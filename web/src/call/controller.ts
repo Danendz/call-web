@@ -182,14 +182,14 @@ export class CallController {
     track.contentHint = "detail";
     track.onended = () => this.stopScreenShare();
     this.screenTrack = track;
-    await this.peer?.videoSender.replaceTrack(track);
+    await this.peer?.setVideoTrack(track, true);
     this.set({ sharing: true });
   }
 
   private async stopScreenShare(): Promise<void> {
     this.screenTrack?.stop();
     this.screenTrack = null;
-    await this.peer?.videoSender.replaceTrack(this.camTrack);
+    await this.peer?.setVideoTrack(this.camTrack, false);
     this.set({ sharing: false });
   }
 
@@ -250,7 +250,7 @@ export class CallController {
         onStateChange: () => this.set({ iceState: this.peer?.pc.iceConnectionState ?? null }),
       },
     );
-    if (this.screenTrack) void this.peer.videoSender.replaceTrack(this.screenTrack);
+    if (this.screenTrack) void this.peer.setVideoTrack(this.screenTrack, true);
     this.statsCounters = null;
     this.set({ phase: "in-call", iceState: this.peer.pc.iceConnectionState });
   }
@@ -296,7 +296,8 @@ export class CallController {
 }
 
 const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const VIDEO: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+// 540p: enough for a face on a phone, and fits the ~1 Mbps the China link reliably carries.
+const VIDEO: MediaTrackConstraints = { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } };
 
 function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
   const base = kind === "audio" ? AUDIO : VIDEO;

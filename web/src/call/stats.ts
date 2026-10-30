@@ -7,9 +7,12 @@ export interface CallStats {
   rttMs?: number;
   inKbps: number;
   outKbps: number;
-  lossPct?: number;
+  lossPct?: number; // what we receive
+  lossOutPct?: number; // what we send, as reported back by the other side
   jitterMs?: number;
   video?: { width?: number; height?: number; fps?: number };
+  videoOut?: { width?: number; height?: number; fps?: number; limitedBy?: string };
+  sendBudgetKbps?: number; // the browser's estimate of how much it can send
 }
 
 interface Counters {
@@ -40,6 +43,8 @@ export async function sampleStats(pc: RTCPeerConnection, prev: Counters | null):
   const counters: Counters = { ts: Date.now(), bytesIn: 0, bytesOut: 0, packetsIn: 0, packetsLost: 0 };
   let jitter: number | undefined;
   let video: CallStats["video"];
+  let videoOut: CallStats["videoOut"];
+  let lossOutPct: number | undefined;
   for (const s of all) {
     if (s.type === "inbound-rtp") {
       counters.bytesIn += s.bytesReceived ?? 0;
@@ -49,6 +54,12 @@ export async function sampleStats(pc: RTCPeerConnection, prev: Counters | null):
       if (s.kind === "video") video = { width: s.frameWidth, height: s.frameHeight, fps: s.framesPerSecond };
     } else if (s.type === "outbound-rtp") {
       counters.bytesOut += s.bytesSent ?? 0;
+      if (s.kind === "video" && s.frameWidth) {
+        const limitedBy = s.qualityLimitationReason && s.qualityLimitationReason !== "none" ? s.qualityLimitationReason : undefined;
+        videoOut = { width: s.frameWidth, height: s.frameHeight, fps: s.framesPerSecond, limitedBy };
+      }
+    } else if (s.type === "remote-inbound-rtp" && s.fractionLost !== undefined) {
+      lossOutPct = Math.max(lossOutPct ?? 0, s.fractionLost * 100);
     }
   }
 
@@ -79,8 +90,11 @@ export async function sampleStats(pc: RTCPeerConnection, prev: Counters | null):
       inKbps,
       outKbps,
       lossPct,
+      lossOutPct,
       jitterMs: jitter,
       video,
+      videoOut,
+      sendBudgetKbps: pair?.availableOutgoingBitrate !== undefined ? pair.availableOutgoingBitrate / 1000 : undefined,
     },
   };
 }

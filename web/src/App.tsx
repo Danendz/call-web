@@ -305,22 +305,35 @@ function StatsOverlay({ stats, forceRelay, onForceRelay }: { stats: CallStats | 
         <dd>{path}</dd>
         <dt>RTT</dt>
         <dd className={rttClass}>{fmt(stats?.rttMs, "ms")}</dd>
-        <dt>Loss</dt>
-        <dd>{fmt(stats?.lossPct, "%", 1)}</dd>
+        <dt>Loss in / out</dt>
+        <dd>
+          {fmt(stats?.lossPct, "", 1)} / {fmt(stats?.lossOutPct, "%", 1)}
+        </dd>
         <dt>Jitter</dt>
         <dd>{fmt(stats?.jitterMs, "ms")}</dd>
         <dt>Down / Up</dt>
         <dd>
           {fmt(stats?.inKbps, "")} / {fmt(stats?.outKbps, "kbps")}
         </dd>
+        <dt>Send budget</dt>
+        <dd>{fmt(stats?.sendBudgetKbps, "kbps")}</dd>
         <dt>Video in</dt>
-        <dd>{stats?.video?.width ? `${stats.video.width}×${stats.video.height} @ ${fmt(stats.video.fps, "fps")}` : "—"}</dd>
+        <dd>{fmtVideo(stats?.video)}</dd>
+        <dt>Video out</dt>
+        <dd>
+          {fmtVideo(stats?.videoOut)}
+          {stats?.videoOut?.limitedBy && <span className="bad"> ({stats.videoOut.limitedBy})</span>}
+        </dd>
       </dl>
       <label>
         <input type="checkbox" checked={forceRelay} onChange={(e) => onForceRelay(e.target.checked)} /> Force TURN relay
       </label>
     </div>
   );
+}
+
+function fmtVideo(v: { width?: number; height?: number; fps?: number } | undefined): string {
+  return v?.width ? `${v.width}×${v.height} @ ${fmt(v.fps, "fps")}` : "—";
 }
 
 function fmt(value: number | undefined, unit: string, digits = 0): string {

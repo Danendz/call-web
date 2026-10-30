@@ -2,6 +2,8 @@ import type { SignalPayload } from "../../../shared/protocol";
 
 const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
+// The China leg can't reliably carry more; above this the encoder starves at peak hours and turns to mosaic.
+const VIDEO_MAX_BITRATE = 1_000_000;
 
 interface PeerCallbacks {
   sendSignal: (payload: SignalPayload) => void;
@@ -15,7 +17,7 @@ interface PeerCallbacks {
  */
 export class PeerSession {
   readonly pc: RTCPeerConnection;
-  readonly videoSender: RTCRtpSender;
+  private readonly videoSender: RTCRtpSender;
   private makingOffer = false;
   private ignoreOffer = false;
   private signalQueue: Promise<void> = Promise.resolve();
@@ -23,6 +25,7 @@ export class PeerSession {
   private disconnectTimer?: number;
   private lastRestart = 0;
   private closed = false;
+  private screen = false;
 
   constructor(
     config: RTCConfiguration,
@@ -50,6 +53,7 @@ export class PeerSession {
         this.makingOffer = true;
         await pc.setLocalDescription();
         if (pc.localDescription) cb.sendSignal({ kind: "description", description: pc.localDescription.toJSON() });
+        void this.tuneSenders();
       } catch (err) {
         console.warn("negotiation failed", err);
       } finally {
@@ -92,11 +96,48 @@ export class PeerSession {
         await pc.setLocalDescription();
         if (pc.localDescription) this.cb.sendSignal({ kind: "description", description: pc.localDescription.toJSON() });
       }
+      void this.tuneSenders();
     } else {
       try {
         await pc.addIceCandidate(payload.candidate as RTCIceCandidateInit);
       } catch (err) {
         if (!this.ignoreOffer) throw err;
+      }
+    }
+  }
+
+  /** Swaps camera ↔ screen without renegotiating, and retunes the encoder for the new content. */
+  async setVideoTrack(track: MediaStreamTrack | null, screen: boolean): Promise<void> {
+    this.screen = screen;
+    await this.videoSender.replaceTrack(track);
+    await this.tuneSenders();
+  }
+
+  /**
+   * Caps video bitrate and tells the encoder what to give up when bandwidth runs short: resolution for the camera
+   * (a smaller clean picture beats a blocky one), frame rate for screen share (text must stay readable).
+   * Audio gets priority so voices survive congestion. Encodings only exist after negotiation, so this runs after
+   * every description change.
+   */
+  private async tuneSenders(): Promise<void> {
+    for (const transceiver of this.pc.getTransceivers()) {
+      const sender = transceiver.sender;
+      const params = sender.getParameters();
+      if (!params.encodings?.length) continue;
+      const isVideo = transceiver.receiver.track.kind === "video";
+      for (const enc of params.encodings) {
+        if (isVideo) enc.maxBitrate = VIDEO_MAX_BITRATE;
+        else enc.priority = enc.networkPriority = "high";
+      }
+      if (isVideo) params.degradationPreference = this.screen ? "maintain-resolution" : "maintain-framerate";
+      try {
+        await sender.setParameters(params);
+      } catch {
+        // Some browsers reject priority/degradation fields; the bitrate cap is the part that matters.
+        if (!isVideo) continue;
+        const capped = sender.getParameters();
+        capped.encodings.forEach((enc) => (enc.maxBitrate = VIDEO_MAX_BITRATE));
+        await sender.setParameters(capped).catch((err) => console.warn("setParameters failed", err));
       }
     }
   }

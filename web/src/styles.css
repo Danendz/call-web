@@ -235,6 +235,49 @@ button.join {
   margin-top: 4px;
 }
 
+/* ---- /nettest ---- */
+
+.nettest {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.nettest-sides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.nettest table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nettest th,
+.nettest td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.nettest th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.nettest tr.best td {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.small {
+  font-size: 13px;
+}
+
 /* ---- call layout ---- */
 
 .call {
