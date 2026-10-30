@@ -1,0 +1,33 @@
+# call.danendz.com
+
+A 1-on-1 video call with text chat, tuned for calling between mainland China and Uzbekistan.
+
+- WebRTC P2P media, with a self-hosted TURN relay in Singapore (UDP, TCP and TLS) for networks where P2P fails. Nothing depends on Google services.
+- A single Node service handles WebSocket signaling, the in-memory chat and the React frontend.
+- Opening `/` creates a random room `/r/<id>`. Share the link; each room holds at most 2 people.
+- The Stats button shows RTT, loss, bitrate and whether the call is direct or relayed. "Force TURN relay" compares the two paths.
+- The call recovers from network switches: the WebSocket resumes its seat and ICE restarts.
+
+## Develop
+
+```sh
+npm install
+npm run dev        # server on :8080, Vite on :5173 (open http://localhost:5173)
+```
+
+Without `TURN_HOST`, calls only work between devices that can reach each other directly, such as two tabs or the same LAN.
+
+## Build / run
+
+```sh
+npm run build && npm start   # serves dist/web + /ws on $PORT (default 8080)
+```
+
+| Env | Meaning |
+|---|---|
+| `PORT` | HTTP port (Railway sets it) |
+| `TURN_HOST` | e.g. `turn.danendz.com` |
+| `TURN_SECRET` | coturn `static-auth-secret` |
+| `TURN_PORT` / `TURNS_PORT` | defaults `3478` / `5349` |
+
+Deployment (Railway via `.railway/railway.ts`, coturn on Vultr, Cloudflare DNS) is covered in [infra/README.md](infra/README.md).
