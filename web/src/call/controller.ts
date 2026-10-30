@@ -3,7 +3,16 @@ import { PeerSession } from "./peer";
 import { Signaling, type SocketStatus } from "./signaling";
 import { sampleStats, type CallStats } from "./stats";
 
-export type Phase = "idle" | "starting" | "waiting" | "in-call" | "full" | "ended" | "error";
+export type Phase = "idle" | "starting" | "waiting" | "in-call" | "full" | "ended";
+
+/** What happened when we asked for a device: denied = blocked by the user/browser, busy = another app holds it. */
+export type MediaAccess = "pending" | "granted" | "denied" | "missing" | "busy";
+export type MediaKind = "audio" | "video";
+
+export interface DeviceOption {
+  id: string;
+  label: string;
+}
 
 export interface CallState {
   phase: Phase;
@@ -15,11 +24,15 @@ export interface CallState {
   chat: ChatMessage[];
   micOn: boolean;
   camOn: boolean;
-  hasCamera: boolean;
+  micAccess: MediaAccess;
+  camAccess: MediaAccess;
+  mics: DeviceOption[];
+  cams: DeviceOption[];
+  micDeviceId: string | null;
+  camDeviceId: string | null;
   sharing: boolean;
   forceRelay: boolean;
   stats: CallStats | null;
-  error: string | null;
 }
 
 const initialState: CallState = {
@@ -32,11 +45,15 @@ const initialState: CallState = {
   chat: [],
   micOn: true,
   camOn: true,
-  hasCamera: false,
+  micAccess: "pending",
+  camAccess: "pending",
+  mics: [],
+  cams: [],
+  micDeviceId: null,
+  camDeviceId: null,
   sharing: false,
   forceRelay: new URLSearchParams(location.search).has("relay"),
   stats: null,
-  error: null,
 };
 
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
@@ -49,6 +66,7 @@ export class CallController {
   private iceServers: IceServerConfig[] = [];
   private camTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
+  private mediaReady: Promise<void> | null = null;
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
 
@@ -72,17 +90,57 @@ export class CallController {
     for (const l of this.listeners) l();
   }
 
-  async start(): Promise<void> {
-    this.set({ phase: "starting", error: null, chat: [], remoteStream: null });
-    let stream: MediaStream;
-    try {
-      stream = await getLocalMedia();
-    } catch (err) {
-      this.set({ phase: "error", error: `Can't access microphone/camera: ${(err as Error).message}` });
-      return;
-    }
+  /** Opens camera and mic for the pre-join screen. Calling it again (Retry) re-asks for both. */
+  preview(): Promise<void> {
+    this.mediaReady ??= this.acquireMedia().finally(() => (this.mediaReady = null));
+    return this.mediaReady;
+  }
+
+  private async acquireMedia(): Promise<void> {
+    this.state.localStream?.getTracks().forEach((t) => t.stop());
+    this.set({ localStream: null, micAccess: "pending", camAccess: "pending" });
+    const { stream, audio, video } = await getLocalMedia(loadDevicePref("audio"), loadDevicePref("video"));
+    stream.getAudioTracks().forEach((t) => (t.enabled = this.state.micOn));
     this.camTrack = stream.getVideoTracks()[0] ?? null;
-    this.set({ localStream: stream, hasCamera: !!this.camTrack, micOn: true, camOn: !!this.camTrack });
+    if (this.camTrack) this.camTrack.enabled = this.state.camOn;
+    this.set({ localStream: stream, micAccess: audio, camAccess: video, ...selectedDevices(stream) });
+    navigator.mediaDevices?.addEventListener("devicechange", this.refreshDevices);
+    await this.refreshDevices();
+  }
+
+  /** Switches mic or camera before joining; remembered for next time. */
+  async selectDevice(kind: MediaKind, deviceId: string): Promise<void> {
+    const stream = this.state.localStream;
+    if (!stream || this.peer) return;
+    saveDevicePref(kind, deviceId);
+    const others = stream.getTracks().filter((t) => t.kind !== kind);
+    // Stop the old track first: iOS won't open a second camera while one is live.
+    stream.getTracks().filter((t) => t.kind === kind).forEach((t) => t.stop());
+    let got = await getTrack(kind, deviceId);
+    if (!got.track) got = await getTrack(kind, null);
+    if (got.track) got.track.enabled = kind === "audio" ? this.state.micOn : this.state.camOn;
+    const next = new MediaStream(got.track ? [...others, got.track] : others);
+    if (kind === "video") this.camTrack = got.track;
+    this.set({
+      localStream: next,
+      ...(kind === "audio" ? { micAccess: got.access } : { camAccess: got.access }),
+      ...selectedDevices(next),
+    });
+  }
+
+  private refreshDevices = async () => {
+    const all = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const list = (kind: MediaDeviceKind, fallback: string) =>
+      all
+        .filter((d) => d.kind === kind && d.deviceId)
+        .map((d, i) => ({ id: d.deviceId, label: d.label || `${fallback} ${i + 1}` }));
+    this.set({ mics: list("audioinput", "Microphone"), cams: list("videoinput", "Camera") });
+  };
+
+  async start(): Promise<void> {
+    this.set({ phase: "starting", chat: [], remoteStream: null });
+    // Joining without camera/mic is allowed: you can still hear, watch and chat.
+    if (this.mediaReady || !this.state.localStream) await this.preview();
 
     window.addEventListener("online", this.onOnline);
     window.addEventListener("pagehide", this.onPageHide);
@@ -237,15 +295,67 @@ export class CallController {
   }
 }
 
-async function getLocalMedia(): Promise<MediaStream> {
-  const audio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const VIDEO: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+
+function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
+  const base = kind === "audio" ? AUDIO : VIDEO;
+  if (deviceId) return { ...base, deviceId: { ideal: deviceId } }; // ideal: falls back if the device is gone
+  return kind === "video" ? { ...base, facingMode: "user" } : base;
+}
+
+async function getLocalMedia(
+  micId: string | null,
+  camId: string | null,
+): Promise<{ stream: MediaStream; audio: MediaAccess; video: MediaAccess }> {
+  if (!navigator.mediaDevices?.getUserMedia) return { stream: new MediaStream(), audio: "missing", video: "missing" };
   try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio,
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: "user" },
+    // One request, so the browser shows a single permission prompt.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: constraintsFor("audio", micId),
+      video: constraintsFor("video", camId),
     });
+    return { stream, audio: "granted", video: "granted" };
+  } catch {
+    // No camera, camera busy or one of them denied: ask separately to find out which, and keep the other.
+    const audio = await getTrack("audio", micId);
+    const video = await getTrack("video", camId);
+    const tracks = [audio.track, video.track].filter((t): t is MediaStreamTrack => t !== null);
+    return { stream: new MediaStream(tracks), audio: audio.access, video: video.access };
+  }
+}
+
+async function getTrack(kind: MediaKind, deviceId: string | null): Promise<{ track: MediaStreamTrack | null; access: MediaAccess }> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ [kind]: constraintsFor(kind, deviceId) });
+    return { track: stream.getTracks()[0], access: "granted" };
   } catch (err) {
-    // No camera, or camera busy/denied: still allow a voice call.
-    return navigator.mediaDevices.getUserMedia({ audio, video: false }).catch(() => Promise.reject(err));
+    const name = (err as DOMException).name;
+    if (name === "NotAllowedError" || name === "SecurityError") return { track: null, access: "denied" };
+    if (name === "NotFoundError" || name === "OverconstrainedError") return { track: null, access: "missing" };
+    return { track: null, access: "busy" };
+  }
+}
+
+function selectedDevices(stream: MediaStream): Pick<CallState, "micDeviceId" | "camDeviceId"> {
+  return {
+    micDeviceId: stream.getAudioTracks()[0]?.getSettings().deviceId ?? null,
+    camDeviceId: stream.getVideoTracks()[0]?.getSettings().deviceId ?? null,
+  };
+}
+
+function loadDevicePref(kind: MediaKind): string | null {
+  try {
+    return localStorage.getItem(`device.${kind}`);
+  } catch {
+    return null;
+  }
+}
+
+function saveDevicePref(kind: MediaKind, deviceId: string): void {
+  try {
+    localStorage.setItem(`device.${kind}`, deviceId);
+  } catch {
+    // storage blocked: the choice just isn't remembered
   }
 }
