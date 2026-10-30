@@ -3,6 +3,11 @@ import { PeerSession } from "./peer";
 import { Signaling, type SocketStatus } from "./signaling";
 import { sampleStats, type CallStats } from "./stats";
 
+// While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
+// through Singapore, and a P2P attempt that failed at call start often works a few minutes later.
+const DIRECT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
+const TRYING_DIRECT_SHOWN_MS = 5_000;
+
 export type Phase = "idle" | "starting" | "waiting" | "in-call" | "full" | "ended";
 
 /** What happened when we asked for a device: denied = blocked by the user/browser, busy = another app holds it. */
@@ -33,6 +38,7 @@ export interface CallState {
   sharing: boolean;
   forceRelay: boolean;
   stats: CallStats | null;
+  tryingDirect: boolean;
 }
 
 const initialState: CallState = {
@@ -54,6 +60,7 @@ const initialState: CallState = {
   sharing: false,
   forceRelay: new URLSearchParams(location.search).has("relay"),
   stats: null,
+  tryingDirect: false,
 };
 
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
@@ -69,6 +76,9 @@ export class CallController {
   private mediaReady: Promise<void> | null = null;
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
+  private directRetries = 0;
+  private nextDirectRetry = 0;
+  private lastDirectRetry = 0;
 
   constructor(roomId: string) {
     this.signaling = new Signaling(
@@ -252,6 +262,7 @@ export class CallController {
     );
     if (this.screenTrack) void this.peer.setVideoTrack(this.screenTrack, true);
     this.statsCounters = null;
+    this.directRetries = this.nextDirectRetry = 0;
     this.set({ phase: "in-call", iceState: this.peer.pc.iceConnectionState });
   }
 
@@ -268,10 +279,33 @@ export class CallController {
       const { stats, counters } = await sampleStats(pc, this.statsCounters);
       if (this.peer?.pc !== pc) return;
       this.statsCounters = counters;
-      this.set({ stats });
+      this.maybeRetryDirect(stats);
+      this.set({ stats, tryingDirect: Date.now() - this.lastDirectRetry < TRYING_DIRECT_SHOWN_MS });
     } catch {
       // pc closed mid-sample
     }
+  }
+
+  /**
+   * Upgrades a relayed call to direct P2P via an ICE restart, with backoff. Only the impolite side drives it so the
+   * two peers don't restart over each other.
+   */
+  private maybeRetryDirect(stats: CallStats): void {
+    if (stats.path === "direct" || this.state.forceRelay || this.polite) {
+      this.directRetries = this.nextDirectRetry = 0;
+      return;
+    }
+    if (stats.path !== "relay") return;
+    const now = Date.now();
+    if (!this.nextDirectRetry) {
+      this.nextDirectRetry = now + DIRECT_RETRY_DELAYS_MS[0];
+      return;
+    }
+    if (now < this.nextDirectRetry) return;
+    this.directRetries++;
+    this.nextDirectRetry = now + DIRECT_RETRY_DELAYS_MS[Math.min(this.directRetries, DIRECT_RETRY_DELAYS_MS.length - 1)];
+    this.lastDirectRetry = now;
+    this.peer?.restartIce();
   }
 
   private onOnline = () => {
@@ -296,8 +330,7 @@ export class CallController {
 }
 
 const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-// 540p: enough for a face on a phone, and fits the ~1 Mbps the China link reliably carries.
-const VIDEO: MediaTrackConstraints = { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } };
+const VIDEO: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
 
 function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
   const base = kind === "audio" ? AUDIO : VIDEO;

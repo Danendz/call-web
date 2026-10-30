@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { NET_TEST_SIDES, NET_TEST_TARGETS, type NetTestBoard, type NetTestResult, type NetTestSide } from "../shared/nettest.js";
 import { MAX_CHAT_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
 
@@ -21,60 +20,12 @@ const CONTENT_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-// Latest /nettest result from each side, kept in memory only (a redeploy clears it).
-const netTestBoard: NetTestBoard = {};
-
-async function handleNetTest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (req.method === "POST") {
-    const body = await readBody(req, 16 * 1024);
-    const report = body === null ? null : parseNetTestReport(body);
-    if (!report) {
-      res.writeHead(400).end();
-      return;
-    }
-    netTestBoard[report.side] = { ...report, at: Date.now() };
-  }
-  res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(netTestBoard));
-}
-
-function parseNetTestReport(body: string): { side: NetTestSide; results: NetTestResult[] } | null {
-  try {
-    const raw = JSON.parse(body);
-    if (!NET_TEST_SIDES.includes(raw.side) || !Array.isArray(raw.results)) return null;
-    const ms = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 60_000 ? Math.round(v) : null);
-    const results = NET_TEST_TARGETS.map(({ id }) => {
-      const r = raw.results.find((x: { id?: unknown }) => x?.id === id);
-      return { id, minMs: ms(r?.minMs), medianMs: ms(r?.medianMs), failed: ms(r?.failed) ?? 0 };
-    });
-    return { side: raw.side, results };
-  } catch {
-    return null;
-  }
-}
-
-function readBody(req: IncomingMessage, limit: number): Promise<string | null> {
-  return new Promise((resolve) => {
-    let size = 0;
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > limit) {
-        resolve(null);
-        req.destroy();
-      } else chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString()));
-    req.on("error", () => resolve(null));
-  });
-}
-
 async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
-  if (url.pathname === "/api/nettest") return handleNetTest(req, res);
 
   let filePath = path.join(STATIC_DIR, path.normalize(decodeURIComponent(url.pathname)));
   if (!filePath.startsWith(STATIC_DIR)) {

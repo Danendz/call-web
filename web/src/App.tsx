@@ -232,7 +232,12 @@ function CallView({ controller, state, roomUrl }: { controller: CallController; 
         )}
         {banner && <div className="banner">{banner}</div>}
         {showStats && (
-          <StatsOverlay stats={state.stats} forceRelay={state.forceRelay} onForceRelay={(v) => controller.setForceRelay(v)} />
+          <StatsOverlay
+            stats={state.stats}
+            tryingDirect={state.tryingDirect}
+            forceRelay={state.forceRelay}
+            onForceRelay={(v) => controller.setForceRelay(v)}
+          />
         )}
       </div>
 
@@ -290,7 +295,17 @@ function Video({ stream, className, muted, mirror }: { stream: MediaStream; clas
   return <video ref={ref} className={`${className} ${mirror ? "mirror" : ""}`} autoPlay playsInline muted={muted} />;
 }
 
-function StatsOverlay({ stats, forceRelay, onForceRelay }: { stats: CallStats | null; forceRelay: boolean; onForceRelay: (v: boolean) => void }) {
+function StatsOverlay({
+  stats,
+  tryingDirect,
+  forceRelay,
+  onForceRelay,
+}: {
+  stats: CallStats | null;
+  tryingDirect: boolean;
+  forceRelay: boolean;
+  onForceRelay: (v: boolean) => void;
+}) {
   const rttClass = stats?.rttMs === undefined ? "" : stats.rttMs < 150 ? "good" : stats.rttMs < 300 ? "ok" : "bad";
   const path =
     !stats || stats.path === "unknown"
@@ -298,11 +313,15 @@ function StatsOverlay({ stats, forceRelay, onForceRelay }: { stats: CallStats | 
       : stats.path === "relay"
         ? `TURN relay (${stats.relayProtocol ?? stats.protocol ?? "?"})`
         : `Direct P2P (${stats.localType} ↔ ${stats.remoteType}, ${stats.protocol})`;
+  const pathNote = tryingDirect ? " · trying direct…" : "";
   return (
     <div className="stats">
       <dl>
         <dt>Path</dt>
-        <dd>{path}</dd>
+        <dd>
+          {path}
+          {pathNote}
+        </dd>
         <dt>RTT</dt>
         <dd className={rttClass}>{fmt(stats?.rttMs, "ms")}</dd>
         <dt>Loss in / out</dt>

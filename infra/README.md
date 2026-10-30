@@ -5,7 +5,7 @@ Two pieces:
 | Piece | Where | Domain |
 |---|---|---|
 | App (static frontend + WebSocket signaling/chat) | Railway, **Southeast Asia (Singapore)** region | `call.danendz.com` |
-| TURN/STUN relay (coturn) | Existing Vultr Singapore VPS | `turn.danendz.com` |
+| STUN + fallback TURN relay (coturn) | Existing Vultr Singapore VPS | `turn.danendz.com` |
 
 Both live in Singapore because it has good routes to mainland China and sits roughly on the way to Uzbekistan.
 
@@ -83,6 +83,8 @@ The service is connected to GitHub `Danendz/call-web` (branch `main`): every pus
    - RTT under 300 ms is fine for talking. Loss over ~3% means video will stutter.
    - Tick **Force TURN relay** and compare RTT and loss. Keep whichever path is better.
 4. **Network switch.** Toggle wifi ↔ mobile data mid-call. It should recover within a few seconds via ICE restart, without rejoining.
+
+Calls normally go direct. coturn is still required: it's the only STUN server reachable from China (without it direct fails too), and it carries the call when direct P2P fails.
 
 ## If calls start failing from China
 

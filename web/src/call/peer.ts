@@ -2,8 +2,8 @@ import type { SignalPayload } from "../../../shared/protocol";
 
 const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
-// The China leg can't reliably carry more; above this the encoder starves at peak hours and turns to mosaic.
-const VIDEO_MAX_BITRATE = 1_000_000;
+// Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss.
+const VIDEO_MAX_BITRATE = 2_000_000;
 
 interface PeerCallbacks {
   sendSignal: (payload: SignalPayload) => void;
