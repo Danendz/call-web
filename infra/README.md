@@ -67,9 +67,10 @@ The project is defined in `.railway/railway.ts`: service `web`, Singapore region
 ```sh
 railway config plan && railway config apply                        # sync the service definition
 railway variable set --service web TURN_SECRET=<static-auth-secret>  # kept out of source
-railway up --service web --ci                                       # deploy the working copy
 railway domain call.danendz.com --service web                       # IaC can't register custom domains
 ```
+
+The service is connected to GitHub `Danendz/call-web` (branch `main`): every push to `main` deploys automatically. `railway up --service web --ci` still works for deploying an uncommitted working copy.
 
 `railway domain` prints the CNAME target and a `_railway-verify.call` TXT record. Add both in Cloudflare as DNS only.
 
