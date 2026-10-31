@@ -10,6 +10,11 @@ export default defineRailway(() => {
     env: {
       TURN_HOST: "turn.danendz.com",
       TURN_SECRET: preserve(), // must equal coturn's static-auth-secret; set with `railway variable set`
+      // Speech-to-chat and translation keys, set with `railway variable set`
+      GROQ_API_KEY: preserve(),
+      LLM_BASE_URL: preserve(),
+      LLM_API_KEY: preserve(),
+      LLM_MODEL: preserve(),
     },
   });
 

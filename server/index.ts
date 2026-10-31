@@ -4,6 +4,7 @@ import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_CHAT_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
+import { handleTranscribe } from "./transcribe.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR ?? "dist/web");
@@ -26,6 +27,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
+  if (url.pathname === "/api/transcribe") return handleTranscribe(req, res, url);
 
   let filePath = path.join(STATIC_DIR, path.normalize(decodeURIComponent(url.pathname)));
   if (!filePath.startsWith(STATIC_DIR)) {
@@ -92,7 +94,7 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null)
         break;
       case "chat": {
         const text = typeof msg.text === "string" ? msg.text.trim() : "";
-        if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text);
+        if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true);
         break;
       }
       case "leave":

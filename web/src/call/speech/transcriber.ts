@@ -1,0 +1,90 @@
+// Turns what you say into chat messages: the browser's own recognition where it works, otherwise the
+// server's. Once the browser's fails it stays on the server for the rest of the page's life
+
+import type { Lang, TranscribeReply } from "../../../../shared/protocol";
+import { BrowserRecognizer } from "./browserRecognizer";
+import { RECOGNITION_LANG } from "./lang";
+import { WhisperRecorder } from "./whisperRecorder";
+
+export interface TranscriberHooks {
+  /** A line the browser recognized, to post as spoken chat. */
+  sendText(text: string): void;
+  /** Where the server path uploads to; null when not in a room yet. */
+  uploadUrl(lang: Lang): string | null;
+  /** Something the person should know about transcription, or null to clear it. */
+  onNotice(notice: string | null): void;
+}
+
+// ?stt=whisper skips the browser's recognition, to try the server path in a browser that has its own
+let serverOnly = new URLSearchParams(location.search).get("stt") === "whisper" || !BrowserRecognizer.supported();
+
+export class Transcriber {
+  private engine: BrowserRecognizer | WhisperRecorder | null = null;
+  // What it's running for (track and language), so sync() only restarts when that changes
+  private running: string | null = null;
+  private unavailable = false;
+  private uploads = Promise.resolve();
+  private pausedUntil = 0;
+  private resumeTimer?: number;
+
+  constructor(private hooks: TranscriberHooks) {}
+
+  /** Runs on `track` in `lang`, or stops when `track` is null. Cheap to call on every state change. */
+  sync(track: MediaStreamTrack | null, lang: Lang): void {
+    const key = track && `${track.id}/${lang}`;
+    if (key === this.running) return;
+    this.running = key;
+    if (track && !this.unavailable) this.start(track, lang);
+    else this.stop();
+  }
+
+  private start(track: MediaStreamTrack, lang: Lang): void {
+    this.stop();
+    if (serverOnly) {
+      this.engine = new WhisperRecorder(track, (wav) => this.upload(wav, lang));
+      return;
+    }
+    this.engine = new BrowserRecognizer(
+      RECOGNITION_LANG[lang],
+      (text) => this.hooks.sendText(text),
+      (reason) => {
+        console.info(`browser speech recognition failed (${reason}), using the server`);
+        serverOnly = true;
+        if (this.engine) this.start(track, lang);
+      },
+    );
+  }
+
+  private stop(): void {
+    this.engine?.stop();
+    this.engine = null;
+  }
+
+  // One at a time, so lines reach the chat in the order they were said
+  private upload(wav: Blob, lang: Lang): void {
+    this.uploads = this.uploads.then(async () => {
+      const url = this.hooks.uploadUrl(lang);
+      if (!url || Date.now() < this.pausedUntil) return;
+      try {
+        const res = await fetch(url, { method: "POST", body: wav, headers: { "content-type": "audio/wav" } });
+        this.onReply((await res.json()) as TranscribeReply);
+      } catch {
+        // offline or the server restarting: this line is lost, the next one tries again
+      }
+    });
+  }
+
+  private onReply(reply: TranscribeReply): void {
+    if ("unavailable" in reply) {
+      this.unavailable = true;
+      this.stop();
+      this.hooks.onNotice("Speech-to-chat isn't available in this browser");
+    } else if ("paused" in reply) {
+      this.pausedUntil = reply.until;
+      const at = new Date(reply.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      this.hooks.onNotice(`Speech-to-chat paused until ${at}: free limit reached`);
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = window.setTimeout(() => this.hooks.onNotice(null), reply.until - Date.now());
+    }
+  }
+}

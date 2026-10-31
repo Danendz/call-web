@@ -1,4 +1,4 @@
-import type { ChatMessage, IceServerConfig, ServerMessage } from "../../../shared/protocol";
+import type { ChatMessage, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
 import {
   getLocalMedia,
   getTrack,
@@ -11,6 +11,8 @@ import {
 } from "./media";
 import { PeerSession } from "./peer";
 import { Signaling, type SocketStatus } from "./signaling";
+import { loadLang, loadTranscribeOn, saveLang, saveTranscribeOn } from "./speech/lang";
+import { Transcriber } from "./speech/transcriber";
 import { sampleStats, type CallStats } from "./stats";
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
@@ -40,6 +42,9 @@ export interface CallState {
   forceRelay: boolean;
   stats: CallStats | null;
   tryingDirect: boolean;
+  lang: Lang;
+  transcribeOn: boolean;
+  speechNotice: string | null;
 }
 
 const initialState: CallState = {
@@ -62,6 +67,9 @@ const initialState: CallState = {
   forceRelay: new URLSearchParams(location.search).has("relay"),
   stats: null,
   tryingDirect: false,
+  lang: loadLang(),
+  transcribeOn: loadTranscribeOn(),
+  speechNotice: null,
 };
 
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
@@ -80,8 +88,15 @@ export class CallController {
   private directRetries = 0;
   private nextDirectRetry = 0;
   private lastDirectRetry = 0;
+  private transcriber = new Transcriber({
+    sendText: (text) => this.signaling.send({ type: "chat", text, spoken: true }),
+    uploadUrl: (lang) =>
+      this.state.myId &&
+      `/api/transcribe?${new URLSearchParams({ room: this.roomId, client: this.state.myId, lang })}`,
+    onNotice: (speechNotice) => this.set({ speechNotice }),
+  });
 
-  constructor(roomId: string) {
+  constructor(private roomId: string) {
     this.signaling = new Signaling(
       roomId,
       (msg) => this.onMessage(msg),
@@ -98,6 +113,10 @@ export class CallController {
 
   private set(patch: Partial<CallState>): void {
     this.state = { ...this.state, ...patch };
+    const { transcribeOn, micOn, phase, localStream, lang } = this.state;
+    // Only while someone is there to read it, and never while muted
+    const speaking = transcribeOn && micOn && phase === "in-call";
+    this.transcriber.sync((speaking && localStream?.getAudioTracks()[0]) || null, lang);
     for (const l of this.listeners) l();
   }
 
@@ -174,6 +193,16 @@ export class CallController {
     this.set({ micOn: on });
   }
 
+  toggleTranscribe(): void {
+    saveTranscribeOn(!this.state.transcribeOn);
+    this.set({ transcribeOn: !this.state.transcribeOn });
+  }
+
+  setLang(lang: Lang): void {
+    saveLang(lang);
+    this.set({ lang });
+  }
+
   toggleCam(): void {
     if (!this.camTrack) return;
     const on = !this.state.camOn;
@@ -237,6 +266,9 @@ export class CallController {
         break;
       case "chat":
         this.set({ chat: [...this.state.chat, msg.message] });
+        break;
+      case "chat-translation":
+        this.set({ chat: this.state.chat.map((m) => (m.id === msg.id ? { ...m, translation: msg.translation } : m)) });
         break;
       case "full":
         this.teardown(false);
