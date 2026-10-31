@@ -1,0 +1,494 @@
+/* ---- layout: stage, plus a chat cell that grows from zero ---- */
+
+.call {
+  --chat-w: 360px;
+  --pip-long: clamp(120px, 22vw, 240px);
+  --pip-gap: 16px;
+  /* Room the pill takes at the bottom of the stage; the tile and subtitles sit above it */
+  --pill-space: calc(96px + env(safe-area-inset-bottom));
+  position: fixed;
+  top: var(--vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vv-height, 100dvh);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0px;
+  grid-template-rows: 100%;
+  grid-template-areas: "stage chat";
+  background: #000;
+  animation: fade-in var(--slow) var(--ease);
+  transition:
+    grid-template-columns var(--slow) var(--ease),
+    grid-template-rows var(--slow) var(--ease);
+}
+
+.call.chat-open {
+  grid-template-columns: minmax(0, 1fr) var(--chat-w);
+}
+
+.call.idle {
+  --pill-space: calc(20px + env(safe-area-inset-bottom));
+}
+
+.call .chat {
+  border-left: 1px solid var(--border);
+}
+
+.stage {
+  grid-area: stage;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.call.idle .stage {
+  cursor: none;
+}
+
+/* ---- the two videos ---- */
+
+.feed {
+  position: absolute;
+  overflow: hidden;
+  background: #111216;
+  animation: fade-in var(--slow) var(--ease);
+  transition:
+    top var(--slow) var(--ease),
+    left var(--slow) var(--ease),
+    width var(--slow) var(--ease),
+    height var(--slow) var(--ease),
+    border-radius var(--slow) var(--ease),
+    box-shadow var(--slow) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.feed.main {
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: #000;
+}
+
+.feed.pip {
+  top: calc(100% - var(--pip-h) - var(--pill-space));
+  left: calc(100% - var(--pip-w) - var(--pip-gap));
+  z-index: 3;
+  width: var(--pip-w);
+  height: var(--pip-h);
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    var(--shadow);
+}
+
+.feed.pip[role="button"] {
+  cursor: pointer;
+}
+
+.feed.pip[role="button"]:hover {
+  transform: scale(1.03);
+}
+
+.feed.pip[role="button"]:active {
+  transform: scale(0.97);
+}
+
+.feed:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.feed-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
+}
+
+.feed.pip .feed-video {
+  object-fit: cover;
+}
+
+video.mirror {
+  transform: scaleX(-1);
+}
+
+.feed-off {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--med) var(--ease);
+}
+
+.feed-off.shown {
+  opacity: 1;
+}
+
+/* ---- waiting for the other person ---- */
+
+.waiting {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 16px var(--pill-space);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.25) 70%);
+  animation: fade-in var(--slow) var(--ease);
+}
+
+.waiting-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(440px, 100%);
+  padding: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  text-align: center;
+  animation: rise var(--slow) var(--ease);
+}
+
+.waiting-card p {
+  margin: 0;
+  font-weight: 550;
+}
+
+.waiting-card .copy-link {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* ---- overlays ---- */
+
+.fade {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease);
+  pointer-events: none;
+}
+
+.fade.shown {
+  opacity: 1;
+  transform: none;
+}
+
+.notices {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+}
+
+.notice {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  font-size: 13px;
+  text-align: center;
+}
+
+.notice:empty {
+  display: none;
+}
+
+.subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--pill-space) + 8px);
+  z-index: 4;
+  max-width: min(84%, 720px);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 20px;
+  line-height: 1.35;
+  text-align: center;
+  translate: -50% 0;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease),
+    bottom var(--slow) var(--ease);
+}
+
+.subtitle:empty {
+  display: none;
+}
+
+.stats {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 14px;
+  z-index: 4;
+  max-height: calc(100% - 28px);
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top left;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease),
+    visibility 0s linear var(--med);
+}
+
+.stats.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease);
+}
+
+.stats dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 14px;
+  margin: 0 0 8px;
+}
+
+.stats dt {
+  color: var(--muted);
+}
+
+.stats dd {
+  margin: 0;
+}
+
+.stats label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.stats input {
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.stats .good {
+  color: var(--good);
+}
+.stats .ok {
+  color: var(--ok);
+}
+.stats .bad {
+  color: var(--bad);
+}
+
+/* ---- control pill ---- */
+
+.pill {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  translate: -50% 0;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease),
+    bottom var(--slow) var(--ease);
+}
+
+.call.idle .pill {
+  opacity: 0;
+  transform: translateY(24px);
+  pointer-events: none;
+}
+
+.pill .hang-up {
+  margin-left: 6px;
+}
+
+.more {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  right: -8px;
+  bottom: calc(100% + 16px);
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: bottom right;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    visibility 0s linear var(--fast);
+}
+
+.menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease-spring);
+}
+
+button.menu-item {
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-weight: 500;
+}
+
+button.menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+button.menu-item:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.menu-item span {
+  flex: 1;
+  text-align: left;
+}
+
+.menu-item .check {
+  color: var(--accent-hover);
+}
+
+/* ---- narrow screens ---- */
+
+@media (max-width: 899px) {
+  .call {
+    --chat-w: min(320px, 42vw);
+    --pip-long: clamp(104px, 28vw, 168px);
+    --pip-gap: 12px;
+    --pill-space: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .pill {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .pill .icon-btn {
+    width: 46px;
+    height: 46px;
+  }
+
+  .pill .icon-btn.danger {
+    width: 56px;
+  }
+
+  .pill .hang-up {
+    margin-left: 2px;
+  }
+
+  .subtitle {
+    font-size: 17px;
+  }
+}
+
+/* Phone held upright (STACKED_QUERY in useMediaQuery.ts): chat opens under the video instead of beside it. */
+@media (max-width: 899px) and (orientation: portrait) {
+  .call {
+    grid-template-columns: 100%;
+    grid-template-rows: 100% 0%;
+    grid-template-areas: "stage" "chat";
+  }
+
+  .call.chat-open {
+    grid-template-columns: 100%;
+    grid-template-rows: 42% 58%;
+    --pip-long: 96px;
+    --pill-space: 66px;
+  }
+
+  .call .chat {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .chat-inner {
+    width: 100%;
+    transform: translateY(32px);
+  }
+
+  .call.chat-open .pill {
+    bottom: 10px;
+    padding: 4px;
+  }
+
+  .call.chat-open .pill .icon-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .call.chat-open .pill .icon-btn.danger {
+    width: 50px;
+  }
+
+  .call.chat-open .notices,
+  .call.chat-open .stats {
+    top: calc(10px + env(safe-area-inset-top));
+  }
+
+  .call.chat-open .menu {
+    bottom: calc(100% + 10px);
+  }
+}

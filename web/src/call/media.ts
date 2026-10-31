@@ -1,6 +1,8 @@
 /** What happened when we asked for a device: denied = blocked by the user/browser, busy = another app holds it. */
 export type MediaAccess = "pending" | "granted" | "denied" | "missing" | "busy";
 export type MediaKind = "audio" | "video";
+/** Shape of the camera video we send; the other side's view fits whatever arrives. */
+export type Orientation = "landscape" | "portrait";
 
 export interface DeviceOption {
   id: string;
@@ -8,10 +10,14 @@ export interface DeviceOption {
 }
 
 const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const VIDEO: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+
+export function videoConstraints(orientation: Orientation): MediaTrackConstraints {
+  const [width, height] = orientation === "portrait" ? [720, 1280] : [1280, 720];
+  return { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: { ideal: 30, max: 30 } };
+}
 
 function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
-  const base = kind === "audio" ? AUDIO : VIDEO;
+  const base = kind === "audio" ? AUDIO : videoConstraints(loadOrientation());
   if (deviceId) return { ...base, deviceId: { ideal: deviceId } }; // ideal: falls back if the device is gone
   return kind === "video" ? { ...base, facingMode: "user" } : base;
 }
@@ -67,6 +73,22 @@ export function loadDevicePref(kind: MediaKind): string | null {
 export function saveDevicePref(kind: MediaKind, deviceId: string): void {
   try {
     localStorage.setItem(`device.${kind}`, deviceId);
+  } catch {
+    // storage blocked: the choice just isn't remembered
+  }
+}
+
+export function loadOrientation(): Orientation {
+  try {
+    return localStorage.getItem("orientation") === "portrait" ? "portrait" : "landscape";
+  } catch {
+    return "landscape";
+  }
+}
+
+export function saveOrientation(orientation: Orientation): void {
+  try {
+    localStorage.setItem("orientation", orientation);
   } catch {
     // storage blocked: the choice just isn't remembered
   }

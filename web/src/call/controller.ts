@@ -3,16 +3,20 @@ import {
   getLocalMedia,
   getTrack,
   loadDevicePref,
+  loadOrientation,
   saveDevicePref,
+  saveOrientation,
   selectedDevices,
+  videoConstraints,
   type DeviceOption,
   type MediaAccess,
   type MediaKind,
+  type Orientation,
 } from "./media";
 import { PeerSession } from "./peer";
 import { Signaling, type SocketStatus } from "./signaling";
 import { loadLang, loadTranscribeOn, saveLang, saveTranscribeOn } from "./speech/lang";
-import { Transcriber } from "./speech/transcriber";
+import { Transcriber, type SpeechNotice } from "./speech/transcriber";
 import { sampleStats, type CallStats } from "./stats";
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
@@ -39,12 +43,13 @@ export interface CallState {
   micDeviceId: string | null;
   camDeviceId: string | null;
   sharing: boolean;
+  orientation: Orientation;
   forceRelay: boolean;
   stats: CallStats | null;
   tryingDirect: boolean;
   lang: Lang;
   transcribeOn: boolean;
-  speechNotice: string | null;
+  speechNotice: SpeechNotice | null;
 }
 
 const initialState: CallState = {
@@ -64,6 +69,7 @@ const initialState: CallState = {
   micDeviceId: null,
   camDeviceId: null,
   sharing: false,
+  orientation: loadOrientation(),
   forceRelay: new URLSearchParams(location.search).has("relay"),
   stats: null,
   tryingDirect: false,
@@ -208,6 +214,15 @@ export class CallController {
     const on = !this.state.camOn;
     this.camTrack.enabled = on;
     this.set({ camOn: on });
+  }
+
+  /** Reshapes the live camera track in place, so a call in progress needs no renegotiation. */
+  async setOrientation(orientation: Orientation): Promise<void> {
+    saveOrientation(orientation);
+    this.set({ orientation });
+    await this.camTrack?.applyConstraints(videoConstraints(orientation)).catch(() => {
+      // camera can't do that shape: it keeps sending what it had
+    });
   }
 
   async toggleScreenShare(): Promise<void> {

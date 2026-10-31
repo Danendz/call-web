@@ -1,0 +1,310 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--bad);
+}
+
+/* ---- buttons ---- */
+
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  background: #30343e;
+}
+
+button:active:not(:disabled),
+.button:active {
+  transform: scale(0.96);
+}
+
+button:focus-visible,
+.button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+button.primary,
+.button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled),
+.button.primary:hover {
+  background: var(--accent-hover);
+}
+
+button.danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+/* Round icon-only button; variants say what state the thing it controls is in. */
+button.icon-btn {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+button.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+button.icon-btn.active {
+  background: var(--text);
+  color: var(--bg);
+}
+
+button.icon-btn.active:hover:not(:disabled) {
+  background: #fff;
+}
+
+button.icon-btn.off {
+  background: var(--danger-soft);
+  color: #ff8a85;
+}
+
+button.icon-btn.off:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+button.icon-btn.danger {
+  width: 60px;
+  background: var(--danger);
+  color: #fff;
+}
+
+button.icon-btn.danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+button.icon-btn.small {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+}
+
+button.icon-btn.small:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 19px;
+  padding: 0 5px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  animation: pop var(--med) var(--ease-spring);
+}
+
+/* ---- inputs ---- */
+
+input,
+select {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  transition:
+    border-color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+input:hover,
+select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+select {
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%239ba1ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+select:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* ---- shared pieces ---- */
+
+.centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 100%;
+  padding: 24px 16px;
+  text-align: center;
+  animation: rise var(--slow) var(--ease);
+}
+
+.centered .actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.centered-icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.copy-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(460px, 100%);
+  padding: 4px 4px 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.copy-link input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.copy-link button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.copy-link button.copied {
+  background: rgba(52, 199, 89, 0.18);
+  color: var(--good);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

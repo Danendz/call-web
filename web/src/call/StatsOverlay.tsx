@@ -1,11 +1,13 @@
 import type { CallStats } from "./stats";
 
 export function StatsOverlay({
+  open,
   stats,
   tryingDirect,
   forceRelay,
   onForceRelay,
 }: {
+  open: boolean;
   stats: CallStats | null;
   tryingDirect: boolean;
   forceRelay: boolean;
@@ -20,7 +22,7 @@ export function StatsOverlay({
         : `Direct P2P (${stats.localType} ↔ ${stats.remoteType}, ${stats.protocol})`;
   const pathNote = tryingDirect ? " · trying direct…" : "";
   return (
-    <div className="stats">
+    <div className={`stats ${open ? "open" : ""}`} aria-hidden={!open}>
       <dl>
         <dt>Path</dt>
         <dd>

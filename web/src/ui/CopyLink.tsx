@@ -1,6 +1,9 @@
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { useT } from "./i18n";
 
 export function CopyLink({ url }: { url: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -13,8 +16,11 @@ export function CopyLink({ url }: { url: string }) {
   };
   return (
     <div className="copy-link">
-      <input readOnly value={url} onFocus={(e) => e.target.select()} />
-      <button onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+      <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label={t.roomLink} />
+      <button className={copied ? "copied" : ""} onClick={copy}>
+        {copied ? <Check size={16} /> : <Copy size={16} />}
+        {copied ? t.copied : t.copy}
+      </button>
     </div>
   );
 }

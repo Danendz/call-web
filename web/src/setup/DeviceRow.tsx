@@ -1,37 +1,32 @@
+import type { ReactNode } from "react";
 import type { DeviceOption, MediaAccess, MediaKind } from "../call/media";
+import { useT } from "../ui/i18n";
 
-export const ACCESS_TEXT: Record<MediaAccess, string> = {
-  granted: "",
-  pending: "Asking for permission…",
-  denied: "Blocked by the browser",
-  missing: "Not found",
-  busy: "In use by another app",
-};
-
+/** Device picker, or why the device can't be used. */
 export function DeviceRow(props: {
   name: string;
+  icon: ReactNode;
   kind: MediaKind;
   access: MediaAccess;
-  on: boolean;
   devices: DeviceOption[];
   selected: string | null;
-  onToggle: () => void;
   onSelect: (kind: MediaKind, deviceId: string) => void;
 }) {
+  const t = useT();
   const granted = props.access === "granted";
   return (
-    <div className="device-row">
-      <button className={granted && !props.on ? "off" : ""} disabled={!granted} onClick={props.onToggle}>
-        {props.name} {granted ? (props.on ? "on" : "off") : ""}
-      </button>
+    <div className={`device-row ${granted ? "" : props.access === "pending" ? "pending" : "problem"}`}>
+      <span className="row-icon" aria-hidden>
+        {props.icon}
+      </span>
       {granted ? (
         <select
           value={props.selected ?? ""}
           disabled={props.devices.length < 2}
           onChange={(e) => props.onSelect(props.kind, e.target.value)}
-          aria-label={`${props.name} device`}
+          aria-label={props.name}
         >
-          {props.devices.length === 0 && <option value="">Default</option>}
+          {props.devices.length === 0 && <option value="">{t.defaultDevice}</option>}
           {props.devices.map((d) => (
             <option key={d.id} value={d.id}>
               {d.label}
@@ -39,7 +34,7 @@ export function DeviceRow(props: {
           ))}
         </select>
       ) : (
-        <span className={props.access === "pending" ? "muted" : "error"}>{ACCESS_TEXT[props.access]}</span>
+        <span className="row-status">{t.deviceStatus(props.name, t.access[props.access])}</span>
       )}
     </div>
   );

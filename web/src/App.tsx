@@ -1,9 +1,11 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { PhoneOff, RotateCcw, Plus, Users } from "lucide-react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { ROOM_ID_RE } from "../../shared/protocol";
-import { CallController } from "./call/controller";
+import { CallController, type CallState } from "./call/controller";
 import { CallView } from "./call/CallView";
 import { Setup } from "./setup/Setup";
 import { Centered } from "./ui/Centered";
+import { LangContext, STRINGS } from "./ui/i18n";
 
 const ROOM_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -22,29 +24,45 @@ export function App() {
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const roomUrl = `${location.origin}/r/${roomId}`;
 
+  useEffect(() => {
+    document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
+  }, [state.lang]);
+
+  return <LangContext.Provider value={state.lang}>{screen(controller, state, roomUrl)}</LangContext.Provider>;
+}
+
+function screen(controller: CallController, state: CallState, roomUrl: string) {
+  const t = STRINGS[state.lang];
   switch (state.phase) {
     case "idle":
       return <Setup controller={controller} state={state} roomUrl={roomUrl} />;
     case "full":
       return (
-        <Centered>
-          <h1>Room is full</h1>
-          <p className="muted">This room already has two people in it.</p>
-          <a className="button primary" href="/">
-            Start a new room
-          </a>
+        <Centered icon={<Users size={30} />}>
+          <h1>{t.roomFull}</h1>
+          <p className="muted">{t.roomFullBody}</p>
+          <div className="actions">
+            <a className="button primary" href="/">
+              <Plus size={18} />
+              {t.startNewRoom}
+            </a>
+          </div>
         </Centered>
       );
     case "ended":
       return (
-        <Centered>
-          <h1>Call ended</h1>
-          <button className="primary" onClick={() => controller.start()}>
-            Rejoin
-          </button>
-          <a className="button" href="/">
-            New room
-          </a>
+        <Centered icon={<PhoneOff size={30} />}>
+          <h1>{t.callEnded}</h1>
+          <div className="actions">
+            <button className="primary" onClick={() => controller.start()}>
+              <RotateCcw size={18} />
+              {t.rejoin}
+            </button>
+            <a className="button" href="/">
+              <Plus size={18} />
+              {t.newRoom}
+            </a>
+          </div>
         </Centered>
       );
     default:

@@ -26,7 +26,7 @@ The call is between mainland China and Uzbekistan, so everything has to work in 
 ## Before saying it's done
 
 - There are no tests or linter yet. Run `npm run typecheck` and `npm run build`, and both must pass.
-- For changes to the call itself, open the same room in two tabs under `npm run dev` and check that the call connects.
+- Don't test the call by opening the same room in two tabs under `npm run dev`: the two tabs never connect in dev, so this proves nothing. Check UI changes on a single tab (setup screen, waiting screen), and leave real two-person call testing to the user.
 
 ## UI text
 
