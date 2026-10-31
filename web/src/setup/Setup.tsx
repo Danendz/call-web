@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { LANGS, type Lang } from "../../../shared/protocol";
+import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { CopyLink } from "../ui/CopyLink";
 import { Video } from "../ui/Video";
@@ -55,6 +57,17 @@ export function Setup({ controller, state, roomUrl }: { controller: CallControll
           onToggle={() => controller.toggleCam()}
           onSelect={(kind, id) => controller.selectDevice(kind, id)}
         />
+
+        <label className="device-row">
+          <span className="row-label">I speak</span>
+          <select value={state.lang} onChange={(e) => controller.setLang(e.target.value as Lang)}>
+            {LANGS.map((l) => (
+              <option key={l} value={l}>
+                {LANG_NAMES[l]}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {blocked && (
           <div className="permission-help">

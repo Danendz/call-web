@@ -13,6 +13,7 @@ A 1-on-1 video call with text chat, tuned for calling between mainland China and
 
 ```sh
 npm install
+cp .env.example .env   # fill in the keys you have
 npm run dev        # server on :8080, Vite on :5173 (open http://localhost:5173)
 ```
 
@@ -30,5 +31,7 @@ npm run build && npm start   # serves dist/web + /ws on $PORT (default 8080)
 | `TURN_HOST` | e.g. `turn.danendz.com` |
 | `TURN_SECRET` | coturn `static-auth-secret` |
 | `TURN_PORT` / `TURNS_PORT` | defaults `3478` / `5349` |
+| `GROQ_API_KEY` | Whisper speech-to-chat and the free translation models |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | DeepSeek, translates when Groq's quota runs out |
 
 Deployment (Railway via `.railway/railway.ts`, coturn on Vultr, Cloudflare DNS) is covered in [infra/README.md](infra/README.md).

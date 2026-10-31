@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import type { ChatMessage, ServerMessage } from "../shared/protocol.js";
+import { translatorFromEnv } from "./translate.js";
 import { iceServersFor } from "./turn.js";
 
 const MAX_PEERS = 2;
@@ -23,6 +24,8 @@ interface Room {
 }
 
 const rooms = new Map<string, Room>();
+const translate = translatorFromEnv();
+if (!translate) console.warn("GROQ_API_KEY and LLM_API_KEY not set: chat messages are not translated");
 
 export function send(ws: WebSocket | null, msg: ServerMessage): void {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -116,11 +119,23 @@ export function relayToPeer(roomId: string, clientId: string, msg: ServerMessage
   send(otherMember(room, clientId)?.ws ?? null, msg);
 }
 
-export function postChat(roomId: string, clientId: string, text: string): void {
+export function isMember(roomId: string, clientId: string): boolean {
+  return rooms.get(roomId)?.members.has(clientId) ?? false;
+}
+
+/** Posts the message as written, then its translation once it's back (kept in the history for a rejoin). */
+export function postChat(roomId: string, clientId: string, text: string, spoken = false): void {
   const room = rooms.get(roomId);
   if (!room) return;
-  const message: ChatMessage = { id: randomUUID(), from: clientId, text, ts: Date.now() };
+  const message: ChatMessage = { id: randomUUID(), from: clientId, text, ts: Date.now(), ...(spoken && { spoken }) };
   room.chat.push(message);
   if (room.chat.length > MAX_CHAT_HISTORY) room.chat.shift();
   for (const m of room.members.values()) send(m.ws, { type: "chat", message });
+
+  void translate?.(text).then((translation) => {
+    if (!translation) return;
+    message.translation = translation;
+    const current = rooms.get(roomId);
+    for (const m of current?.members.values() ?? []) send(m.ws, { type: "chat-translation", id: message.id, translation });
+  });
 }

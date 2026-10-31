@@ -4,6 +4,7 @@ import { CopyLink } from "../ui/CopyLink";
 import { Video } from "../ui/Video";
 import type { CallController, CallState } from "./controller";
 import { StatsOverlay } from "./StatsOverlay";
+import { Subtitle } from "./Subtitle";
 
 export function CallView({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
@@ -34,6 +35,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           <Video stream={state.localStream} className={`local ${state.sharing ? "screen" : ""}`} muted mirror={!state.sharing} />
         )}
         {banner && <div className="banner">{banner}</div>}
+        {state.transcribeOn && state.speechNotice && <div className="speech-notice">{state.speechNotice}</div>}
+        {!chatOpen && <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} />}
         {showStats && (
           <StatsOverlay
             stats={state.stats}
@@ -45,7 +48,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
       </div>
 
       {chatOpen && (
-        <ChatPanel messages={state.chat} myId={state.myId} onSend={(t) => controller.sendChat(t)} onClose={() => setChatOpen(false)} />
+        <ChatPanel messages={state.chat} myId={state.myId} lang={state.lang} onSend={(t) => controller.sendChat(t)} onClose={() => setChatOpen(false)} />
       )}
 
       <div className="controls">
@@ -60,6 +63,13 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
             {state.sharing ? "Stop sharing" : "Share screen"}
           </button>
         )}
+        <button
+          className={state.transcribeOn ? "active" : ""}
+          disabled={state.micAccess !== "granted"}
+          onClick={() => controller.toggleTranscribe()}
+        >
+          🎙→💬
+        </button>
         <button className={showStats ? "active" : ""} onClick={() => setShowStats((v) => !v)}>
           Stats
         </button>
