@@ -1,4 +1,14 @@
 import type { ChatMessage, IceServerConfig, ServerMessage } from "../../../shared/protocol";
+import {
+  getLocalMedia,
+  getTrack,
+  loadDevicePref,
+  saveDevicePref,
+  selectedDevices,
+  type DeviceOption,
+  type MediaAccess,
+  type MediaKind,
+} from "./media";
 import { PeerSession } from "./peer";
 import { Signaling, type SocketStatus } from "./signaling";
 import { sampleStats, type CallStats } from "./stats";
@@ -9,15 +19,6 @@ const DIRECT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
 const TRYING_DIRECT_SHOWN_MS = 5_000;
 
 export type Phase = "idle" | "starting" | "waiting" | "in-call" | "full" | "ended";
-
-/** What happened when we asked for a device: denied = blocked by the user/browser, busy = another app holds it. */
-export type MediaAccess = "pending" | "granted" | "denied" | "missing" | "busy";
-export type MediaKind = "audio" | "video";
-
-export interface DeviceOption {
-  id: string;
-  label: string;
-}
 
 export interface CallState {
   phase: Phase;
@@ -326,70 +327,5 @@ export class CallController {
     this.screenTrack = null;
     this.state.localStream?.getTracks().forEach((t) => t.stop());
     this.set({ localStream: null, remoteStream: null, iceState: null, stats: null, sharing: false });
-  }
-}
-
-const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const VIDEO: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
-
-function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
-  const base = kind === "audio" ? AUDIO : VIDEO;
-  if (deviceId) return { ...base, deviceId: { ideal: deviceId } }; // ideal: falls back if the device is gone
-  return kind === "video" ? { ...base, facingMode: "user" } : base;
-}
-
-async function getLocalMedia(
-  micId: string | null,
-  camId: string | null,
-): Promise<{ stream: MediaStream; audio: MediaAccess; video: MediaAccess }> {
-  if (!navigator.mediaDevices?.getUserMedia) return { stream: new MediaStream(), audio: "missing", video: "missing" };
-  try {
-    // One request, so the browser shows a single permission prompt.
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: constraintsFor("audio", micId),
-      video: constraintsFor("video", camId),
-    });
-    return { stream, audio: "granted", video: "granted" };
-  } catch {
-    // No camera, camera busy or one of them denied: ask separately to find out which, and keep the other.
-    const audio = await getTrack("audio", micId);
-    const video = await getTrack("video", camId);
-    const tracks = [audio.track, video.track].filter((t): t is MediaStreamTrack => t !== null);
-    return { stream: new MediaStream(tracks), audio: audio.access, video: video.access };
-  }
-}
-
-async function getTrack(kind: MediaKind, deviceId: string | null): Promise<{ track: MediaStreamTrack | null; access: MediaAccess }> {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ [kind]: constraintsFor(kind, deviceId) });
-    return { track: stream.getTracks()[0], access: "granted" };
-  } catch (err) {
-    const name = (err as DOMException).name;
-    if (name === "NotAllowedError" || name === "SecurityError") return { track: null, access: "denied" };
-    if (name === "NotFoundError" || name === "OverconstrainedError") return { track: null, access: "missing" };
-    return { track: null, access: "busy" };
-  }
-}
-
-function selectedDevices(stream: MediaStream): Pick<CallState, "micDeviceId" | "camDeviceId"> {
-  return {
-    micDeviceId: stream.getAudioTracks()[0]?.getSettings().deviceId ?? null,
-    camDeviceId: stream.getVideoTracks()[0]?.getSettings().deviceId ?? null,
-  };
-}
-
-function loadDevicePref(kind: MediaKind): string | null {
-  try {
-    return localStorage.getItem(`device.${kind}`);
-  } catch {
-    return null;
-  }
-}
-
-function saveDevicePref(kind: MediaKind, deviceId: string): void {
-  try {
-    localStorage.setItem(`device.${kind}`, deviceId);
-  } catch {
-    // storage blocked: the choice just isn't remembered
   }
 }
