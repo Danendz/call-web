@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import type { ChatMessage, ServerMessage } from "../shared/protocol.js";
 import { translatorFromEnv } from "./translate.js";
 import { iceServersFor } from "./turn.js";
 
 const MAX_PEERS = 2;
+// Each room holds its chat in memory; this is far past what two people use.
+const MAX_ROOMS = 100;
 const MAX_CHAT_HISTORY = 200;
 // How long a dropped socket keeps its seat, so a network switch resumes the call instead of ending it.
 const RESUME_GRACE_MS = 20_000;
@@ -12,6 +14,8 @@ const CLIENT_ID_RE = /^[0-9a-f-]{36}$/;
 
 interface Member {
   clientId: string;
+  // Secret that proves a reconnect is this member. clientId is not one: the other person sees it in chat.
+  token: string;
   ws: WebSocket | null;
   polite: boolean;
   graceTimer?: NodeJS.Timeout;
@@ -36,15 +40,20 @@ function otherMember(room: Room, clientId: string): Member | undefined {
   return undefined;
 }
 
-/** Returns the joined clientId, or null if the room is full. */
-export function join(roomId: string, requestedId: string | null, ws: WebSocket): string | null {
+/** Returns the joined clientId, or null if the room (or the server) is full. */
+export function join(roomId: string, requestedId: string | null, token: string | null, ws: WebSocket): string | null {
   let room = rooms.get(roomId);
   if (!room) {
+    if (rooms.size >= MAX_ROOMS) {
+      send(ws, { type: "full" });
+      return null;
+    }
     room = { id: roomId, members: new Map(), chat: [] };
     rooms.set(roomId, room);
   }
 
-  const existing = requestedId ? room.members.get(requestedId) : undefined;
+  const seat = requestedId ? room.members.get(requestedId) : undefined;
+  const existing = seat && token && seat.token === token ? seat : undefined;
   if (existing) {
     clearTimeout(existing.graceTimer);
     if (existing.ws && existing.ws !== ws) existing.ws.terminate();
@@ -52,6 +61,7 @@ export function join(roomId: string, requestedId: string | null, ws: WebSocket):
     send(ws, {
       type: "joined",
       clientId: existing.clientId,
+      token: existing.token,
       resumed: true,
       peerPresent: otherMember(room, existing.clientId) !== undefined,
       polite: existing.polite,
@@ -72,15 +82,17 @@ export function join(roomId: string, requestedId: string | null, ws: WebSocket):
     if (!rooms.has(roomId)) rooms.set(roomId, room);
   }
 
-  const clientId = requestedId && CLIENT_ID_RE.test(requestedId) ? requestedId : randomUUID();
+  // Keeping the old id (seat expired, then reconnected) lets the chat history still show as ours.
+  const clientId = requestedId && CLIENT_ID_RE.test(requestedId) && !room.members.has(requestedId) ? requestedId : randomUUID();
   const peer = otherMember(room, clientId);
   // The newcomer is the polite peer in perfect negotiation; the one already waiting is impolite.
-  const member: Member = { clientId, ws, polite: peer !== undefined };
+  const member: Member = { clientId, token: randomBytes(32).toString("base64url"), ws, polite: peer !== undefined };
   room.members.set(clientId, member);
 
   send(ws, {
     type: "joined",
     clientId,
+    token: member.token,
     resumed: false,
     peerPresent: peer !== undefined,
     polite: member.polite,
@@ -119,8 +131,11 @@ export function relayToPeer(roomId: string, clientId: string, msg: ServerMessage
   send(otherMember(room, clientId)?.ws ?? null, msg);
 }
 
-export function isMember(roomId: string, clientId: string): boolean {
-  return rooms.get(roomId)?.members.has(clientId) ?? false;
+/** The clientId of the room member holding this token. */
+export function memberByToken(roomId: string, token: string): string | null {
+  if (!token) return null;
+  for (const m of rooms.get(roomId)?.members.values() ?? []) if (m.token === token) return m.clientId;
+  return null;
 }
 
 /** Posts the message as written, then its translation once it's back (kept in the history for a rejoin). */

@@ -5,7 +5,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { LANGS, MAX_UTTERANCE_S, TRANSCRIBE_SAMPLE_RATE, type Lang, type TranscribeReply } from "../shared/protocol.js";
 import { createQuota, failIfNotOk } from "./llm.js";
-import { isMember, postChat } from "./rooms.js";
+import { rateLimit } from "./limits.js";
+import { memberByToken, postChat } from "./rooms.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1";
 // Each has its own free quota (2h of audio an hour): when large-v3 runs out, turbo still has its own
@@ -16,6 +17,8 @@ const MAX_BODY = MAX_UTTERANCE_S * TRANSCRIBE_SAMPLE_RATE * 2 + 1024;
 // Whisper's own guess that a segment is noise; above this the segment is dropped
 const NO_SPEECH_PROB = 0.6;
 // What Whisper makes up from noise it was trained on (video subtitles credits)
+// One utterance every couple of seconds of nonstop talking; past that someone is spending the quota.
+const uploadsPerMember = rateLimit(30, 60_000);
 const HALLUCINATION_RE = /amara\.org|字幕由|明镜与点点|點點栏目|请不吝点赞/i;
 
 class OutOfQuota extends Error {
@@ -75,14 +78,15 @@ function reply(res: ServerResponse, status: number, body: TranscribeReply | { er
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 }
 
-/** POST /api/transcribe?room=&client=&lang= with a WAV body, from a member of the room. */
+/** POST /api/transcribe?room=&token=&lang= with a WAV body, from a member of the room. */
 export async function handleTranscribe(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   if (req.method !== "POST") return reply(res, 405, { error: "POST only" });
   const roomId = url.searchParams.get("room") ?? "";
-  const clientId = url.searchParams.get("client") ?? "";
+  const clientId = memberByToken(roomId, url.searchParams.get("token") ?? "");
   const lang = url.searchParams.get("lang") as Lang;
-  if (!isMember(roomId, clientId)) return reply(res, 403, { error: "not in this room" });
+  if (!clientId) return reply(res, 403, { error: "not in this room" });
   if (!LANGS.includes(lang)) return reply(res, 400, { error: "unknown lang" });
+  if (!uploadsPerMember(clientId)) return reply(res, 429, { error: "too many utterances" });
   if (!key) return reply(res, 503, { unavailable: true });
 
   const wav = await readBody(req, MAX_BODY);
