@@ -7,10 +7,11 @@ const PING_EVERY_MS = 10_000;
 const DEAD_AFTER_MS = 25_000;
 const MAX_BACKOFF_MS = 8_000;
 
-/** WebSocket to the room with heartbeat and automatic reconnect. Reconnects reuse clientId so the server resumes our seat. */
+/** WebSocket to the room with heartbeat and automatic reconnect. Reconnects send clientId and token so the server resumes our seat. */
 export class Signaling {
   private ws: WebSocket | null = null;
   private clientId: string | null = null;
+  private token: string | null = null;
   private stopped = false;
   private attempt = 0;
   private lastPong = 0;
@@ -28,8 +29,9 @@ export class Signaling {
     this.open();
   }
 
-  setClientId(id: string): void {
-    this.clientId = id;
+  setIdentity(clientId: string, token: string): void {
+    this.clientId = clientId;
+    this.token = token;
   }
 
   send(msg: ClientMessage): boolean {
@@ -59,6 +61,7 @@ export class Signaling {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams({ room: this.roomId });
     if (this.clientId) params.set("clientId", this.clientId);
+    if (this.token) params.set("token", this.token);
     const ws = new WebSocket(`${proto}//${location.host}/ws?${params}`);
     this.ws = ws;
     this.onStatus(this.attempt === 0 ? "connecting" : "reconnecting");

@@ -53,6 +53,8 @@ export type ServerMessage =
   | {
       type: "joined";
       clientId: string;
+      // Secret for resuming this seat and for /api/transcribe; never shown to the other member
+      token: string;
       // true when this socket replaced the same client's dropped socket
       resumed: boolean;
       peerPresent: boolean;

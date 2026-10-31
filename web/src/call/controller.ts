@@ -86,6 +86,7 @@ export class CallController {
   private peer: PeerSession | null = null;
   private polite = false;
   private iceServers: IceServerConfig[] = [];
+  private token: string | null = null;
   private camTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
   private mediaReady: Promise<void> | null = null;
@@ -97,8 +98,7 @@ export class CallController {
   private transcriber = new Transcriber({
     sendText: (text) => this.signaling.send({ type: "chat", text, spoken: true }),
     uploadUrl: (lang) =>
-      this.state.myId &&
-      `/api/transcribe?${new URLSearchParams({ room: this.roomId, client: this.state.myId, lang })}`,
+      this.token && `/api/transcribe?${new URLSearchParams({ room: this.roomId, token: this.token, lang })}`,
     onNotice: (speechNotice) => this.set({ speechNotice }),
   });
 
@@ -256,7 +256,8 @@ export class CallController {
   private onMessage(msg: ServerMessage): void {
     switch (msg.type) {
       case "joined":
-        this.signaling.setClientId(msg.clientId);
+        this.signaling.setIdentity(msg.clientId, msg.token);
+        this.token = msg.token;
         this.iceServers = msg.iceServers;
         this.set({ myId: msg.clientId, chat: msg.chat });
         if (msg.resumed && this.peer) {
