@@ -1,0 +1,38 @@
+:root {
+  --bg: #0a0b0e;
+  --surface: #131419;
+  --surface-2: #1b1d23;
+  --surface-3: #262932;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f3f4f6;
+  --muted: #9ba1ad;
+  --accent: #4c7dff;
+  --accent-hover: #6690ff;
+  --accent-soft: rgba(76, 125, 255, 0.18);
+  --danger: #ef4444;
+  --danger-hover: #f25c5c;
+  --danger-soft: rgba(239, 68, 68, 0.2);
+  --good: #34c759;
+  --ok: #ffb020;
+  --bad: #ff5a52;
+
+  /* Frosted glass over video */
+  --glass: rgba(20, 21, 26, 0.6);
+  --glass-strong: rgba(20, 21, 26, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --blur: blur(18px) saturate(160%);
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --fast: 150ms;
+  --med: 260ms;
+  --slow: 420ms;
+
+  color-scheme: dark;
+}

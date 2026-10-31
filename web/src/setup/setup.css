@@ -1,0 +1,209 @@
+.setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 32px 40px;
+  min-height: 100%;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  animation: fade-in var(--slow) var(--ease);
+}
+
+/* Sized from the frame shape (--ar), so switching portrait/landscape animates the box instead of jumping. */
+.preview {
+  --w-max: min(640px, 100vw - 32px);
+  --h-max: 64vh;
+  position: relative;
+  flex: none;
+  width: min(var(--w-max), var(--h-max) * var(--ar));
+  height: min(var(--h-max), var(--w-max) / var(--ar));
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition:
+    width var(--slow) var(--ease),
+    height var(--slow) var(--ease);
+}
+
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: fade-in var(--med) var(--ease);
+}
+
+.preview-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 16px 16px 80px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  animation: fade-in var(--med) var(--ease);
+}
+
+.preview-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  transform: translateX(-50%);
+}
+
+.preview-controls .icon-btn {
+  width: 46px;
+  height: 46px;
+}
+
+.mic-level {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 calc(var(--level, 0) * 6px) rgba(52, 199, 89, 0.55);
+  pointer-events: none;
+}
+
+.setup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(380px, 100%);
+}
+
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.share .copy-link {
+  width: 100%;
+}
+
+.devices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--fast) var(--ease);
+}
+
+.device-row:hover {
+  border-color: var(--border-strong);
+}
+
+.device-row:focus-within {
+  border-color: var(--accent);
+}
+
+.row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  color: var(--muted);
+}
+
+.row-label {
+  flex: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.device-row select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background-color: transparent;
+}
+
+.device-row .row-label + select {
+  text-align: right;
+  text-align-last: right;
+}
+
+.row-status {
+  flex: 1;
+  padding-right: 14px;
+  font-size: 14px;
+}
+
+.device-row.pending .row-status {
+  color: var(--muted);
+}
+
+.device-row.problem {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.device-row.problem .row-status,
+.device-row.problem .row-icon {
+  color: #ff8a85;
+}
+
+.permission-help {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, 0.08);
+  font-size: 14px;
+  animation: rise var(--med) var(--ease);
+}
+
+.permission-help p {
+  margin: 0;
+}
+
+.permission-help button {
+  min-height: 36px;
+}
+
+button.join {
+  min-height: 52px;
+  font-size: 16px;
+}
+
+@media (max-width: 899px) {
+  .setup {
+    align-content: flex-start;
+    gap: 22px;
+  }
+
+  .preview {
+    --h-max: 52vh;
+  }
+
+  .setup h1 {
+    font-size: 22px;
+  }
+}

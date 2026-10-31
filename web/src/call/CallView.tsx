@@ -1,16 +1,30 @@
 import { useEffect, useState } from "react";
 import { ChatPanel } from "../chat/ChatPanel";
 import { CopyLink } from "../ui/CopyLink";
-import { Video } from "../ui/Video";
+import { useT, type Strings } from "../ui/i18n";
+import "./call.css";
+import { ControlPill } from "./ControlPill";
 import type { CallController, CallState } from "./controller";
+import type { SpeechNotice } from "./speech/transcriber";
+import { Fade } from "./Fade";
+import { Feeds } from "./Feeds";
 import { StatsOverlay } from "./StatsOverlay";
 import { Subtitle } from "./Subtitle";
+import { useAutoHide } from "./useAutoHide";
+import { STACKED_QUERY, useMediaQuery } from "./useMediaQuery";
+import { useVisualViewport } from "./useVisualViewport";
 
 export function CallView({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
+  const t = useT();
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const [showStats, setShowStats] = useState(state.forceRelay);
   const [seenCount, setSeenCount] = useState(0);
-  const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
+  const [swapped, setSwapped] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hoveringPill, setHoveringPill] = useState(false);
+  const stacked = useMediaQuery(STACKED_QUERY);
+  const finePointer = useMediaQuery("(pointer: fine)");
+  useVisualViewport();
 
   const othersCount = state.chat.filter((m) => m.from !== state.myId).length;
   useEffect(() => {
@@ -18,84 +32,106 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   }, [chatOpen, othersCount]);
   const unread = othersCount - seenCount;
 
-  const banner = statusBanner(state);
+  // A new peer starts in the usual layout: them big, you small
+  useEffect(() => {
+    if (!state.remoteStream) setSwapped(false);
+  }, [state.remoteStream]);
+
+  const connected = state.phase === "in-call" && !!state.remoteStream;
+  const compact = stacked && chatOpen;
+  const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !hoveringPill && !compact);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // On touch, tapping the bare video toggles the controls, like in phone call apps
+    const onVideo = !(e.target as Element).closest(".pill, .pip, .stats, .chat");
+    if (e.pointerType !== "mouse" && onVideo && !idle) sleep();
+    else wake();
+  };
+
+  const banner = statusBanner(state, t);
 
   return (
-    <div className={`call ${chatOpen ? "chat-open" : ""}`}>
+    <div
+      className={`call ${chatOpen ? "chat-open" : ""} ${idle ? "idle" : ""}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={(e) => e.pointerType === "mouse" && wake()}
+      onKeyDown={wake}
+    >
       <div className="stage">
-        {state.phase === "in-call" && state.remoteStream ? (
-          <Video stream={state.remoteStream} className="remote" />
-        ) : (
+        <Feeds
+          localStream={state.localStream}
+          remoteStream={connected ? state.remoteStream : null}
+          camOn={state.camAccess === "granted" && state.camOn}
+          swapped={swapped}
+          onSwap={() => setSwapped((v) => !v)}
+        />
+
+        {!connected && (
           <div className="waiting">
-            <p>{state.phase === "starting" ? "Starting…" : "Waiting for the other person to join…"}</p>
-            <CopyLink url={roomUrl} />
+            <div className="waiting-card">
+              <p>{state.phase === "starting" ? t.starting : t.waitingForPeer}</p>
+              <CopyLink url={roomUrl} />
+            </div>
           </div>
         )}
-        {state.localStream && (
-          <Video stream={state.localStream} className={`local ${state.sharing ? "screen" : ""}`} muted mirror={!state.sharing} />
-        )}
-        {banner && <div className="banner">{banner}</div>}
-        {state.transcribeOn && state.speechNotice && <div className="speech-notice">{state.speechNotice}</div>}
-        {!chatOpen && <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} />}
-        {showStats && (
-          <StatsOverlay
-            stats={state.stats}
-            tryingDirect={state.tryingDirect}
-            forceRelay={state.forceRelay}
-            onForceRelay={(v) => controller.setForceRelay(v)}
-          />
-        )}
+
+        <div className="notices">
+          <Fade className="notice" text={banner} />
+          <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
+        </div>
+        <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
+        <StatsOverlay
+          open={showStats}
+          stats={state.stats}
+          tryingDirect={state.tryingDirect}
+          forceRelay={state.forceRelay}
+          onForceRelay={(v) => controller.setForceRelay(v)}
+        />
+
+        <ControlPill
+          controller={controller}
+          state={state}
+          compact={compact}
+          chatOpen={chatOpen}
+          unread={unread}
+          showStats={showStats}
+          onToggleChat={() => setChatOpen((v) => !v)}
+          onToggleStats={() => setShowStats((v) => !v)}
+          onMenuChange={setMenuOpen}
+          onHover={setHoveringPill}
+        />
       </div>
 
-      {chatOpen && (
-        <ChatPanel messages={state.chat} myId={state.myId} lang={state.lang} onSend={(t) => controller.sendChat(t)} onClose={() => setChatOpen(false)} />
-      )}
-
-      <div className="controls">
-        <button className={state.micOn ? "" : "off"} disabled={state.micAccess !== "granted"} onClick={() => controller.toggleMic()}>
-          {state.micOn ? "Mute" : "Unmute"}
-        </button>
-        <button className={state.camOn ? "" : "off"} disabled={state.camAccess !== "granted"} onClick={() => controller.toggleCam()}>
-          {state.camOn ? "Camera off" : "Camera on"}
-        </button>
-        {canShare && (
-          <button className={state.sharing ? "active" : ""} disabled={state.phase !== "in-call"} onClick={() => controller.toggleScreenShare()}>
-            {state.sharing ? "Stop sharing" : "Share screen"}
-          </button>
-        )}
-        <button
-          className={state.transcribeOn ? "active" : ""}
-          disabled={state.micAccess !== "granted"}
-          onClick={() => controller.toggleTranscribe()}
-        >
-          🎙→💬
-        </button>
-        <button className={showStats ? "active" : ""} onClick={() => setShowStats((v) => !v)}>
-          Stats
-        </button>
-        <button className={chatOpen ? "active" : ""} onClick={() => setChatOpen((v) => !v)}>
-          Chat{unread > 0 && !chatOpen ? <span className="badge">{unread}</span> : null}
-        </button>
-        <button className="danger" onClick={() => controller.hangUp()}>
-          Hang up
-        </button>
-      </div>
+      <ChatPanel
+        open={chatOpen}
+        messages={state.chat}
+        myId={state.myId}
+        lang={state.lang}
+        focusOnOpen={finePointer}
+        onSend={(t) => controller.sendChat(t)}
+        onClose={() => setChatOpen(false)}
+      />
     </div>
   );
 }
 
-function statusBanner(state: CallState): string | null {
-  if (state.socket === "reconnecting") return "Lost connection to server, reconnecting…";
+function statusBanner(state: CallState, t: Strings): string | null {
+  if (state.socket === "reconnecting") return t.serverLost;
   if (state.phase !== "in-call") return null;
   switch (state.iceState) {
     case "new":
     case "checking":
-      return "Connecting…";
+      return t.connecting;
     case "disconnected":
-      return "Connection unstable, reconnecting…";
+      return t.unstable;
     case "failed":
-      return "Connection failed, retrying…";
+      return t.failed;
     default:
       return null;
   }
+}
+
+function speechNoticeText(notice: SpeechNotice, t: Strings): string {
+  if (notice.kind === "unavailable") return t.speechUnavailable;
+  return t.speechPaused(new Date(notice.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
 }

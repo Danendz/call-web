@@ -1,81 +1,122 @@
-import { useEffect } from "react";
+import { Languages, Mic, MicOff, RectangleHorizontal, RectangleVertical, Video as VideoIcon, VideoOff } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { CopyLink } from "../ui/CopyLink";
+import { useT } from "../ui/i18n";
+import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
-import { ACCESS_TEXT, DeviceRow } from "./DeviceRow";
+import { DeviceRow } from "./DeviceRow";
 import { MicLevel } from "./MicLevel";
+import "./setup.css";
 
 /** Pre-join screen: camera preview, mic level, device pickers and permission help. */
 export function Setup({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
+  const t = useT();
   useEffect(() => {
     void controller.preview();
   }, [controller]);
 
+  const portrait = state.orientation === "portrait";
+  const [aspect, setAspect] = useState<number | null>(null);
+  // Until the camera reports its frame size, assume it gives the shape we asked for
+  useEffect(() => setAspect(null), [state.orientation]);
+
+  const micGranted = state.micAccess === "granted";
+  const camGranted = state.camAccess === "granted";
   const pending = state.micAccess === "pending" || state.camAccess === "pending";
   const blocked = state.micAccess === "denied" || state.camAccess === "denied";
-  const showVideo = state.localStream && state.camAccess === "granted" && state.camOn;
+  const showVideo = state.localStream && camGranted && state.camOn;
   const joinLabel =
-    pending ? "Waiting for permission…"
-    : state.micAccess !== "granted" && state.camAccess !== "granted" ? "Join without camera & mic"
-    : "Join call";
+    pending ? t.waitingPermission
+    : !micGranted && !camGranted ? t.joinWithoutMedia
+    : t.joinCall;
 
   return (
     <div className="setup">
-      <div className="preview">
+      <div className="preview" style={{ "--ar": aspect ?? (portrait ? 9 / 16 : 16 / 9) } as CSSProperties}>
         {showVideo ? (
-          <Video stream={state.localStream!} className="preview-video" muted mirror />
+          <Video stream={state.localStream!} className="preview-video" muted mirror onAspect={setAspect} />
         ) : (
-          <div className="preview-off">{state.camAccess === "granted" ? "Camera is off" : `Camera: ${ACCESS_TEXT[state.camAccess]}`}</div>
+          <div className="preview-off">
+            <VideoOff size={28} />
+            <span>{camGranted ? t.cameraOff : t.deviceStatus(t.camera, t.access[state.camAccess])}</span>
+          </div>
         )}
-        {state.localStream && state.micAccess === "granted" && <MicLevel stream={state.localStream} />}
+        <div className="preview-controls">
+          <IconButton
+            label={state.micOn ? t.micOff : t.micOn}
+            variant={micGranted && !state.micOn ? "off" : null}
+            disabled={!micGranted}
+            onClick={() => controller.toggleMic()}
+          >
+            {micGranted && state.micOn && state.localStream && <MicLevel stream={state.localStream} />}
+            {micGranted && state.micOn ? <Mic size={20} /> : <MicOff size={20} />}
+          </IconButton>
+          <IconButton
+            label={state.camOn ? t.camOff : t.camOn}
+            variant={camGranted && !state.camOn ? "off" : null}
+            disabled={!camGranted}
+            onClick={() => controller.toggleCam()}
+          >
+            {camGranted && state.camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
+          </IconButton>
+          <IconButton
+            label={portrait ? t.sendLandscape : t.sendPortrait}
+            disabled={!camGranted}
+            onClick={() => controller.setOrientation(portrait ? "landscape" : "portrait")}
+          >
+            {portrait ? <RectangleVertical size={20} /> : <RectangleHorizontal size={20} />}
+          </IconButton>
+        </div>
       </div>
 
       <div className="setup-panel">
-        <h1>Ready to join?</h1>
-        <p className="muted">Share this link with the person you want to call:</p>
-        <CopyLink url={roomUrl} />
+        <h1>{t.readyToJoin}</h1>
+        <div className="share">
+          <p className="muted">{t.shareLink}</p>
+          <CopyLink url={roomUrl} />
+        </div>
 
-        <DeviceRow
-          name="Microphone"
-          kind="audio"
-          access={state.micAccess}
-          on={state.micOn}
-          devices={state.mics}
-          selected={state.micDeviceId}
-          onToggle={() => controller.toggleMic()}
-          onSelect={(kind, id) => controller.selectDevice(kind, id)}
-        />
-        <DeviceRow
-          name="Camera"
-          kind="video"
-          access={state.camAccess}
-          on={state.camOn}
-          devices={state.cams}
-          selected={state.camDeviceId}
-          onToggle={() => controller.toggleCam()}
-          onSelect={(kind, id) => controller.selectDevice(kind, id)}
-        />
-
-        <label className="device-row">
-          <span className="row-label">I speak</span>
-          <select value={state.lang} onChange={(e) => controller.setLang(e.target.value as Lang)}>
-            {LANGS.map((l) => (
-              <option key={l} value={l}>
-                {LANG_NAMES[l]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="devices">
+          <DeviceRow
+            name={t.microphone}
+            icon={<Mic size={18} />}
+            kind="audio"
+            access={state.micAccess}
+            devices={state.mics}
+            selected={state.micDeviceId}
+            onSelect={(kind, id) => controller.selectDevice(kind, id)}
+          />
+          <DeviceRow
+            name={t.camera}
+            icon={<VideoIcon size={18} />}
+            kind="video"
+            access={state.camAccess}
+            devices={state.cams}
+            selected={state.camDeviceId}
+            onSelect={(kind, id) => controller.selectDevice(kind, id)}
+          />
+          <label className="device-row">
+            <span className="row-icon" aria-hidden>
+              <Languages size={18} />
+            </span>
+            <span className="row-label">{t.iSpeak}</span>
+            <select value={state.lang} onChange={(e) => controller.setLang(e.target.value as Lang)}>
+              {LANGS.map((l) => (
+                <option key={l} value={l}>
+                  {LANG_NAMES[l]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {blocked && (
           <div className="permission-help">
-            <p>
-              The browser blocked access. Tap the camera or lock icon in the address bar, allow camera and microphone, then
-              press Retry. On iPhone: Settings → Safari → Camera / Microphone → Allow.
-            </p>
-            <button onClick={() => controller.preview()}>Retry</button>
+            <p>{t.permissionHelp}</p>
+            <button onClick={() => controller.preview()}>{t.retry}</button>
           </div>
         )}
 

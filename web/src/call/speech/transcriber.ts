@@ -6,13 +6,16 @@ import { BrowserRecognizer } from "./browserRecognizer";
 import { RECOGNITION_LANG } from "./lang";
 import { WhisperRecorder } from "./whisperRecorder";
 
+/** Something the person should know about transcription; the UI words it in their language. */
+export type SpeechNotice = { kind: "unavailable" } | { kind: "paused"; until: number };
+
 export interface TranscriberHooks {
   /** A line the browser recognized, to post as spoken chat. */
   sendText(text: string): void;
   /** Where the server path uploads to; null when not in a room yet. */
   uploadUrl(lang: Lang): string | null;
   /** Something the person should know about transcription, or null to clear it. */
-  onNotice(notice: string | null): void;
+  onNotice(notice: SpeechNotice | null): void;
 }
 
 // ?stt=whisper skips the browser's recognition, to try the server path in a browser that has its own
@@ -78,11 +81,10 @@ export class Transcriber {
     if ("unavailable" in reply) {
       this.unavailable = true;
       this.stop();
-      this.hooks.onNotice("Speech-to-chat isn't available in this browser");
+      this.hooks.onNotice({ kind: "unavailable" });
     } else if ("paused" in reply) {
       this.pausedUntil = reply.until;
-      const at = new Date(reply.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      this.hooks.onNotice(`Speech-to-chat paused until ${at}: free limit reached`);
+      this.hooks.onNotice({ kind: "paused", until: reply.until });
       clearTimeout(this.resumeTimer);
       this.resumeTimer = window.setTimeout(() => this.hooks.onNotice(null), reply.until - Date.now());
     }
