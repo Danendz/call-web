@@ -26,8 +26,20 @@ const MAX_UTTERANCE_BYTES = MAX_UTTERANCE_S * TRANSCRIBE_SAMPLE_RATE * 2;
 const MIN_UTTERANCE_BYTES = TRANSCRIBE_SAMPLE_RATE * 2 * 0.2;
 // The client sends ~25 frames a second; a cap on the count keeps tiny frames from costing more than their bytes
 const MAX_UTTERANCE_FRAMES = 2000;
-// Whisper's own guess that a segment is noise; above this the segment is dropped
+// Whisper's own guesses that a segment is made up, at the cutoffs Whisper itself uses: noise, a low
+// average log-probability of its tokens (unsure), or text that compresses too well (a phrase on repeat)
 const NO_SPEECH_PROB = 0.6;
+const MIN_AVG_LOGPROB = -1;
+const MAX_COMPRESSION_RATIO = 2.4;
+// A line that's only a filler: in the chat it's noise even when it was really said, since it was heard anyway
+const FILLER_RE = /^(?:嗯|啊|哦|呃|额|唔|mm+|hm+|uh+|um+|ah+|oh+|huh|mhm)+$/;
+// What Whisper says most often when it hears only noise (video endings). Said on purpose it's usually
+// longer, so as a whole line it's dropped when the audio was short or Whisper wasn't sure
+const THANKS_RE =
+  /^(?:(?:thank you|thanks)(?: (?:so much|very much|all|everyone|for watching|for listening))? ?)+$|^(?:谢谢|感谢)+(?:大家|你|您)?(?:的)?(?:观看|收看|收听)?$/;
+// Preroll and the closing pause are ~1.1s of this, so it's about 1.4s of speech
+const SHORT_AUDIO_S = 2.5;
+const SURE_AVG_LOGPROB = -0.5;
 // One utterance every couple of seconds of nonstop talking; past that someone is spending the quota.
 const uploadsPerMember = rateLimit(30, 60_000);
 // What Whisper makes up from noise it was trained on (video subtitles credits)
@@ -43,7 +55,53 @@ const withQuota = createQuota(WHISPER_MODELS);
 const key = process.env.GROQ_API_KEY;
 if (!key) console.warn("GROQ_API_KEY not set: speech is transcribed only in browsers that can do it themselves");
 
-async function transcribe(wav: Buffer, lang: Lang): Promise<{ text: string; model: string }> {
+interface Segment {
+  text: string;
+  no_speech_prob?: number;
+  avg_logprob?: number;
+  compression_ratio?: number;
+}
+
+/** Why a segment or the whole line was dropped; only these go to the log, never the text. */
+type Dropped = Record<"noise" | "unsure" | "repeat" | "credits" | "filler" | "thanks", number>;
+
+function keep(segments: Segment[], lang: Lang, seconds: number, dropped: Dropped): string {
+  const kept = segments.filter((s) => {
+    const reason =
+      (s.no_speech_prob ?? 0) >= NO_SPEECH_PROB
+        ? "noise"
+        : (s.avg_logprob ?? 0) < MIN_AVG_LOGPROB
+          ? "unsure"
+          : (s.compression_ratio ?? 0) > MAX_COMPRESSION_RATIO
+            ? "repeat"
+            : HALLUCINATION_RE.test(s.text)
+              ? "credits"
+              : null;
+    if (reason) dropped[reason]++;
+    return !reason;
+  });
+  const text = kept
+    .map((s) => s.text.trim())
+    .join(lang === "zh" ? "" : " ")
+    .trim();
+  const words = text.toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, " ").trim();
+  if (FILLER_RE.test(words.replace(/ /g, ""))) {
+    if (words) dropped.filler++;
+    return "";
+  }
+  const sure = kept.every((s) => (s.avg_logprob ?? 0) >= SURE_AVG_LOGPROB);
+  if (THANKS_RE.test(words) && (seconds < SHORT_AUDIO_S || !sure)) {
+    dropped.thanks++;
+    return "";
+  }
+  return text;
+}
+
+async function transcribe(
+  wav: Buffer,
+  lang: Lang,
+  seconds: number,
+): Promise<{ text: string; model: string; dropped: Dropped }> {
   return withQuota(
     async (model) => {
       const form = new FormData();
@@ -59,13 +117,10 @@ async function transcribe(wav: Buffer, lang: Lang): Promise<{ text: string; mode
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       await failIfNotOk(res, "Transcribe");
-      const reply = (await res.json()) as { segments?: { text: string; no_speech_prob?: number }[] };
-      const text = (reply.segments ?? [])
-        .filter((s) => (s.no_speech_prob ?? 0) < NO_SPEECH_PROB && !HALLUCINATION_RE.test(s.text))
-        .map((s) => s.text.trim())
-        .join(lang === "zh" ? "" : " ")
-        .trim();
-      return { text, model };
+      const reply = (await res.json()) as { segments?: Segment[] };
+      const dropped: Dropped = { noise: 0, unsure: 0, repeat: 0, credits: 0, filler: 0, thanks: 0 };
+      const text = keep(Array.isArray(reply.segments) ? reply.segments : [], lang, seconds, dropped);
+      return { text, model, dropped };
     },
     ({ until }) => Promise.reject(new OutOfQuota(until)),
   );
@@ -108,11 +163,16 @@ export function onSpeechConnection(ws: WebSocket, roomId: string, token: string)
 
   const finish = (lang: Lang, pcm: Buffer, startedAt: number) => {
     const endedAt = Date.now();
-    const transcribed = transcribe(wavFrom(pcm), lang).then(
+    const seconds = pcm.length / (TRANSCRIBE_SAMPLE_RATE * 2);
+    const transcribed = transcribe(wavFrom(pcm), lang, seconds).then(
       (result) => {
-        // Timings only, never what was said. span against audio shows how far the stream fell behind
+        // Timings and drop counts only, never what was said. span against audio shows how far the stream fell behind
+        const dropped = Object.entries(result.dropped)
+          .filter(([, n]) => n)
+          .map(([reason, n]) => `${reason}:${n}`)
+          .join(",");
         console.info(
-          `transcribe lang=${lang} audio=${(pcm.length / (TRANSCRIBE_SAMPLE_RATE * 2)).toFixed(1)}s span=${endedAt - startedAt}ms whisper=${Date.now() - endedAt}ms model=${result.model} chars=${result.text.length}`,
+          `transcribe lang=${lang} audio=${seconds.toFixed(1)}s span=${endedAt - startedAt}ms whisper=${Date.now() - endedAt}ms model=${result.model} chars=${result.text.length} dropped=${dropped || "-"}`,
         );
         return result.text;
       },
