@@ -28,7 +28,7 @@ The call is between mainland China and Uzbekistan, so everything has to work in 
 The service is public: anyone can open the site and connect to `/ws` or `/api`. Write every change assuming the other side is hostile.
 
 - **Treat everything from a client as untrusted.** Check the shape and type of every message before reading it (valid JSON can still be `null`), and check sizes and lengths. A throw inside a socket handler crashes the server and drops every call.
-- **IDs are not secrets.** `clientId` and room IDs are visible to the other person. Anything that grants access (resuming a seat, `/api/transcribe`) must check the member's secret `token`, made with `node:crypto` and never sent to the other member.
+- **IDs are not secrets.** `clientId` and room IDs are visible to the other person. Anything that grants access (resuming a seat, `/ws/speech`) must check the member's secret `token`, made with `node:crypto` and never sent to the other member.
 - **Put a limit on anything a client can repeat or grow.** New endpoints, messages, and in-memory state get a rate limit or cap (helpers in `server/limits.ts`), especially anything that spends paid API quota or TURN relay.
 - **Keep the CSP strict.** Don't add `'unsafe-inline'`, `'unsafe-eval'` or third-party hosts to `setSecurityHeaders`, and don't render user text as HTML (`dangerouslySetInnerHTML`, `innerHTML`).
 - **Secrets stay in Railway variables**, never in source, logs, client code, or messages sent to the browser.

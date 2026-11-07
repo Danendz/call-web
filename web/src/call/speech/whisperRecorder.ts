@@ -1,9 +1,10 @@
-// Cuts the mic track into utterances for server transcription. Loudness against the room's noise
-// floor says when someone is talking; a pause ends the utterance. It listens to the call's own track,
-// so echo cancellation keeps the other person's voice from the speakers out of it
+// Cuts the mic track into utterances for server transcription, handing each one out while it's being
+// said. Loudness against the room's noise floor says when someone is talking; a pause ends the utterance.
+// It listens to the call's own track, so echo cancellation keeps the other person's voice from the
+// speakers out of it
 
 import { MAX_UTTERANCE_S } from "../../../../shared/protocol";
-import { encodeWav } from "./wav";
+import { Downsampler } from "./pcm";
 
 const CHUNK = 2048;
 // Hands the mic's samples to the page in chunks; inline so it ships in the bundle, not from another host
@@ -38,20 +39,28 @@ const END_SILENCE_MS = 800;
 // Shorter than this of actual speech is a cough or a bump, not worth a request
 const MIN_VOICED_MS = 300;
 
+/** Where an utterance goes as it's said: 16-bit PCM at the server's rate, then whether it was speech. */
+export interface UtteranceSink {
+  start(): void;
+  audio(pcm: Int16Array): void;
+  end(speech: boolean): void;
+}
+
 export class WhisperRecorder {
   private ctx: AudioContext;
   private chunkMs: number;
   private floorDb = -60;
   private loudRun = 0;
   private preroll: Float32Array[] = [];
-  private utterance: Float32Array[] | null = null;
+  private utterance: Downsampler | null = null;
+  private utteranceMs = 0;
   private voicedMs = 0;
   private silentMs = 0;
   private stopped = false;
 
   constructor(
     track: MediaStreamTrack,
-    private onUtterance: (wav: Blob) => void,
+    private sink: UtteranceSink,
   ) {
     this.ctx = new AudioContext();
     this.chunkMs = (CHUNK / this.ctx.sampleRate) * 1000;
@@ -61,6 +70,9 @@ export class WhisperRecorder {
   stop(): void {
     this.stopped = true;
     void this.ctx.close();
+    // Cut off mid-sentence (muted, language changed): what was said so far is dropped
+    if (this.utterance) this.sink.end(false);
+    this.utterance = null;
   }
 
   private async connect(track: MediaStreamTrack): Promise<void> {
@@ -93,29 +105,29 @@ export class WhisperRecorder {
       if (this.preroll.length * this.chunkMs > PREROLL_MS) this.preroll.shift();
       this.loudRun = loud ? this.loudRun + 1 : 0;
       if (this.loudRun >= START_CHUNKS) {
-        this.utterance = this.preroll;
-        this.preroll = [];
+        this.utterance = new Downsampler(this.ctx.sampleRate);
+        this.utteranceMs = this.preroll.length * this.chunkMs;
         this.voicedMs = this.loudRun * this.chunkMs;
         this.silentMs = 0;
+        this.sink.start();
+        for (const chunk of this.preroll) this.sink.audio(this.utterance.push(chunk));
+        this.preroll = [];
       }
       return;
     }
 
-    this.utterance.push(samples);
+    this.sink.audio(this.utterance.push(samples));
+    this.utteranceMs += this.chunkMs;
     if (loud) {
       this.voicedMs += this.chunkMs;
       this.silentMs = 0;
     } else this.silentMs += this.chunkMs;
-    if (this.silentMs >= END_SILENCE_MS || this.utterance.length * this.chunkMs >= MAX_UTTERANCE_S * 1000 - 500) this.finish();
+    if (this.silentMs >= END_SILENCE_MS || this.utteranceMs >= MAX_UTTERANCE_S * 1000 - 500) this.finish();
   }
 
   private finish(): void {
-    const chunks = this.utterance!;
     this.utterance = null;
     this.loudRun = 0;
-    if (this.voicedMs < MIN_VOICED_MS) return;
-    const all = new Float32Array(chunks.length * CHUNK);
-    chunks.forEach((c, i) => all.set(c, i * CHUNK));
-    this.onUtterance(encodeWav(all, this.ctx.sampleRate));
+    this.sink.end(this.voicedMs >= MIN_VOICED_MS);
   }
 }

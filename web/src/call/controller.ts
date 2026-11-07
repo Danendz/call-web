@@ -97,8 +97,7 @@ export class CallController {
   private lastDirectRetry = 0;
   private transcriber = new Transcriber({
     sendText: (text) => this.signaling.send({ type: "chat", text, spoken: true }),
-    uploadUrl: (lang) =>
-      this.token && `/api/transcribe?${new URLSearchParams({ room: this.roomId, token: this.token, lang })}`,
+    speechUrl: () => this.token && `/ws/speech?${new URLSearchParams({ room: this.roomId, token: this.token })}`,
     onNotice: (speechNotice) => this.set({ speechNotice }),
   });
 

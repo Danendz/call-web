@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_CHAT_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
 import { clientIp, concurrencyLimit, ownHost, rateLimit, setSecurityHeaders } from "./limits.js";
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
-import { handleTranscribe } from "./transcribe.js";
+import { onSpeechConnection } from "./transcribe.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR ?? "dist/web");
@@ -36,7 +36,6 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
-  if (url.pathname === "/api/transcribe") return handleTranscribe(req, res, url);
 
   let filePath = path.join(STATIC_DIR, path.normalize(decodeURIComponent(url.pathname)));
   if (!filePath.startsWith(STATIC_DIR)) {
@@ -73,7 +72,8 @@ const alive = new WeakSet<WebSocket>();
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const roomId = url.searchParams.get("room") ?? "";
-  if (url.pathname !== "/ws" || !ROOM_ID_RE.test(roomId) || !sameOrigin(req)) {
+  const speech = url.pathname === "/ws/speech";
+  if ((url.pathname !== "/ws" && !speech) || !ROOM_ID_RE.test(roomId) || !sameOrigin(req)) {
     socket.destroy();
     return;
   }
@@ -84,7 +84,10 @@ server.on("upgrade", (req, socket, head) => {
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
     ws.on("close", () => socketsPerIp.release(ip));
-    onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"));
+    alive.add(ws);
+    ws.on("pong", () => alive.add(ws));
+    if (speech) onSpeechConnection(ws, roomId, url.searchParams.get("token") ?? "");
+    else onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"));
   });
 });
 
@@ -106,8 +109,6 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
     return;
   }
 
-  alive.add(ws);
-  ws.on("pong", () => alive.add(ws));
   ws.on("close", () => disconnected(roomId, clientId, ws));
   ws.on("message", (raw) => {
     let msg: ClientMessage;
