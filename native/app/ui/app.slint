@@ -34,6 +34,13 @@ export component AppWindow inherits Window {
     in property <bool> portrait;
     in property <image> self-video;
     in property <image> peer-video;
+    in property <image> screen-video;
+    in property <bool> remote-screen;
+    in property <bool> sharing;
+    in property <[DeviceItem]> screen-sources;
+    in property <string> corner-self: "br";
+    in property <string> corner-peer: "tr";
+    in property <string> corner-screen: "tl";
     in property <int> peer-frame-rotation;
     in property <bool> peer-cam-on: true;
     in property <StatsView> stats;
@@ -69,7 +76,11 @@ export component AppWindow inherits Window {
     callback set-force-relay(bool);
     callback toggle-transcribe();
     callback send-chat(string) -> bool;
-    callback screenshot(int);
+    callback screenshot(string, int);
+    callback toggle-share();
+    callback share-source(string);
+    callback close-screen-picker();
+    callback corner-moved(string, string);
     callback show-shot();
 
     title: "Call Danya";
@@ -129,6 +140,17 @@ export component AppWindow inherits Window {
         cam-id: root.cam-id;
         portrait: root.portrait;
         peer-video: root.peer-video;
+        screen-video: root.screen-video;
+        remote-screen: root.remote-screen;
+        sharing: root.sharing;
+        screen-sources: root.screen-sources;
+        corner-self: root.corner-self;
+        corner-peer: root.corner-peer;
+        corner-screen: root.corner-screen;
+        toggle-share => { root.toggle-share(); }
+        share-source(id) => { root.share-source(id); }
+        close-screen-picker => { root.close-screen-picker(); }
+        corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
         peer-frame-rotation: root.peer-frame-rotation;
         peer-cam-on: root.peer-cam-on;
         self-video: root.self-video;
@@ -143,7 +165,7 @@ export component AppWindow inherits Window {
         speech-paused-until: root.speech-paused-until;
         peer-screenshot: root.peer-screenshot;
         saved-shot: root.saved-shot;
-        screenshot(rotation) => { root.screenshot(rotation); }
+        screenshot(feed, rotation) => { root.screenshot(feed, rotation); }
         show-shot => { root.show-shot(); }
         toggle-transcribe => { root.toggle-transcribe(); }
         send-chat(text) => { root.send-chat(text) }

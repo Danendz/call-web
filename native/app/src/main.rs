@@ -145,10 +145,16 @@ fn main() -> anyhow::Result<()> {
     ui.on_screenshot({
         let engine = engine.clone();
         let weak = ui.as_weak();
-        move |rotation| {
+        move |feed, rotation| {
             let Some(ui) = weak.upgrade() else { return };
-            let Some(main) = ui.get_peer_video().to_rgba8() else { return };
-            let tile = ui.get_cam_on().then(|| ui.get_self_video().to_rgba8()).flatten();
+            let main = match feed.as_str() {
+                "screen" => ui.get_screen_video(),
+                "self" => ui.get_self_video(),
+                _ => ui.get_peer_video(),
+            };
+            let Some(main) = main.to_rgba8() else { return };
+            // Your own camera rides along as a tile, unless it's what's on the stage
+            let tile = (feed != "self" && ui.get_cam_on()).then(|| ui.get_self_video().to_rgba8()).flatten();
             let picture = screenshot::Picture {
                 main: screenshot::Shot { frame: main, rotation },
                 tile: tile.map(|frame| screenshot::Shot { frame, rotation: 0 }),
@@ -174,6 +180,29 @@ fn main() -> anyhow::Result<()> {
             if let Some(ui) = weak.upgrade() {
                 screenshot::show_in_folder(std::path::Path::new(ui.get_saved_shot().as_str()));
             }
+        }
+    });
+    ui.on_toggle_share(send(Command::ToggleShare));
+    ui.on_close_screen_picker(send(Command::CloseScreenPicker));
+    ui.on_share_source({
+        let engine = engine.clone();
+        move |id| engine.send(Command::ShareSource(id.into()))
+    });
+    {
+        let settings = settings.borrow();
+        for (feed, corner) in &settings.corners {
+            set_corner(&ui, feed, corner);
+        }
+    }
+    ui.on_corner_moved({
+        let weak = ui.as_weak();
+        let settings = settings.clone();
+        move |feed, corner| {
+            let Some(ui) = weak.upgrade() else { return };
+            set_corner(&ui, &feed, &corner);
+            let mut settings = settings.borrow_mut();
+            settings.corners.insert(feed.into(), corner.into());
+            settings.save();
         }
     });
     ui.on_set_force_relay({
@@ -217,6 +246,19 @@ fn main() -> anyhow::Result<()> {
     drop(ui);
     drop(engine);
     Ok(())
+}
+
+/// Where a tile sits; anything but the four corners is ignored, so a hand-edited settings file can't misplace one.
+fn set_corner(ui: &AppWindow, feed: &str, corner: &str) {
+    if !matches!(corner, "tl" | "tr" | "bl" | "br") {
+        return;
+    }
+    match feed {
+        "self" => ui.set_corner_self(corner.into()),
+        "peer" => ui.set_corner_peer(corner.into()),
+        "screen" => ui.set_corner_screen(corner.into()),
+        _ => {}
+    }
 }
 
 fn with_bridge(f: impl FnOnce(&Bridge)) {

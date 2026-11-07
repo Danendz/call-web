@@ -8,6 +8,7 @@ import { StatsOverlay, StatsView } from "stats-overlay.slint";
 import { DeviceItem } from "../setup/device-row.slint";
 import { ChatPanel, ChatRow } from "../chat/chat.slint";
 import { Button } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
 
 export { StatsView, ChatRow }
 
@@ -30,6 +31,14 @@ export component CallScreen inherits Rectangle {
     in property <string> cam-id;
     in property <bool> portrait;
     in property <image> peer-video;
+    in property <image> screen-video;
+    in property <bool> remote-screen;
+    in property <bool> sharing;
+    // Screens and windows to pick from where the OS has no picker of its own; the picker shows while it's not empty
+    in property <[DeviceItem]> screen-sources;
+    in property <string> corner-self;
+    in property <string> corner-peer;
+    in property <string> corner-screen;
     in property <int> peer-frame-rotation;
     in property <bool> peer-cam-on;
     in property <image> self-video;
@@ -56,8 +65,12 @@ export component CallScreen inherits Rectangle {
     callback set-force-relay(bool);
     callback toggle-transcribe();
     callback send-chat(string) -> bool;
-    // Clockwise degrees their video shows at, so the picture matches the screen
-    callback screenshot(int);
+    // The feed on the stage ("peer", "screen" or "self") and the degrees it's turned, so the picture matches the screen
+    callback screenshot(string, int);
+    callback toggle-share();
+    callback share-source(string);
+    callback close-screen-picker();
+    callback corner-moved(string, string);
     callback show-shot();
     callback hang-up();
 
@@ -73,6 +86,26 @@ export component CallScreen inherits Rectangle {
     changed others-count => { if (chat-open) { seen-count = others-count; } }
     changed chat-open => { if (chat-open) { seen-count = others-count; } subtitle-shown = false; }
     property <length> chat-width: min(360px, root.width * 0.42);
+
+    // The controls fade off the video after a few seconds without input, like the web's useAutoHide; never while
+    // waiting, with the pointer on the pill, or with the menu just opened
+    property <bool> idle;
+    property <bool> hovering-pill;
+    property <bool> can-idle: connected && !hovering-pill && screen-sources.length == 0;
+    changed can-idle => { wake(); }
+    function wake() {
+        idle = false;
+        idle-timer.running = can-idle;
+        idle-timer.restart();
+    }
+    idle-timer := Timer {
+        interval: 3s;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.idle = root.can-idle;
+        }
+    }
 
     property <bool> toast-shown;
     changed saved-shot => {
@@ -141,15 +174,29 @@ export component CallScreen inherits Rectangle {
         animate width { duration: Theme.slow; easing: Theme.ease; }
         clip: true;
 
-        Feeds {
-            opacity: connected ? 1 : 0;
-            animate opacity { duration: Theme.med; easing: Theme.ease; }
+        // Wakes the controls on any movement over the stage; under everything, so tiles get their own presses
+        TouchArea {
+            mouse-cursor: root.idle ? none : default;
+            moved => { root.wake(); }
+            pointer-event(event) => { root.wake(); }
+        }
+
+        feeds := Feeds {
             peer-video: root.peer-video;
-            peer-rotation: root.peer-frame-rotation + root.user-rotation;
-            peer-cam-on: root.peer-cam-on;
+            screen-video: root.screen-video;
             self-video: root.self-video;
-            self-shown: root.cam-granted;
+            peer-rotation: root.peer-frame-rotation + root.user-rotation;
+            has-peer: root.connected;
+            has-screen: root.connected && root.remote-screen;
+            has-self: root.cam-granted;
+            peer-cam-on: root.peer-cam-on;
             self-cam-on: root.cam-on && root.self-video.width > 0;
+            pill-space: root.idle ? 20px : 96px;
+            corner-self: root.corner-self;
+            corner-peer: root.corner-peer;
+            corner-screen: root.corner-screen;
+            corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
+            touched => { root.wake(); }
         }
 
         if !connected: Rectangle {
@@ -250,7 +297,8 @@ export component CallScreen inherits Rectangle {
         // Where the picture went, with a way to it
         Rectangle {
             x: (parent.width - self.width) / 2;
-            y: parent.height - self.height - 104px;
+            y: parent.height - self.height - (root.idle ? 28px : 104px);
+            animate y { duration: Theme.med; easing: Theme.ease; }
             width: toast.preferred-width;
             height: toast.preferred-height;
             border-radius: self.height / 2;
@@ -283,7 +331,8 @@ export component CallScreen inherits Rectangle {
         // Their latest spoken line over the video while the chat is closed, like the web's Subtitle
         Rectangle {
             x: (parent.width - self.width) / 2;
-            y: parent.height - self.height - 104px;
+            y: parent.height - self.height - (root.idle ? 28px : 104px);
+            animate y { duration: Theme.med; easing: Theme.ease; }
             width: min(min(parent.width * 0.84, 720px), line.preferred-width + 32px);
             height: line.preferred-height + 16px;
             border-radius: Theme.radius;
@@ -312,7 +361,11 @@ export component CallScreen inherits Rectangle {
 
         ControlPill {
             x: (parent.width - self.width) / 2;
-            y: parent.height - self.height - 20px;
+            // Off the video while idle, like the web's .call.idle .pill
+            y: parent.height - self.height - 20px + (root.idle ? 24px : 0);
+            opacity: root.idle ? 0 : 1;
+            animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+            hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;
             has-mic: root.has-mic;
             cam-on: root.cam-on;
@@ -322,13 +375,18 @@ export component CallScreen inherits Rectangle {
             portrait: root.portrait;
             can-rotate: root.connected;
             stats-open: root.stats-open;
-            can-screenshot: root.connected && root.peer-cam-on && root.peer-video.width > 0;
+            can-screenshot: root.connected && (feeds.main-feed == "screen" ? root.screen-video.width > 0
+                : feeds.main-feed == "peer" ? root.peer-cam-on && root.peer-video.width > 0
+                : root.cam-on && root.self-video.width > 0);
             screenshot => {
                 root.flash = true;
                 flash-timer.running = true;
                 flash-timer.restart();
-                root.screenshot(root.peer-frame-rotation + root.user-rotation);
+                root.screenshot(feeds.main-feed, feeds.main-feed == "peer" ? root.peer-frame-rotation + root.user-rotation : 0);
             }
+            sharing: root.sharing;
+            can-share: root.connected;
+            toggle-share => { root.toggle-share(); }
             transcribe-on: root.transcribe-on;
             chat-open: root.chat-open;
             unread: root.unread;
@@ -342,6 +400,81 @@ export component CallScreen inherits Rectangle {
             rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
             toggle-stats => { root.stats-open = !root.stats-open; }
             hang-up => { root.hang-up(); }
+        }
+    }
+
+    // Where the OS has no picker of its own (Windows): which screen or window to share
+    if screen-sources.length > 0: Rectangle {
+        background: #0000008c;
+        TouchArea { clicked => { root.close-screen-picker(); } }
+        Rectangle {
+            width: min(420px, parent.width - 32px);
+            height: min(picker.preferred-height, parent.height - 64px);
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.glass-border;
+            background: Theme.surface;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+            TouchArea { }
+            picker := VerticalLayout {
+                padding: 18px;
+                spacing: 6px;
+                HorizontalLayout {
+                    Text {
+                        text: @tr("Share screen");
+                        color: Theme.text;
+                        font-weight: 650;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    IconButton {
+                        icon: Icons.x;
+                        label: @tr("Cancel");
+                        size: 36px;
+                        transparent: true;
+                        clicked => { root.close-screen-picker(); }
+                    }
+                }
+                Flickable {
+                    min-height: 0;
+                    preferred-height: list.preferred-height;
+                    list := VerticalLayout {
+                        for source in screen-sources: Rectangle {
+                            height: 44px;
+                            border-radius: Theme.radius-sm;
+                            background: item.has-hover ? Theme.surface-3 : transparent;
+                            accessible-role: button;
+                            accessible-label: source.label;
+                            accessible-action-default => { root.share-source(source.id); }
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 12px;
+                                Image {
+                                    source: Icons.screen-share;
+                                    colorize: Theme.muted;
+                                    width: 18px;
+                                    height: 18px;
+                                    y: (parent.height - self.height) / 2;
+                                }
+                                Text {
+                                    text: source.label;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                            item := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.share-source(source.id); }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

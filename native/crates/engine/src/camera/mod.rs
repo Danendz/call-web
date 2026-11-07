@@ -23,6 +23,8 @@ use crate::media::Device;
 use crate::video::{Feed, Frame, VideoSink};
 
 /// The web's camera request: 720p at up to 30 fps, or 720x1280 when portrait is picked.
+pub(crate) use fake::pattern as test_pattern;
+
 pub(crate) const WIDTH: u32 = 1280;
 pub(crate) const HEIGHT: u32 = 720;
 

@@ -12,6 +12,7 @@ use libwebrtc::media_stream_track::MediaStreamTrack;
 use libwebrtc::peer_connection::{IceConnectionState, OfferOptions, PeerConnection, SignalingState, TrackEvent};
 use libwebrtc::peer_connection_factory::{IceServer, IceTransportsType, PeerConnectionFactory, RtcConfiguration};
 use libwebrtc::rtp_parameters::{DegradationPreference, Priority};
+use libwebrtc::rtp_sender::RtpSender;
 use libwebrtc::rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit};
 use libwebrtc::session_description::{SdpType, SessionDescription};
 use libwebrtc::video_track::RtcVideoTrack;
@@ -27,12 +28,21 @@ const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
 // Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
+// While sharing, the same ~2 Mbps is split: most for the screen (text must stay sharp), a small face for the camera
+const SHARE_SCREEN_BITRATE: u64 = 1_600_000;
+const SHARE_CAMERA_BITRATE: u64 = 400_000;
+// The camera's 720p down to the web's 360p short side while sharing
+const SHARE_CAMERA_SCALE: f64 = 2.0;
+/// The id of our screen's track, to tell its sender from the camera's.
+pub const SCREEN_TRACK: &str = "screen";
 
 pub enum PeerEvent {
     Signal(SignalPayload),
     IceState(IceConnectionState),
-    /// A video track from the other side
+    /// A video track from the other side, with the id of the stream they sent it in ("" for none), which says
+    /// whether it's their camera or their screen
     RemoteVideo {
+        stream_id: String,
         track: RtcVideoTrack,
     },
     /// Their voice; it plays by itself, this is for taking its echo out of speech to chat
@@ -50,14 +60,17 @@ enum Input {
     Track(TrackEvent),
     RestartIce,
     ForceRelay(bool),
+    Screen(Option<MediaStreamTrack>),
 }
 
 pub struct PeerConfig {
     pub ice_servers: Vec<IceServerConfig>,
     pub force_relay: bool,
     pub polite: bool,
-    /// The stream id our mic (and later camera) is sent in; the other side groups tracks by it.
+    /// The stream id our mic and camera are sent in; the other side groups tracks by it.
     pub stream_id: String,
+    /// Our shared screen goes out in its own stream, so the other side can tell it from the camera.
+    pub screen_stream_id: String,
 }
 
 /// Runs until dropped; dropping it closes the connection.
@@ -114,6 +127,8 @@ impl Peer {
             pc,
             polite: config.polite,
             ice_servers: config.ice_servers,
+            screen_stream_id: config.screen_stream_id,
+            screen_sender: None,
             counters: None,
             ignore_offer: false,
             last_restart: None,
@@ -136,6 +151,11 @@ impl Peer {
     /// Sends everything through our TURN server, for testing the relay path from the stats overlay.
     pub fn set_force_relay(&self, relay: bool) {
         let _ = self.input.send(Input::ForceRelay(relay));
+    }
+
+    /// Sends the shared screen alongside the camera, or stops; see [`Session::set_screen`].
+    pub fn set_screen(&self, track: Option<MediaStreamTrack>) {
+        let _ = self.input.send(Input::Screen(track));
     }
 }
 
@@ -161,6 +181,8 @@ struct Session {
     pc: PeerConnection,
     polite: bool,
     ice_servers: Vec<IceServerConfig>,
+    screen_stream_id: String,
+    screen_sender: Option<RtpSender>,
     counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
@@ -214,10 +236,14 @@ impl Session {
                 self.emit(PeerEvent::IceState(state));
             }
             Input::Track(event) => match event.track {
-                MediaStreamTrack::Video(track) => self.emit(PeerEvent::RemoteVideo { track }),
+                MediaStreamTrack::Video(track) => {
+                    let stream_id = event.streams.first().map(|s| s.id()).unwrap_or_default();
+                    self.emit(PeerEvent::RemoteVideo { stream_id, track });
+                }
                 MediaStreamTrack::Audio(track) => self.emit(PeerEvent::RemoteAudio { track }),
             },
             Input::RestartIce => self.restart_ice(),
+            Input::Screen(track) => self.set_screen(track),
             Input::ForceRelay(relay) => {
                 if let Err(e) = self.pc.set_configuration(rtc_config(&self.ice_servers, relay)) {
                     tracing::warn!("couldn't change the relay policy: {}", e.message);
@@ -293,30 +319,64 @@ impl Session {
         }));
     }
 
-    /// Like the web's tuneSenders: caps the camera's bitrate and has it give up resolution rather than frame rate
-    /// when bandwidth runs short (a smaller clean picture beats a blocky one), and gives the mic priority so voices
-    /// survive congestion. Encodings only exist after negotiation, so this runs after every description change.
+    /// The first share adds its transceiver (one renegotiation); after that, stopping and starting again only swaps
+    /// the track in it, like the web's setScreen.
+    fn set_screen(&mut self, track: Option<MediaStreamTrack>) {
+        match (&self.screen_sender, track) {
+            (Some(sender), track) => {
+                if let Err(e) = sender.set_track(track) {
+                    tracing::warn!("couldn't swap the screen track: {}", e.message);
+                }
+            }
+            (None, Some(track)) => {
+                let init = init(RtpTransceiverDirection::SendOnly, std::slice::from_ref(&self.screen_stream_id));
+                match self.pc.add_transceiver(track, init) {
+                    Ok(transceiver) => self.screen_sender = Some(transceiver.sender()),
+                    Err(e) => tracing::warn!("couldn't add the screen: {}", e.message),
+                }
+            }
+            (None, None) => {}
+        }
+        self.tune_senders();
+    }
+
+    /// Like the web's tuneSenders: caps video bitrate and tells the encoder what to give up when bandwidth runs
+    /// short: resolution for the camera (a smaller clean picture beats a blocky one), frame rate for the screen (text
+    /// must stay readable). While sharing, the camera shrinks to a small face so the screen gets the bandwidth. The
+    /// mic gets priority so voices survive congestion. Encodings only exist after negotiation, so this runs after
+    /// every description change.
     fn tune_senders(&self) {
+        let sharing = self.screen_sender.as_ref().is_some_and(|s| s.track().is_some());
         for transceiver in self.pc.transceivers() {
             let sender = transceiver.sender();
-            let video = match sender.track() {
-                Some(MediaStreamTrack::Video(_)) => true,
-                Some(MediaStreamTrack::Audio(_)) => false,
+            let (video, screen) = match sender.track() {
+                Some(MediaStreamTrack::Video(track)) => (true, track.id() == SCREEN_TRACK),
+                Some(MediaStreamTrack::Audio(_)) => (false, false),
                 None => continue,
             };
             let mut params = sender.parameters();
             if params.encodings.is_empty() {
                 continue;
             }
+            let max_bitrate = match (screen, sharing) {
+                (true, _) => SHARE_SCREEN_BITRATE,
+                (false, true) => SHARE_CAMERA_BITRATE,
+                (false, false) => VIDEO_MAX_BITRATE,
+            };
             for enc in &mut params.encodings {
                 if video {
-                    enc.max_bitrate = Some(VIDEO_MAX_BITRATE);
+                    enc.max_bitrate = Some(max_bitrate);
+                    enc.scale_resolution_down_by = Some(if sharing && !screen { SHARE_CAMERA_SCALE } else { 1.0 });
                 } else {
                     enc.priority = Priority::High;
                 }
             }
             if video {
-                params.set_degradation_preference(DegradationPreference::MaintainFramerate);
+                params.set_degradation_preference(if screen {
+                    DegradationPreference::MaintainResolution
+                } else {
+                    DegradationPreference::MaintainFramerate
+                });
             }
             if let Err(e) = sender.set_parameters(params) {
                 tracing::debug!("couldn't tune a sender: {}", e.message);

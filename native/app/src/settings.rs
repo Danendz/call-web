@@ -18,6 +18,9 @@ pub struct Settings {
     /// Speech to chat, which the web also remembers
     #[serde(default)]
     pub transcribe: bool,
+    /// Which corner each video tile sits in: "self", "peer" or "screen" to tl, tr, bl or br
+    #[serde(default)]
+    pub corners: std::collections::BTreeMap<String, String>,
 }
 
 impl Settings {

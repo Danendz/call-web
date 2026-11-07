@@ -19,7 +19,12 @@ export component ControlPill inherits Rectangle {
     in property <bool> chat-open;
     in property <int> unread;
     in property <bool> can-screenshot;
+    in property <bool> sharing;
+    in property <bool> can-share;
     callback screenshot();
+    callback toggle-share();
+    // The pointer is over the pill: the controls stay up meanwhile
+    callback hovered(bool);
     callback toggle-transcribe();
     callback toggle-chat();
     callback toggle-mic();
@@ -40,6 +45,10 @@ export component ControlPill inherits Rectangle {
     drop-shadow-blur: 30px;
     drop-shadow-offset-y: 10px;
     drop-shadow-color: Theme.shadow;
+
+    hover := TouchArea {
+        changed has-hover => { root.hovered(self.has-hover); }
+    }
 
     row := HorizontalLayout {
         padding: 8px;
@@ -84,7 +93,10 @@ export component ControlPill inherits Rectangle {
                 can-rotate: root.can-rotate;
                 stats-open: root.stats-open;
                 can-screenshot: root.can-screenshot;
+                sharing: root.sharing;
+                can-share: root.can-share;
                 screenshot => { root.screenshot(); }
+                toggle-share => { root.toggle-share(); }
                 pick-cam(id) => { root.pick-cam(id); }
                 next-cam => { root.next-cam(); }
                 toggle-portrait => { root.toggle-portrait(); }

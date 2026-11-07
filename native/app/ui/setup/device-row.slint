@@ -72,6 +72,12 @@ export component DeviceRow inherits Rectangle {
         width: root.width;
 
         Rectangle {
+            property <bool> shown;
+            init => { shown = true; }
+            opacity: shown ? 1 : 0;
+            transform-scale: shown ? 1 : 0.97;
+            transform-origin: { x: self.width / 2, y: 0 };
+            animate opacity, transform-scale { duration: Theme.fast; easing: Theme.ease; }
             border-radius: Theme.radius-sm;
             border-width: 1px;
             border-color: Theme.border-strong;

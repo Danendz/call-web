@@ -24,17 +24,19 @@ pub struct SlintSink {
     window: slint::Weak<AppWindow>,
     camera: Arc<Slot>,
     peer: Arc<Slot>,
+    screen: Arc<Slot>,
 }
 
 impl SlintSink {
     pub fn new(window: slint::Weak<AppWindow>) -> Arc<Self> {
-        Arc::new(Self { window, camera: Slot::new(), peer: Slot::new() })
+        Arc::new(Self { window, camera: Slot::new(), peer: Slot::new(), screen: Slot::new() })
     }
 
     fn slot(&self, feed: Feed) -> &Arc<Slot> {
         match feed {
             Feed::Camera => &self.camera,
             Feed::Peer => &self.peer,
+            Feed::Screen => &self.screen,
         }
     }
 
@@ -57,6 +59,7 @@ impl SlintSink {
                     ui.set_peer_video(image);
                     ui.set_peer_frame_rotation(rotation);
                 }
+                Feed::Screen => ui.set_screen_video(image),
             }
         });
     }

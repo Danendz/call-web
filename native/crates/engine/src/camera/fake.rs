@@ -44,7 +44,7 @@ pub(super) fn start(output: Arc<Output>) -> Running {
 }
 
 /// A slowly changing color with a white bar sweeping across, so a frozen picture is easy to spot.
-fn pattern(width: u32, height: u32, tick: u32) -> I420Buffer {
+pub(crate) fn pattern(width: u32, height: u32, tick: u32) -> I420Buffer {
     let mut buf = I420Buffer::new(width, height);
     let (sy, su, sv) = buf.strides();
     let (y, u, v) = buf.data_mut();

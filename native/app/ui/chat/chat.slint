@@ -117,20 +117,23 @@ export component ChatPanel inherits Rectangle {
             }
         }
 
-        list := Flickable {
+        // In place of the list until the first message, so it doesn't size the list
+        if messages.length == 0: Rectangle {
             vertical-stretch: 1;
-            content-height: column.preferred-height;
-
-            if messages.length == 0: Text {
-                x: (list.width - self.width) / 2;
-                y: (list.height - self.height) / 2;
-                width: min(240px, list.width - 28px);
+            Text {
+                width: min(240px, parent.width - 28px);
                 text: @tr("No messages yet. They disappear when the room closes.");
                 color: Theme.muted;
                 font-size: 13px;
                 wrap: word-wrap;
                 horizontal-alignment: center;
             }
+        }
+        list := Flickable {
+            vertical-stretch: 1;
+            // Takes no room until there's something in it
+            max-height: messages.length == 0 ? 0px : 100000px;
+            content-height: column.preferred-height;
             property <int> count: messages.length;
             // New messages scroll into view, smoothly, like the web's scrollTo
             changed count => { stick.running = true; }

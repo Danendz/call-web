@@ -17,6 +17,8 @@ pub enum Feed {
     Camera,
     /// The other person's camera
     Peer,
+    /// The other person's shared screen
+    Screen,
 }
 
 /// One frame, borrowed for the length of a [`VideoSink::frame`] call.

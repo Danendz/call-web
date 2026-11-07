@@ -1,0 +1,168 @@
+//! What the UI sees of the engine: the handle it sends [`Command`]s through, and the [`State`] and [`ChatEvent`]s it
+//! gets back.
+
+use std::sync::Arc;
+use std::thread;
+use std::time::Instant;
+
+use protocol::{ChatMessage, Lang, Translation};
+use tokio::sync::mpsc;
+use url::Url;
+
+use super::Controller;
+use crate::camera::CameraAccess;
+use crate::level::Level;
+use crate::media::Device;
+use crate::speech::SpeechNotice;
+use crate::stats::CallStats;
+use crate::video::VideoSink;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// No room picked yet: new room or join by link
+    Start,
+    /// Room picked, not joined: the pre-join screen
+    Setup,
+    Starting,
+    /// Joined, alone in the room
+    Waiting,
+    /// The other person is here and a peer connection to them exists
+    InCall,
+    Full,
+    Ended,
+}
+
+/// The media path to the other person, as the call screen's banner shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Link {
+    Connecting,
+    Connected,
+    /// Dropped for now; an ICE restart follows if it doesn't come back by itself
+    Unstable,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct State {
+    pub phase: Phase,
+    pub lang: Lang,
+    pub room_id: Option<String>,
+    /// The web address of the room, for sharing: it opens in a browser or in this app.
+    pub room_url: Option<String>,
+    /// The socket dropped and is being reopened; the seat is kept for a while meanwhile.
+    pub reconnecting: bool,
+    pub link: Option<Link>,
+    /// When the call with the other person began, on this machine's clock; None while alone.
+    pub call_started: Option<Instant>,
+    pub mic_on: bool,
+    pub mics: Vec<Device>,
+    pub mic_id: Option<String>,
+    /// The other person's camera is on (from their `media` messages).
+    pub remote_cam_on: bool,
+    /// Their camera's track has arrived; frames go to the sink as [`crate::Feed::Peer`]
+    pub remote_video: bool,
+    /// They're sharing their screen and it's arriving; frames go to the sink as [`crate::Feed::Screen`]
+    pub remote_screen: bool,
+    /// We're sharing our screen
+    pub sharing: bool,
+    /// Screens and windows to pick from, while the app's own picker is open (where the OS has none)
+    pub screen_picker: Option<Vec<Device>>,
+    pub cam_on: bool,
+    pub cam_access: CameraAccess,
+    pub cams: Vec<Device>,
+    pub cam_id: Option<String>,
+    /// We send a 9:16 picture instead of 16:9
+    pub portrait: bool,
+    pub stats: Option<CallStats>,
+    /// The other person just saved a picture of the call
+    pub peer_screenshot: bool,
+    /// Speech to chat is on: what you say is posted to the chat while someone's there to read it
+    pub transcribe_on: bool,
+    pub speech_notice: Option<SpeechNotice>,
+    /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
+    pub force_relay: bool,
+    /// An ICE restart to get off the relay just went out
+    pub trying_direct: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum Command {
+    NewRoom,
+    /// A room id, or a link someone pasted, already checked with [`crate::room::parse_room`].
+    OpenRoom(String),
+    SetLang(Lang),
+    Join,
+    HangUp,
+    /// Back to the start screen
+    Home,
+    ToggleMic,
+    /// Only before joining, as on the web: switching the mic mid-call would restart capture under the call.
+    SelectMic(String),
+    ToggleCam,
+    /// Any time: the new camera feeds the same track, so a call needs no renegotiation
+    SelectCam(String),
+    /// The next camera in the list: a phone's front and back, or a laptop's two
+    NextCam,
+    SetPortrait(bool),
+    SetForceRelay(bool),
+    /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes
+    SendChat(String),
+    /// Tells the other person a picture of the call was saved
+    NotifyScreenshot,
+    SetTranscribe(bool),
+    /// Starts sharing (with the OS's picker, or opening the app's) or stops
+    ToggleShare,
+    /// A screen or window from the app's picker
+    ShareSource(String),
+    CloseScreenPicker,
+}
+
+/// The chat, as changes: a whole new list on joining, then single messages and translations, so the UI updates its
+/// list in place. Kept out of [`State`], which would otherwise copy every message on every change.
+#[derive(Debug, Clone)]
+pub enum ChatEvent {
+    Reset { my_id: String, messages: Vec<ChatMessage> },
+    Added(ChatMessage),
+    Translated { id: String, translation: Translation },
+}
+
+/// Handle to the engine thread. Dropping it leaves the room and stops the thread.
+pub struct Engine {
+    commands: mpsc::UnboundedSender<Command>,
+    level: Level,
+}
+
+impl Engine {
+    /// `on_state` runs on the engine's thread for every change; the UI hops to its own thread from there.
+    /// Video frames go to `sink`, from video threads; see [`VideoSink`].
+    pub fn start(
+        server: Url,
+        lang: Lang,
+        sink: Arc<dyn VideoSink>,
+        on_state: impl Fn(State) + Send + 'static,
+        on_chat: impl Fn(ChatEvent) + Send + 'static,
+    ) -> std::io::Result<Self> {
+        let (commands, rx) = mpsc::unbounded_channel();
+        let level = Level::default();
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
+        let controller_level = level.clone();
+        thread::Builder::new().name("engine".into()).spawn(move || {
+            // Built inside the runtime: WebRTC's video source needs one to exist
+            runtime.block_on(async move {
+                Controller::new(server, lang, controller_level, sink, Box::new(on_state), Box::new(on_chat))
+                    .run(rx)
+                    .await;
+            });
+        })?;
+        Ok(Self { commands, level })
+    }
+
+    /// The mic level on the setup screen, 0..=1; 0 elsewhere. Cheap enough to read every frame.
+    pub fn mic_level(&self) -> f32 {
+        self.level.get()
+    }
+
+    pub fn send(&self, command: Command) {
+        let _ = self.commands.send(command);
+    }
+}

@@ -16,6 +16,7 @@ use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, StatsView}
 pub struct Bridge {
     mics: Rc<VecModel<DeviceItem>>,
     cams: Rc<VecModel<DeviceItem>>,
+    screen_sources: Rc<VecModel<DeviceItem>>,
     chat: RefCell<Chat>,
     /// Read by the ticker that redraws the call timer
     pub call_started: Rc<RefCell<Option<Instant>>>,
@@ -27,7 +28,9 @@ impl Bridge {
         let cams = Rc::new(VecModel::default());
         ui.set_mics(ModelRc::from(mics.clone()));
         ui.set_cams(ModelRc::from(cams.clone()));
-        Self { mics, cams, chat: RefCell::new(Chat::new(ui, lang)), call_started: Rc::default() }
+        let screen_sources = Rc::new(VecModel::default());
+        ui.set_screen_sources(ModelRc::from(screen_sources.clone()));
+        Self { mics, cams, screen_sources, chat: RefCell::new(Chat::new(ui, lang)), call_started: Rc::default() }
     }
 
     pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
@@ -38,6 +41,7 @@ impl Bridge {
         *self.call_started.borrow_mut() = state.call_started;
         sync_devices(&self.mics, &state.mics);
         sync_devices(&self.cams, &state.cams);
+        sync_devices(&self.screen_sources, state.screen_picker.as_deref().unwrap_or_default());
 
         ui.set_phase(match state.phase {
             Phase::Start => AppPhase::Start,
@@ -78,6 +82,8 @@ impl Bridge {
         ui.set_cam_label(cam.map(|d| d.label.as_str()).unwrap_or_default().into());
         ui.set_portrait(state.portrait);
         ui.set_peer_cam_on(state.remote_cam_on);
+        ui.set_remote_screen(state.remote_screen);
+        ui.set_sharing(state.sharing);
         ui.set_force_relay(state.force_relay);
         ui.set_stats(stats_view(state.stats.as_ref(), state.trying_direct));
         ui.set_transcribe_on(state.transcribe_on);

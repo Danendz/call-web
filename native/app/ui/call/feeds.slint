@@ -16,60 +16,227 @@ component CamOff inherits Rectangle {
     }
 }
 
-// The other person fills the stage; your own camera is a small tile in the corner above the controls, like the
-// web's Feeds. Tiles move and swap in M4.
-export component Feeds inherits Rectangle {
-    in property <image> peer-video;
-    in property <image> self-video;
-    // Clockwise degrees: what their frames say plus what the user picked with "Rotate their video"
-    in property <int> peer-rotation;
-    in property <bool> peer-cam-on;
-    in property <bool> self-shown;
-    in property <bool> self-cam-on;
-    // Room the control pill takes at the bottom of the stage
-    in property <length> pill-space: 96px;
+// One video, on the stage or as a tile. It keeps its element whatever its role, so moving between spots animates,
+// like the web's Feed. A tile follows the pointer while dragged and reports the corner it's dropped nearest; a tap
+// that barely moves picks it for the stage.
+component Feed inherits Rectangle {
+    in property <image> source;
+    in property <bool> main;
+    in property <bool> hidden;
+    // Where it sits when nobody's dragging it
+    in property <length> home-x;
+    in property <length> home-y;
+    in property <length> home-width;
+    in property <length> home-height;
+    // Clockwise degrees
+    in property <int> rotation;
+    in property <bool> off;
+    in property <string> label;
+    callback picked();
+    callback dropped(string);
+    callback touched();
 
-    property <bool> turned: Math.mod(peer-rotation, 180) != 0;
-    property <bool> has-peer-video: peer-video.width > 0;
+    property <bool> dragging;
+    property <length> drag-x;
+    property <length> drag-y;
+    property <length> grab-x;
+    property <length> grab-y;
+    property <length> start-x;
+    property <length> start-y;
+    property <bool> turned: Math.mod(rotation, 180) != 0;
 
-    Rectangle {
-        background: #000;
-        Image {
-            width: turned ? parent.height : parent.width;
-            height: turned ? parent.width : parent.height;
-            source: peer-video;
-            image-fit: contain;
-            transform-rotation: peer-rotation * 1deg;
-            opacity: has-peer-video ? 1 : 0;
-            animate opacity { duration: Theme.med; easing: Theme.ease; }
+    x: dragging ? drag-x : home-x;
+    y: dragging ? drag-y : home-y;
+    width: home-width;
+    height: home-height;
+    // Tiles over the stage, whichever order they're declared in
+    z: main ? 0 : 1;
+    border-radius: main ? 0 : Theme.radius;
+    clip: true;
+    background: main ? #000 : #111216;
+    opacity: hidden ? 0 : 1;
+    drop-shadow-blur: main ? 0 : 24px;
+    drop-shadow-color: Theme.shadow;
+    animate x, y, width, height, border-radius { duration: dragging ? 0ms : Theme.slow; easing: Theme.ease; }
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
+    // A button whatever its role (the role can't change at run time); on the stage pressing it does nothing
+    accessible-role: button;
+    accessible-label: main ? label : @tr("Swap videos");
+    accessible-description: label;
+    accessible-action-default => { if (!main) { root.picked(); } }
+
+    Image {
+        width: root.turned ? parent.height : parent.width;
+        height: root.turned ? parent.width : parent.height;
+        source: root.source;
+        // The stage shows all of the picture; a tile fills itself
+        image-fit: main ? contain : cover;
+        transform-rotation: root.rotation * 1deg;
+    }
+    CamOff {
+        shown: root.off;
+        icon-size: main ? 36px : 20px;
+    }
+
+    if !main && !hidden: TouchArea {
+        mouse-cursor: root.dragging ? grabbing : pointer;
+        pointer-event(event) => {
+            root.touched();
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                root.start-x = root.x;
+                root.start-y = root.y;
+                root.grab-x = root.x + self.mouse-x;
+                root.grab-y = root.y + self.mouse-y;
+            } else if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left) {
+                if (root.dragging) {
+                    root.dropped(
+                        (root.y + root.height / 2 < root.parent-height / 2 ? "t" : "b")
+                            + (root.x + root.width / 2 < root.parent-width / 2 ? "l" : "r"));
+                    root.dragging = false;
+                } else {
+                    root.picked();
+                }
+            }
         }
-        CamOff {
-            shown: !peer-cam-on || !has-peer-video;
-            icon-size: 36px;
+        moved => {
+            if (self.pressed) {
+                // Less than this between press and release is a tap, not a drag
+                let dx = root.x + self.mouse-x - root.grab-x;
+                let dy = root.y + self.mouse-y - root.grab-y;
+                if (root.dragging || dx * dx + dy * dy > 36px * 1px) {
+                    root.dragging = true;
+                    root.drag-x = clamp(root.start-x + dx, 0px, root.parent-width - root.width);
+                    root.drag-y = clamp(root.start-y + dy, 0px, root.parent-height - root.height);
+                }
+            }
         }
     }
 
-    // The web's --pip-long: clamp(120px, 22vw, 240px) on the long edge, the short one from the picture's shape
-    property <float> self-aspect: self-video.height > 0 ? self-video.width / self-video.height : 16 / 9;
-    property <length> pip-long: clamp(root.width * 0.22, 120px, 240px);
-    if self-shown: Rectangle {
-        width: self-aspect >= 1 ? pip-long : pip-long * self-aspect;
-        height: self-aspect >= 1 ? pip-long / self-aspect : pip-long;
-        x: root.width - self.width - 16px;
-        y: root.height - self.height - pill-space;
-        border-radius: Theme.radius;
-        clip: true;
-        background: #111216;
-        drop-shadow-blur: 24px;
-        drop-shadow-color: Theme.shadow;
-        animate width, height { duration: Theme.slow; easing: Theme.ease; }
+    // The stage's size, for clamping and the nearest corner
+    in property <length> parent-width;
+    in property <length> parent-height;
+}
 
-        Image {
-            width: 100%;
-            height: 100%;
-            source: self-video;
-            image-fit: cover;
-        }
-        CamOff { shown: !self-cam-on; }
+// Up to three videos, like the web's Feeds: one fills the stage, the others are tiles in the corners. Tapping a tile
+// puts it on the stage; dragging moves it to another corner.
+export component Feeds inherits Rectangle {
+    in property <image> peer-video;
+    in property <image> self-video;
+    in property <image> screen-video;
+    // Clockwise degrees: what their frames say plus what the user picked with "Rotate their video"
+    in property <int> peer-rotation;
+    in property <bool> has-peer;
+    in property <bool> has-self;
+    in property <bool> has-screen;
+    in property <bool> peer-cam-on;
+    in property <bool> self-cam-on;
+    // Room the control pill takes at the bottom of the stage; less while the controls are hidden
+    in property <length> pill-space: 96px;
+    // tl, tr, bl or br for each tile, remembered across calls
+    in property <string> corner-self: "br";
+    in property <string> corner-peer: "tr";
+    in property <string> corner-screen: "tl";
+    callback corner-moved(string, string);
+    callback touched();
+    // The feed on the stage, as `main` says it; the parent reads it for screenshots
+    out property <string> main-feed: main;
+
+    // The feed the user tapped onto the stage; "" for the default
+    property <string> picked;
+    changed has-screen => { picked = ""; }
+    changed has-peer => { if (!has-peer) { picked = ""; } }
+
+    // Kept playing (its audio) but not shown: their turned-off camera while their screen is up
+    property <bool> peer-hidden: has-peer && has-screen && !peer-cam-on;
+    property <bool> self-shown: has-self;
+    property <bool> peer-shown: has-peer && !peer-hidden;
+    property <bool> screen-shown: has-screen;
+    property <string> main: (picked == "self" && self-shown) || (picked == "peer" && peer-shown) || (picked == "screen" && screen-shown)
+        ? picked
+        : screen-shown ? "screen" : peer-shown ? "peer" : "self";
+
+    // The web's --pip-long: clamp(120px, 22vw, 240px) on the long edge, the short one from the picture's shape
+    property <length> pip-long: clamp(root.width * 0.22, 120px, 240px);
+    property <length> gap: 16px;
+    pure function aspect(img: image, turned: bool) -> float {
+        if (img.width == 0 || img.height == 0) { return 16 / 9; }
+        turned ? img.height / img.width : img.width / img.height
+    }
+    pure function tile-w(a: float) -> length { a >= 1 ? pip-long : pip-long * a }
+    pure function tile-h(a: float) -> length { a >= 1 ? pip-long / a : pip-long }
+    property <float> self-aspect: aspect(self-video, false);
+    property <float> peer-aspect: aspect(peer-video, Math.mod(peer-rotation, 180) != 0);
+    property <float> screen-aspect: aspect(screen-video, false);
+
+    // A tile sharing its corner with an earlier tile (in the order self, peer, screen) moves past it
+    property <bool> self-tile: self-shown && main != "self";
+    property <bool> peer-tile: peer-shown && main != "peer";
+    property <bool> screen-tile: screen-shown && main != "screen";
+    property <length> peer-stack: self-tile && corner-self == corner-peer ? tile-h(self-aspect) + gap : 0;
+    property <length> screen-stack: (self-tile && corner-self == corner-screen ? tile-h(self-aspect) + gap : 0)
+        + (peer-tile && corner-peer == corner-screen ? tile-h(peer-aspect) + gap : 0);
+
+    pure function tile-x(corner: string, w: length) -> length {
+        corner == "tl" || corner == "bl" ? gap : root.width - w - gap
+    }
+    pure function tile-y(corner: string, h: length, stack: length) -> length {
+        corner == "tl" || corner == "tr" ? gap + stack : root.height - h - pill-space - stack
+    }
+
+    // Tapping a tile swaps it with the stage: the video that was there takes the tile's corner
+    function pick(key: string, corner: string) {
+        root.corner-moved(main, corner);
+        picked = key;
+    }
+
+    background: #000;
+
+    peer := Feed {
+        source: peer-video;
+        rotation: peer-rotation;
+        main: main == "peer";
+        hidden: !has-peer || peer-hidden;
+        off: !peer-cam-on || peer-video.width == 0;
+        label: @tr("Their camera");
+        home-x: self.main ? 0 : tile-x(corner-peer, tile-w(peer-aspect));
+        home-y: self.main ? 0 : tile-y(corner-peer, tile-h(peer-aspect), peer-stack);
+        home-width: self.main ? root.width : tile-w(peer-aspect);
+        home-height: self.main ? root.height : tile-h(peer-aspect);
+        parent-width: root.width;
+        parent-height: root.height;
+        picked => { pick("peer", corner-peer); }
+        dropped(corner) => { root.corner-moved("peer", corner); }
+        touched => { root.touched(); }
+    }
+    screen := Feed {
+        source: screen-video;
+        main: main == "screen";
+        hidden: !has-screen;
+        label: @tr("Their screen");
+        home-x: self.main ? 0 : tile-x(corner-screen, tile-w(screen-aspect));
+        home-y: self.main ? 0 : tile-y(corner-screen, tile-h(screen-aspect), screen-stack);
+        home-width: self.main ? root.width : tile-w(screen-aspect);
+        home-height: self.main ? root.height : tile-h(screen-aspect);
+        parent-width: root.width;
+        parent-height: root.height;
+        picked => { pick("screen", corner-screen); }
+        dropped(corner) => { root.corner-moved("screen", corner); }
+        touched => { root.touched(); }
+    }
+    you := Feed {
+        source: self-video;
+        main: main == "self";
+        hidden: !has-self;
+        off: !self-cam-on;
+        label: @tr("You");
+        home-x: self.main ? 0 : tile-x(corner-self, tile-w(self-aspect));
+        home-y: self.main ? 0 : tile-y(corner-self, tile-h(self-aspect), 0);
+        home-width: self.main ? root.width : tile-w(self-aspect);
+        home-height: self.main ? root.height : tile-h(self-aspect);
+        parent-width: root.width;
+        parent-height: root.height;
+        picked => { pick("self", corner-self); }
+        dropped(corner) => { root.corner-moved("self", corner); }
+        touched => { root.touched(); }
     }
 }

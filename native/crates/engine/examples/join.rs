@@ -5,7 +5,8 @@
 //!
 //! With `CALL_FAKE_CAMERA=1` it sends a test pattern as its camera; video it receives is logged every few seconds,
 //! and chat as it arrives. `SAY="hello"` posts that to the chat once the other person is there; `TRANSCRIBE=1` turns
-//! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file).
+//! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file). `SHARE=1` shares the screen once in the
+//! call (with `CALL_FAKE_SCREEN=1` a test pattern).
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -32,7 +33,8 @@ fn main() {
 
     let said = std::sync::atomic::AtomicBool::new(false);
     let (say_tx, say_rx) = std::sync::mpsc::channel::<String>();
-    let say = std::env::var("SAY").ok();
+    // Something has to wake the in-call wait below when only sharing
+    let say = std::env::var("SAY").ok().or_else(|| std::env::var_os("SHARE").map(|_| String::new()));
     let on_chat = |event: ChatEvent| match event {
         ChatEvent::Reset { messages, .. } => tracing::info!("chat: {} earlier messages", messages.len()),
         ChatEvent::Added(m) => tracing::info!("chat from {}: {}", m.from, m.text),
@@ -69,7 +71,12 @@ fn main() {
     if let Ok(text) = say_rx.recv_timeout(Duration::from_secs(seconds)) {
         // A moment for the other side to settle into the call
         std::thread::sleep(Duration::from_secs(1));
-        engine.send(Command::SendChat(text));
+        if !text.is_empty() {
+            engine.send(Command::SendChat(text));
+        }
+        if std::env::var_os("SHARE").is_some() {
+            engine.send(Command::ToggleShare);
+        }
     }
     std::thread::sleep(Duration::from_secs(seconds));
     engine.send(Command::HangUp);
@@ -85,12 +92,12 @@ struct LogSink {
 
 impl VideoSink for LogSink {
     fn frame(&self, feed: Feed, frame: &Frame<'_>) {
-        if feed == Feed::Peer {
+        if feed != Feed::Camera {
             let n = self.peer_frames.fetch_add(1, Ordering::Relaxed);
             if n.is_multiple_of(90) {
                 let mut rgba = vec![0; frame.width() as usize * frame.height() as usize * 4];
                 frame.write_rgba(&mut rgba);
-                tracing::info!("received video frame {n}: {}x{}", frame.width(), frame.height());
+                tracing::info!("received {feed:?} frame {n}: {}x{}", frame.width(), frame.height());
             }
         }
     }
