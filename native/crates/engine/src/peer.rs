@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use libwebrtc::MediaType;
+use libwebrtc::audio_track::RtcAudioTrack;
 use libwebrtc::ice_candidate::IceCandidate;
 use libwebrtc::media_stream_track::MediaStreamTrack;
 use libwebrtc::peer_connection::{IceConnectionState, OfferOptions, PeerConnection, SignalingState, TrackEvent};
@@ -33,6 +34,10 @@ pub enum PeerEvent {
     /// A video track from the other side
     RemoteVideo {
         track: RtcVideoTrack,
+    },
+    /// Their voice; it plays by itself, this is for taking its echo out of speech to chat
+    RemoteAudio {
+        track: RtcAudioTrack,
     },
     Stats(Box<CallStats>),
 }
@@ -208,12 +213,10 @@ impl Session {
                 }
                 self.emit(PeerEvent::IceState(state));
             }
-            Input::Track(event) => {
-                if let MediaStreamTrack::Video(track) = event.track {
-                    self.emit(PeerEvent::RemoteVideo { track });
-                }
-                // Audio plays through the platform audio device by itself
-            }
+            Input::Track(event) => match event.track {
+                MediaStreamTrack::Video(track) => self.emit(PeerEvent::RemoteVideo { track }),
+                MediaStreamTrack::Audio(track) => self.emit(PeerEvent::RemoteAudio { track }),
+            },
             Input::RestartIce => self.restart_ice(),
             Input::ForceRelay(relay) => {
                 if let Err(e) = self.pc.set_configuration(rtc_config(&self.ice_servers, relay)) {

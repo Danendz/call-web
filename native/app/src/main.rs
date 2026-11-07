@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bridge;
+mod chat;
 mod settings;
 mod video;
 mod window;
@@ -46,21 +47,24 @@ fn main() -> anyhow::Result<()> {
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
 
-    let bridge = Bridge::new(&ui);
+    let bridge = Bridge::new(&ui, lang);
     let call_started = bridge.call_started.clone();
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
-    let engine = Rc::new(Engine::start(server, lang, sink, move |state| {
-        let _ = weak.upgrade_in_event_loop(move |ui| {
-            BRIDGE.with(|bridge| {
-                if let Some(bridge) = bridge.borrow().as_ref() {
-                    bridge.render(&ui, &state);
-                }
-            });
-        });
-    })?);
+    let chat_weak = ui.as_weak();
+    let engine = Rc::new(Engine::start(
+        server,
+        lang,
+        sink,
+        move |state| {
+            let _ = weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.render(&ui, &state)));
+        },
+        move |event| {
+            let _ = chat_weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.chat(&ui, event)));
+        },
+    )?);
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
     // mic level while the setup screen shows it
@@ -91,6 +95,9 @@ fn main() -> anyhow::Result<()> {
         if settings.portrait {
             engine.send(Command::SetPortrait(true));
         }
+        if settings.transcribe {
+            engine.send(Command::SetTranscribe(true));
+        }
     }
 
     let send = |command: Command| {
@@ -112,6 +119,26 @@ fn main() -> anyhow::Result<()> {
                 true
             }
             None => false,
+        }
+    });
+    ui.on_send_chat({
+        let engine = engine.clone();
+        move |text| {
+            engine.send(Command::SendChat(text.into()));
+            // The box clears; the message shows once the server echoes it back, as on the web
+            true
+        }
+    });
+    ui.on_toggle_transcribe({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move || {
+            let on = !weak.upgrade().is_some_and(|ui| ui.get_transcribe_on());
+            let mut settings = settings.borrow_mut();
+            settings.transcribe = on;
+            settings.save();
+            engine.send(Command::SetTranscribe(on));
         }
     });
     ui.on_set_force_relay({
@@ -155,6 +182,14 @@ fn main() -> anyhow::Result<()> {
     drop(ui);
     drop(engine);
     Ok(())
+}
+
+fn with_bridge(f: impl FnOnce(&Bridge)) {
+    BRIDGE.with(|bridge| {
+        if let Some(bridge) = bridge.borrow().as_ref() {
+            f(bridge);
+        }
+    });
 }
 
 fn parse_lang(code: &str) -> Lang {

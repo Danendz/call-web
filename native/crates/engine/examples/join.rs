@@ -3,7 +3,9 @@
 //!
 //!   cargo run -p engine --example join -- http://localhost:8090 <room id or link> [seconds]
 //!
-//! With `CALL_FAKE_CAMERA=1` it sends a test pattern as its camera; video it receives is logged every few seconds.
+//! With `CALL_FAKE_CAMERA=1` it sends a test pattern as its camera; video it receives is logged every few seconds,
+//! and chat as it arrives. `SAY="hello"` posts that to the chat once the other person is there; `TRANSCRIBE=1` turns
+//! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file).
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -12,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use engine::{Command, Engine, Feed, Frame, Lang, VideoSink, room};
+use engine::{ChatEvent, Command, Engine, Feed, Frame, Lang, Phase, VideoSink, room};
 use url::Url;
 
 fn main() {
@@ -28,19 +30,47 @@ fn main() {
     let room = room::parse_room(&link).unwrap_or_else(|| panic!("not a room: {link}"));
     let seconds = args.next().and_then(|s| s.parse().ok()).unwrap_or(30);
 
-    let engine = Engine::start(server, Lang::En, Arc::new(LogSink::default()), |state| {
-        tracing::info!(
-            "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={}",
-            state.phase,
-            state.link,
-            state.reconnecting,
-            state.call_started.map(|at| at.elapsed().as_secs()),
-            state.mics.len()
-        );
-    })
+    let said = std::sync::atomic::AtomicBool::new(false);
+    let (say_tx, say_rx) = std::sync::mpsc::channel::<String>();
+    let say = std::env::var("SAY").ok();
+    let on_chat = |event: ChatEvent| match event {
+        ChatEvent::Reset { messages, .. } => tracing::info!("chat: {} earlier messages", messages.len()),
+        ChatEvent::Added(m) => tracing::info!("chat from {}: {}", m.from, m.text),
+        ChatEvent::Translated { id, translation } => tracing::info!("chat {id} translated: {:?}", translation.text),
+    };
+    let engine = Engine::start(
+        server,
+        Lang::En,
+        Arc::new(LogSink::default()),
+        move |state| {
+            if state.phase == Phase::InCall
+                && let Some(text) = &say
+                && !said.swap(true, Ordering::Relaxed)
+            {
+                let _ = say_tx.send(text.clone());
+            }
+            tracing::info!(
+                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={}",
+                state.phase,
+                state.link,
+                state.reconnecting,
+                state.call_started.map(|at| at.elapsed().as_secs()),
+                state.mics.len()
+            );
+        },
+        on_chat,
+    )
     .unwrap_or_else(|e| panic!("engine: {e}"));
     engine.send(Command::OpenRoom(room));
+    if std::env::var_os("TRANSCRIBE").is_some() {
+        engine.send(Command::SetTranscribe(true));
+    }
     engine.send(Command::Join);
+    if let Ok(text) = say_rx.recv_timeout(Duration::from_secs(seconds)) {
+        // A moment for the other side to settle into the call
+        std::thread::sleep(Duration::from_secs(1));
+        engine.send(Command::SendChat(text));
+    }
     std::thread::sleep(Duration::from_secs(seconds));
     engine.send(Command::HangUp);
     // Lets the leave go out, so the other side sees us go at once instead of after the server's resume grace

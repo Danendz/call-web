@@ -15,6 +15,11 @@ export component ControlPill inherits Rectangle {
     in property <bool> portrait;
     in property <bool> can-rotate;
     in property <bool> stats-open;
+    in property <bool> transcribe-on;
+    in property <bool> chat-open;
+    in property <int> unread;
+    callback toggle-transcribe();
+    callback toggle-chat();
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
@@ -54,6 +59,20 @@ export component ControlPill inherits Rectangle {
                 kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
                 enabled: cam-granted;
                 clicked => { root.toggle-cam(); }
+            }
+            IconButton {
+                icon: Icons.captions;
+                label: @tr("Speech to chat");
+                kind: transcribe-on ? IconButtonKind.active : IconButtonKind.normal;
+                enabled: has-mic;
+                clicked => { root.toggle-transcribe(); }
+            }
+            IconButton {
+                icon: Icons.message-square;
+                label: @tr("Chat");
+                kind: chat-open ? IconButtonKind.active : IconButtonKind.normal;
+                badge: chat-open ? 0 : unread;
+                clicked => { root.toggle-chat(); }
             }
             MoreMenu {
                 cams: root.cams;

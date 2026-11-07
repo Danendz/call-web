@@ -15,6 +15,9 @@ pub struct Settings {
     /// Send 9:16 video instead of 16:9
     #[serde(default)]
     pub portrait: bool,
+    /// Speech to chat, which the web also remembers
+    #[serde(default)]
+    pub transcribe: bool,
 }
 
 impl Settings {

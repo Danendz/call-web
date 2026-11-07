@@ -10,15 +10,21 @@ export component IconButton inherits Rectangle {
     in property <IconButtonKind> kind: normal;
     in property <bool> enabled: true;
     in property <length> size: 48px;
+    // The web's `.small`: no fill until hovered, for buttons inside panels
+    in property <bool> transparent;
+    // Unread count in a red dot at the corner; hidden at 0
+    in property <int> badge;
     callback clicked();
 
     property <color> base: kind == IconButtonKind.active ? Theme.text
         : kind == IconButtonKind.off ? Theme.danger-soft
         : kind == IconButtonKind.danger ? Theme.danger
+        : transparent ? #ffffff00
         : Theme.icon-btn;
     property <color> hover: kind == IconButtonKind.active ? #fff
         : kind == IconButtonKind.off ? Theme.danger-soft-hover
         : kind == IconButtonKind.danger ? Theme.danger-hover
+        : transparent ? Theme.menu-hover
         : Theme.icon-btn-hover;
     property <color> fg: kind == IconButtonKind.active ? Theme.bg
         : kind == IconButtonKind.off ? Theme.danger-text
@@ -30,7 +36,7 @@ export component IconButton inherits Rectangle {
     background: touch.has-hover && enabled ? hover : base;
     opacity: enabled ? 1 : 0.38;
     accessible-role: button;
-    accessible-label: label;
+    accessible-label: badge > 0 ? label + " (" + badge + ")" : label;
     accessible-enabled: enabled;
     accessible-action-default => { clicked(); }
     animate background, opacity { duration: Theme.fast; easing: Theme.ease; }
@@ -49,5 +55,27 @@ export component IconButton inherits Rectangle {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
+    }
+
+    // Pops in like the web's .badge
+    if badge > 0: Rectangle {
+        x: parent.width - self.width + 2px;
+        y: -2px;
+        width: max(19px, count.preferred-width + 14px);
+        height: 19px;
+        border-radius: self.height / 2;
+        border-width: 2px;
+        border-color: Theme.surface;
+        background: Theme.danger;
+        property <bool> shown: false;
+        init => { shown = true; }
+        transform-scale: shown ? 1 : 0.4;
+        animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
+        count := Text {
+            text: badge;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+        }
     }
 }

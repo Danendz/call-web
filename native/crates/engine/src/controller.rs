@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use libwebrtc::media_stream_track::MediaStreamTrack;
 use libwebrtc::peer_connection::IceConnectionState;
-use protocol::{ClientMessage, IceServerConfig, Lang, ServerMessage};
+use protocol::{
+    ChatMessage, ClientMessage, IceServerConfig, Lang, MAX_CHAT_LENGTH, ServerMessage, SpeechServerMessage, Translation,
+};
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -18,6 +20,7 @@ use crate::media::{Device, Media};
 use crate::peer::{Peer, PeerConfig, PeerEvent};
 use crate::room;
 use crate::signaling::{SignalEvent, Signaling, SocketStatus};
+use crate::speech::{Params as SpeechParams, SpeechNotice, Transcriber};
 use crate::stats::{CallStats, Path};
 use crate::video::{self, Feed, VideoSink};
 
@@ -72,6 +75,11 @@ pub struct State {
     /// We send a 9:16 picture instead of 16:9
     pub portrait: bool,
     pub stats: Option<CallStats>,
+    /// The other person just saved a picture of the call
+    pub peer_screenshot: bool,
+    /// Speech to chat is on: what you say is posted to the chat while someone's there to read it
+    pub transcribe_on: bool,
+    pub speech_notice: Option<SpeechNotice>,
     /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
     pub force_relay: bool,
     /// An ICE restart to get off the relay just went out
@@ -98,6 +106,20 @@ pub enum Command {
     NextCam,
     SetPortrait(bool),
     SetForceRelay(bool),
+    /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes
+    SendChat(String),
+    /// Tells the other person a picture of the call was saved
+    NotifyScreenshot,
+    SetTranscribe(bool),
+}
+
+/// The chat, as changes: a whole new list on joining, then single messages and translations, so the UI updates its
+/// list in place. Kept out of [`State`], which would otherwise copy every message on every change.
+#[derive(Debug, Clone)]
+pub enum ChatEvent {
+    Reset { my_id: String, messages: Vec<ChatMessage> },
+    Added(ChatMessage),
+    Translated { id: String, translation: Translation },
 }
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
@@ -106,9 +128,14 @@ const DIRECT_RETRY_DELAYS: [Duration; 4] =
     [Duration::from_secs(15), Duration::from_secs(30), Duration::from_secs(60), Duration::from_secs(120)];
 const TRYING_DIRECT_SHOWN: Duration = Duration::from_secs(5);
 
-/// What the engine tells itself from other threads.
+const PEER_SCREENSHOT_SHOWN: Duration = Duration::from_secs(3);
+
+/// What the engine tells itself from other threads and timers.
 enum Internal {
     CameraAccess(CameraAccess),
+    PeerScreenshotShown,
+    /// Speech to chat's quota is back
+    SpeechResumed,
 }
 
 /// Handle to the engine thread. Dropping it leaves the room and stops the thread.
@@ -125,6 +152,7 @@ impl Engine {
         lang: Lang,
         sink: Arc<dyn VideoSink>,
         on_state: impl Fn(State) + Send + 'static,
+        on_chat: impl Fn(ChatEvent) + Send + 'static,
     ) -> std::io::Result<Self> {
         let (commands, rx) = mpsc::unbounded_channel();
         let level = Level::default();
@@ -133,7 +161,9 @@ impl Engine {
         thread::Builder::new().name("engine".into()).spawn(move || {
             // Built inside the runtime: WebRTC's video source needs one to exist
             runtime.block_on(async move {
-                Controller::new(server, lang, controller_level, sink, Box::new(on_state)).run(rx).await;
+                Controller::new(server, lang, controller_level, sink, Box::new(on_state), Box::new(on_chat))
+                    .run(rx)
+                    .await;
             });
         })?;
         Ok(Self { commands, level })
@@ -153,6 +183,8 @@ impl Engine {
 #[derive(Default)]
 struct Seat {
     polite: bool,
+    /// Secret for resuming the seat and for `/ws/speech`; never logged
+    token: Option<String>,
     ice_servers: Vec<IceServerConfig>,
 }
 
@@ -160,6 +192,7 @@ struct Controller {
     server: Url,
     state: State,
     on_state: Box<dyn Fn(State) + Send>,
+    on_chat: Box<dyn Fn(ChatEvent) + Send>,
     media: Media,
     level: Level,
     /// Only while the setup screen is up
@@ -172,6 +205,8 @@ struct Controller {
     remote_video: Option<tokio::task::JoinHandle<()>>,
     internal_tx: mpsc::UnboundedSender<Internal>,
     internal_rx: mpsc::UnboundedReceiver<Internal>,
+    transcriber: Transcriber,
+    speech_rx: mpsc::UnboundedReceiver<SpeechServerMessage>,
     direct_retries: usize,
     next_direct_retry: Option<Instant>,
     last_direct_retry: Option<Instant>,
@@ -192,10 +227,12 @@ impl Controller {
         level: Level,
         sink: Arc<dyn VideoSink>,
         on_state: Box<dyn Fn(State) + Send>,
+        on_chat: Box<dyn Fn(ChatEvent) + Send>,
     ) -> Self {
         let (signal_tx, signal_rx) = mpsc::unbounded_channel();
         let (peer_tx, peer_rx) = mpsc::unbounded_channel();
         let (internal_tx, internal_rx) = mpsc::unbounded_channel();
+        let (speech_tx, speech_rx) = mpsc::unbounded_channel();
         let media = Media::new();
         let camera = LocalCamera::new(media.factory(), sink.clone());
         let state = State {
@@ -219,11 +256,15 @@ impl Controller {
             stats: None,
             force_relay: false,
             trying_direct: false,
+            peer_screenshot: false,
+            transcribe_on: false,
+            speech_notice: None,
         };
         Self {
             server,
             state,
             on_state,
+            on_chat,
             media,
             level,
             meter: None,
@@ -233,6 +274,8 @@ impl Controller {
             remote_video: None,
             internal_tx,
             internal_rx,
+            transcriber: Transcriber::new(speech_tx),
+            speech_rx,
             direct_retries: 0,
             next_direct_retry: None,
             last_direct_retry: None,
@@ -257,7 +300,16 @@ impl Controller {
                 },
                 Some(event) = self.signal_rx.recv() => self.signal_event(event),
                 Some(event) = self.peer_rx.recv() => self.peer_event(event),
-                Some(Internal::CameraAccess(access)) = self.internal_rx.recv() => self.camera.set_access(access),
+                Some(internal) = self.internal_rx.recv() => match internal {
+                    Internal::CameraAccess(access) => self.camera.set_access(access),
+                    Internal::PeerScreenshotShown => self.state.peer_screenshot = false,
+                    Internal::SpeechResumed => {
+                        if matches!(self.state.speech_notice, Some(SpeechNotice::Paused { .. })) {
+                            self.state.speech_notice = None;
+                        }
+                    }
+                },
+                Some(msg) = self.speech_rx.recv() => self.speech_notice(msg),
             }
             self.sync_devices();
             self.publish();
@@ -308,6 +360,22 @@ impl Controller {
             Command::SelectCam(id) => self.camera.select(id),
             Command::NextCam => self.camera.next(),
             Command::SetPortrait(portrait) => self.camera.set_portrait(portrait),
+            Command::SendChat(text) => {
+                let text = text.trim();
+                // The server counts UTF-16 units, like JavaScript's String.length
+                if !text.is_empty()
+                    && text.encode_utf16().count() <= MAX_CHAT_LENGTH
+                    && let Some(signaling) = &self.signaling
+                {
+                    signaling.send(ClientMessage::Chat { text: text.to_owned(), spoken: None });
+                }
+            }
+            Command::SetTranscribe(on) => self.state.transcribe_on = on,
+            Command::NotifyScreenshot => {
+                if let Some(signaling) = &self.signaling {
+                    signaling.send(ClientMessage::Screenshot);
+                }
+            }
             Command::SetForceRelay(relay) => {
                 self.state.force_relay = relay;
                 if let Some(peer) = &self.peer {
@@ -346,6 +414,36 @@ impl Controller {
         self.state.cams.clone_from(&self.camera.devices);
         self.state.cam_id = self.camera.id.clone().or_else(|| self.camera.devices.first().map(|d| d.id.clone()));
         self.state.portrait = self.camera.portrait;
+
+        // Only while someone is there to read it, and never while muted, like the web
+        let speaking = self.state.transcribe_on && self.state.mic_on && self.state.phase == Phase::InCall;
+        let params = speaking.then(|| self.speech_params()).flatten();
+        self.transcriber.sync(params);
+    }
+
+    fn speech_params(&self) -> Option<SpeechParams> {
+        let (room, token) = (self.state.room_id.as_ref()?, self.seat.token.as_ref()?);
+        let mut url = self.server.clone();
+        // Only http and https servers are accepted at startup, so this can't fail
+        let _ = url.set_scheme(if self.server.scheme() == "https" { "wss" } else { "ws" });
+        url.set_path("/ws/speech");
+        url.query_pairs_mut().clear().append_pair("room", room).append_pair("token", token);
+        let mic = self.state.mic_id.as_ref().and_then(|id| self.state.mics.iter().find(|d| &d.id == id));
+        Some(SpeechParams { url, lang: self.state.lang, mic: mic.map(|d| d.label.clone()) })
+    }
+
+    fn speech_notice(&mut self, msg: SpeechServerMessage) {
+        let Some(notice) = self.transcriber.notice(msg) else { return };
+        if let SpeechNotice::Paused { until_ms } = notice {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+            let wait = Duration::from_millis(until_ms.saturating_sub(now.as_millis() as u64));
+            let tx = self.internal_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(wait).await;
+                let _ = tx.send(Internal::SpeechResumed);
+            });
+        }
+        self.state.speech_notice = Some(notice);
     }
 
     fn camera_wanted(&self) -> bool {
@@ -401,9 +499,11 @@ impl Controller {
                 peer_present,
                 polite,
                 ice_servers,
+                chat,
                 call_elapsed_ms,
-                ..
             } => {
+                (self.on_chat)(ChatEvent::Reset { my_id: client_id.clone(), messages: chat });
+                self.seat.token = Some(token.clone());
                 if let Some(signaling) = &self.signaling {
                     signaling.set_identity(client_id, token);
                 }
@@ -445,6 +545,18 @@ impl Controller {
                 }
             }
             ServerMessage::Media { cam_on, .. } => self.state.remote_cam_on = cam_on,
+            ServerMessage::Chat { message } => (self.on_chat)(ChatEvent::Added(message)),
+            ServerMessage::ChatTranslation { id, translation } => {
+                (self.on_chat)(ChatEvent::Translated { id, translation });
+            }
+            ServerMessage::Screenshot => {
+                self.state.peer_screenshot = true;
+                let tx = self.internal_tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(PEER_SCREENSHOT_SHOWN).await;
+                    let _ = tx.send(Internal::PeerScreenshotShown);
+                });
+            }
             ServerMessage::Full => {
                 self.signaling = None;
                 self.drop_peer();
@@ -482,6 +594,7 @@ impl Controller {
 
     fn drop_peer(&mut self) {
         self.peer = None;
+        self.transcriber.set_remote_audio(None);
         if let Some(pump) = self.remote_video.take() {
             pump.abort();
             self.sink.clear(Feed::Peer);
@@ -528,6 +641,7 @@ impl Controller {
                 }
                 self.state.remote_video = true;
             }
+            PeerEvent::RemoteAudio { track } => self.transcriber.set_remote_audio(Some(track)),
             PeerEvent::Stats(stats) => {
                 self.maybe_retry_direct(&stats);
                 self.state.trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);

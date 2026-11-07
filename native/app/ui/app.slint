@@ -7,9 +7,9 @@ import { Centered } from "components/centered.slint";
 import { StartScreen } from "start/start.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
-import { CallScreen, CallLink, StatsView } from "call/call.slint";
+import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
 
-export { DeviceItem, CallLink, StatsView }
+export { DeviceItem, CallLink, StatsView, ChatRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -38,6 +38,14 @@ export component AppWindow inherits Window {
     in property <bool> peer-cam-on: true;
     in property <StatsView> stats;
     in property <bool> force-relay;
+    in property <[ChatRow]> chat;
+    in property <int> others-count;
+    in property <string> subtitle;
+    in property <int> subtitle-serial;
+    in property <bool> transcribe-on;
+    in property <int> speech-notice;
+    in property <string> speech-paused-until;
+    in property <bool> peer-screenshot;
 
     // The web's deviceStatus: why a device can't be used
     property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
@@ -58,6 +66,8 @@ export component AppWindow inherits Window {
     callback next-cam();
     callback set-portrait(bool);
     callback set-force-relay(bool);
+    callback toggle-transcribe();
+    callback send-chat(string) -> bool;
 
     title: "Call Danya";
     icon: Icons.video;
@@ -121,6 +131,16 @@ export component AppWindow inherits Window {
         self-video: root.self-video;
         stats: root.stats;
         force-relay: root.force-relay;
+        chat: root.chat;
+        others-count: root.others-count;
+        subtitle: root.subtitle;
+        subtitle-serial: root.subtitle-serial;
+        transcribe-on: root.transcribe-on;
+        speech-notice: root.speech-notice;
+        speech-paused-until: root.speech-paused-until;
+        peer-screenshot: root.peer-screenshot;
+        toggle-transcribe => { root.toggle-transcribe(); }
+        send-chat(text) => { root.send-chat(text) }
         toggle-mic => { root.toggle-mic(); }
         toggle-cam => { root.toggle-cam(); }
         pick-cam(id) => { root.pick-cam(id); }

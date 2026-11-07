@@ -6,26 +6,32 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use engine::{CallStats, CameraAccess, Device, Link, Path, Phase, State, VideoStats};
+use engine::{CallStats, CameraAccess, ChatEvent, Device, Lang, Link, Path, Phase, SpeechNotice, State, VideoStats};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
+use crate::chat::{Chat, local_time};
 use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, StatsView};
 
 /// What the bridge keeps on the UI thread between states.
 pub struct Bridge {
     mics: Rc<VecModel<DeviceItem>>,
     cams: Rc<VecModel<DeviceItem>>,
+    chat: RefCell<Chat>,
     /// Read by the ticker that redraws the call timer
     pub call_started: Rc<RefCell<Option<Instant>>>,
 }
 
 impl Bridge {
-    pub fn new(ui: &AppWindow) -> Self {
+    pub fn new(ui: &AppWindow, lang: Lang) -> Self {
         let mics = Rc::new(VecModel::default());
         let cams = Rc::new(VecModel::default());
         ui.set_mics(ModelRc::from(mics.clone()));
         ui.set_cams(ModelRc::from(cams.clone()));
-        Self { mics, cams, call_started: Rc::default() }
+        Self { mics, cams, chat: RefCell::new(Chat::new(ui, lang)), call_started: Rc::default() }
+    }
+
+    pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
+        self.chat.borrow_mut().event(ui, event);
     }
 
     pub fn render(&self, ui: &AppWindow, state: &State) {
@@ -43,6 +49,7 @@ impl Bridge {
             Phase::Ended => AppPhase::Ended,
         });
         ui.set_lang(crate::lang_code(state.lang).into());
+        self.chat.borrow_mut().set_lang(state.lang);
         ui.set_room_url(state.room_url.clone().unwrap_or_default().into());
         ui.set_reconnecting(state.reconnecting);
         ui.set_link(match state.link {
@@ -73,6 +80,15 @@ impl Bridge {
         ui.set_peer_cam_on(state.remote_cam_on);
         ui.set_force_relay(state.force_relay);
         ui.set_stats(stats_view(state.stats.as_ref(), state.trying_direct));
+        ui.set_transcribe_on(state.transcribe_on);
+        let (notice, until) = match state.speech_notice {
+            None => (0, String::new()),
+            Some(SpeechNotice::Unavailable) => (1, String::new()),
+            Some(SpeechNotice::Paused { until_ms }) => (2, local_time(until_ms)),
+        };
+        ui.set_speech_notice(notice);
+        ui.set_speech_paused_until(until.into());
+        ui.set_peer_screenshot(state.peer_screenshot);
     }
 }
 

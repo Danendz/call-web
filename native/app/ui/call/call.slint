@@ -6,8 +6,9 @@ import { Notice } from "notice.slint";
 import { Feeds } from "feeds.slint";
 import { StatsOverlay, StatsView } from "stats-overlay.slint";
 import { DeviceItem } from "../setup/device-row.slint";
+import { ChatPanel, ChatRow } from "../chat/chat.slint";
 
-export { StatsView }
+export { StatsView, ChatRow }
 
 export enum CallLink { none, connecting, connected, unstable, failed }
 
@@ -33,18 +34,55 @@ export component CallScreen inherits Rectangle {
     in property <image> self-video;
     in property <StatsView> stats;
     in property <bool> force-relay;
+    in property <[ChatRow]> chat;
+    // The other person's messages so far; what the chat hasn't shown yet is the unread badge
+    in property <int> others-count;
+    // The other person's latest spoken line, and a counter that ticks when it or its translation arrives
+    in property <string> subtitle;
+    in property <int> subtitle-serial;
+    in property <bool> transcribe-on;
+    // 0 nothing to say, 1 the server has no speech model, 2 out of quota until speech-paused-until (a local time)
+    in property <int> speech-notice;
+    in property <string> speech-paused-until;
+    in property <bool> peer-screenshot;
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
     callback next-cam();
     callback set-portrait(bool);
     callback set-force-relay(bool);
+    callback toggle-transcribe();
+    callback send-chat(string) -> bool;
     callback hang-up();
 
     // Screen-only choices, reset for each new person like the web's
     property <int> user-rotation: 0;
     property <bool> stats-open: force-relay;
     changed connected => { if (!connected) { user-rotation = 0; } }
+
+    // Open from the start on a wide window, like the web's (min-width: 900px)
+    in-out property <bool> chat-open: root.width >= 900px;
+    property <int> seen-count;
+    property <int> unread: chat-open ? 0 : max(0, others-count - seen-count);
+    changed others-count => { if (chat-open) { seen-count = others-count; } }
+    changed chat-open => { if (chat-open) { seen-count = others-count; } subtitle-shown = false; }
+    property <length> chat-width: min(360px, root.width * 0.42);
+
+    property <bool> subtitle-shown;
+    changed subtitle-serial => {
+        if (!chat-open && subtitle != "") {
+            subtitle-shown = true;
+            subtitle-timer.restart();
+        }
+    }
+    subtitle-timer := Timer {
+        interval: 6s;
+        running: false;
+        triggered => {
+            self.running = false;
+            subtitle-shown = false;
+        }
+    }
 
     property <bool> shown: false;
     init => { shown = true; }
@@ -53,116 +91,178 @@ export component CallScreen inherits Rectangle {
     opacity: shown ? 1 : 0;
     animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
-    Feeds {
-        opacity: connected ? 1 : 0;
-        animate opacity { duration: Theme.med; easing: Theme.ease; }
-        peer-video: root.peer-video;
-        peer-rotation: root.peer-frame-rotation + root.user-rotation;
-        peer-cam-on: root.peer-cam-on;
-        self-video: root.self-video;
-        self-shown: root.cam-granted;
-        self-cam-on: root.cam-on && root.self-video.width > 0;
+    ChatPanel {
+        x: root.width - self.width;
+        width: root.chat-open ? root.chat-width : 0;
+        animate width { duration: Theme.slow; easing: Theme.ease; }
+        messages: root.chat;
+        open: root.chat-open;
+        can-send: !root.reconnecting && !root.starting;
+        send(text) => { root.send-chat(text) }
+        close => { root.chat-open = false; }
     }
 
-    if !connected: Rectangle {
-        background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
-        property <bool> card-shown: false;
-        init => { card-shown = true; }
+    // Everything but the chat; it narrows as the chat opens
+    stage := Rectangle {
+        x: 0;
+        width: root.width - (root.chat-open ? root.chat-width : 0);
+        animate width { duration: Theme.slow; easing: Theme.ease; }
+        clip: true;
 
-        Rectangle {
-            width: min(440px, parent.width - 32px);
-            height: content.preferred-height;
-            y: (parent.height - self.height) / 2 + (card-shown ? 0 : 10px);
-            opacity: card-shown ? 1 : 0;
-            border-radius: Theme.radius-lg;
-            border-width: 1px;
-            border-color: Theme.glass-border;
-            background: Theme.glass;
-            drop-shadow-blur: 30px;
-            drop-shadow-offset-y: 10px;
-            drop-shadow-color: Theme.shadow;
-            animate y, opacity { duration: Theme.slow; easing: Theme.ease; }
-
-            content := VerticalLayout {
-                padding: 22px;
-                spacing: 14px;
-                Text {
-                    text: starting ? @tr("Starting…") : @tr("Waiting for the other person to join…");
-                    color: Theme.text;
-                    font-weight: 550;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-                CopyLink {
-                    url: root.room-url;
-                    fill: #0000004d;
-                }
-            }
+        Feeds {
+            opacity: connected ? 1 : 0;
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+            peer-video: root.peer-video;
+            peer-rotation: root.peer-frame-rotation + root.user-rotation;
+            peer-cam-on: root.peer-cam-on;
+            self-video: root.self-video;
+            self-shown: root.cam-granted;
+            self-cam-on: root.cam-on && root.self-video.width > 0;
         }
-    }
 
-    // Below the macOS traffic lights, which sit over the content
-    VerticalLayout {
-        y: 40px;
-        height: self.preferred-height;
-        alignment: start;
-        spacing: 6px;
+        if !connected: Rectangle {
+            background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
+            property <bool> card-shown: false;
+            init => { card-shown = true; }
 
-        if connected && elapsed != "": HorizontalLayout {
-            alignment: center;
             Rectangle {
-                width: timer.preferred-width + 24px;
-                height: timer.preferred-height + 8px;
-                border-radius: self.height / 2;
-                background: Theme.timer;
-                timer := Text {
-                    text: elapsed;
-                    color: #ffffffe6;
-                    font-size: 13px;
+                width: min(440px, parent.width - 32px);
+                height: content.preferred-height;
+                y: (parent.height - self.height) / 2 + (card-shown ? 0 : 10px);
+                opacity: card-shown ? 1 : 0;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.glass-border;
+                background: Theme.glass;
+                drop-shadow-blur: 30px;
+                drop-shadow-offset-y: 10px;
+                drop-shadow-color: Theme.shadow;
+                animate y, opacity { duration: Theme.slow; easing: Theme.ease; }
+
+                content := VerticalLayout {
+                    padding: 22px;
+                    spacing: 14px;
+                    Text {
+                        text: starting ? @tr("Starting…") : @tr("Waiting for the other person to join…");
+                        color: Theme.text;
+                        font-weight: 550;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    CopyLink {
+                        url: root.room-url;
+                        fill: #0000004d;
+                    }
                 }
             }
         }
-        HorizontalLayout {
-            alignment: center;
-            Notice {
-                text: reconnecting ? @tr("Lost connection to server, reconnecting…")
-                    : !connected ? ""
-                    : link == CallLink.connecting ? @tr("Connecting…")
-                    : link == CallLink.unstable ? @tr("Connection unstable, reconnecting…")
-                    : link == CallLink.failed ? @tr("Connection failed, retrying…")
+
+        // Below the macOS traffic lights, which sit over the content
+        VerticalLayout {
+            y: 40px;
+            height: self.preferred-height;
+            alignment: start;
+            spacing: 6px;
+
+            if connected && elapsed != "": HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: timer.preferred-width + 24px;
+                    height: timer.preferred-height + 8px;
+                    border-radius: self.height / 2;
+                    background: Theme.timer;
+                    timer := Text {
+                        text: elapsed;
+                        color: #ffffffe6;
+                        font-size: 13px;
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                Notice {
+                    text: reconnecting ? @tr("Lost connection to server, reconnecting…")
+                        : !connected ? ""
+                        : link == CallLink.connecting ? @tr("Connecting…")
+                        : link == CallLink.unstable ? @tr("Connection unstable, reconnecting…")
+                        : link == CallLink.failed ? @tr("Connection failed, retrying…")
+                        : "";
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                Notice {
+                    muted: true;
+                    text: peer-screenshot ? @tr("The other person took a screenshot") : "";
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                Notice {
+                    muted: true;
+                    text: !transcribe-on ? ""
+                    : speech-notice == 1 ? @tr("Speech-to-chat isn't available right now")
+                    : speech-notice == 2 ? @tr("Speech-to-chat paused until {}: free limit reached", speech-paused-until)
                     : "";
+                }
             }
         }
-    }
 
-    StatsOverlay {
-        x: 14px;
-        y: 40px;
-        open: root.stats-open && root.connected;
-        stats: root.stats;
-        force-relay: root.force-relay;
-        set-force-relay(relay) => { root.set-force-relay(relay); }
-    }
+        // Their latest spoken line over the video while the chat is closed, like the web's Subtitle
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 104px;
+            width: min(min(parent.width * 0.84, 720px), line.preferred-width + 32px);
+            height: line.preferred-height + 16px;
+            border-radius: Theme.radius;
+            background: #000000b8;
+            opacity: subtitle-shown && !chat-open && connected ? 1 : 0;
+            visible: self.opacity > 0;
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+            line := Text {
+                width: parent.width - 32px;
+                text: subtitle;
+                color: #fff;
+                font-size: 20px;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+        }
 
-    ControlPill {
-        x: (parent.width - self.width) / 2;
-        y: parent.height - self.height - 20px;
-        mic-on: root.mic-on;
-        has-mic: root.has-mic;
-        cam-on: root.cam-on;
-        cam-granted: root.cam-granted;
-        cams: root.cams;
-        cam-id: root.cam-id;
-        portrait: root.portrait;
-        can-rotate: root.connected;
-        stats-open: root.stats-open;
-        toggle-mic => { root.toggle-mic(); }
-        toggle-cam => { root.toggle-cam(); }
-        pick-cam(id) => { root.pick-cam(id); }
-        next-cam => { root.next-cam(); }
-        toggle-portrait => { root.set-portrait(!root.portrait); }
-        rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
-        toggle-stats => { root.stats-open = !root.stats-open; }
-        hang-up => { root.hang-up(); }
+        StatsOverlay {
+            x: 14px;
+            y: 40px;
+            open: root.stats-open && root.connected;
+            stats: root.stats;
+            force-relay: root.force-relay;
+            set-force-relay(relay) => { root.set-force-relay(relay); }
+        }
+
+        ControlPill {
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 20px;
+            mic-on: root.mic-on;
+            has-mic: root.has-mic;
+            cam-on: root.cam-on;
+            cam-granted: root.cam-granted;
+            cams: root.cams;
+            cam-id: root.cam-id;
+            portrait: root.portrait;
+            can-rotate: root.connected;
+            stats-open: root.stats-open;
+            transcribe-on: root.transcribe-on;
+            chat-open: root.chat-open;
+            unread: root.unread;
+            toggle-transcribe => { root.toggle-transcribe(); }
+            toggle-chat => { root.chat-open = !root.chat-open; }
+            toggle-mic => { root.toggle-mic(); }
+            toggle-cam => { root.toggle-cam(); }
+            pick-cam(id) => { root.pick-cam(id); }
+            next-cam => { root.next-cam(); }
+            toggle-portrait => { root.set-portrait(!root.portrait); }
+            rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
+            toggle-stats => { root.stats-open = !root.stats-open; }
+            hang-up => { root.hang-up(); }
+        }
     }
 }

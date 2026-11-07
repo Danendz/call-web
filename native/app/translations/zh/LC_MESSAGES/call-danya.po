@@ -32,6 +32,12 @@ msgstr "摄像头：未找到"
 msgid "Cancel"
 msgstr "取消"
 
+msgid "Chat"
+msgstr "聊天"
+
+msgid "Close chat"
+msgstr "关闭聊天"
+
 msgid "Connecting…"
 msgstr "正在连接…"
 
@@ -68,6 +74,9 @@ msgstr "加入通话"
 msgid "Lost connection to server, reconnecting…"
 msgstr "与服务器断开连接，正在重连…"
 
+msgid "Message"
+msgstr "消息"
+
 msgid "Microphone"
 msgstr "麦克风"
 
@@ -79,6 +88,9 @@ msgstr "更多"
 
 msgid "New room"
 msgstr "新房间"
+
+msgid "No messages yet. They disappear when the room closes."
+msgstr "还没有消息。房间关闭后消息会消失。"
 
 msgid "Portrait video"
 msgstr "竖屏视频"
@@ -98,6 +110,9 @@ msgstr "房间链接"
 msgid "Rotate their video"
 msgstr "旋转对方画面"
 
+msgid "Send"
+msgstr "发送"
+
 msgid "Send landscape video"
 msgstr "发送横屏视频"
 
@@ -106,6 +121,18 @@ msgstr "发送竖屏视频"
 
 msgid "Share this link with the person you want to call"
 msgstr "把这个链接发给你要通话的人"
+
+msgid "Speech to chat"
+msgstr "语音转文字"
+
+msgid "Speech-to-chat isn't available right now"
+msgstr "语音转文字暂不可用"
+
+msgid "Speech-to-chat paused until {}: free limit reached"
+msgstr "语音转文字已暂停至 {}：已达到免费额度"
+
+msgid "Spoken"
+msgstr "语音"
 
 msgid "Start a new room"
 msgstr "创建新房间"
@@ -118,6 +145,9 @@ msgstr "切换摄像头"
 
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
+
+msgid "The other person took a screenshot"
+msgstr "对方截了一张图"
 
 msgid "This room already has two people in it."
 msgstr "这个房间已经有两个人了。"

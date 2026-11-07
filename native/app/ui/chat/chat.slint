@@ -1,0 +1,234 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { IconButton } from "../components/icon-button.slint";
+
+// One message as the bridge words it: the other person's in your language with what they wrote under it, your own
+// as written (the web's readable())
+export struct ChatRow {
+    id: string,
+    text: string,
+    original: string,
+    mine: bool,
+    spoken: bool,
+    time: string,
+}
+
+// A bubble that rises in like the web's msg-in
+component Bubble inherits HorizontalLayout {
+    in property <ChatRow> message;
+    in property <length> max-bubble;
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    alignment: message.mine ? end : start;
+    Rectangle {
+        max-width: root.max-bubble;
+        // Your own tail at the bottom right, theirs at the bottom left
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        border-bottom-left-radius: message.mine ? 18px : 6px;
+        border-bottom-right-radius: message.mine ? 6px : 18px;
+        background: message.mine ? Theme.accent : Theme.surface-3;
+        opacity: shown ? 1 : 0;
+        transform-scale: shown ? 1 : 0.96;
+        transform-origin: { x: message.mine ? self.width : 0, y: self.height };
+        animate opacity, transform-scale { duration: Theme.med; easing: Theme.ease; }
+        accessible-role: text;
+        accessible-label: message.text;
+
+        VerticalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 8px;
+            padding-bottom: 6px;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: 5px;
+                if message.spoken: Image {
+                    source: Icons.mic;
+                    colorize: message.mine ? #ffffffb8 : Theme.muted;
+                    width: 13px;
+                    height: 13px;
+                    y: 3px;
+                    accessible-role: image;
+                    accessible-label: @tr("Spoken");
+                }
+                Text {
+                    text: message.text;
+                    color: message.mine ? #fff : Theme.text;
+                    wrap: word-wrap;
+                }
+            }
+            if message.original != "": Text {
+                text: message.original;
+                color: message.mine ? #ffffffb8 : Theme.muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            Text {
+                text: message.time;
+                color: message.mine ? #ffffffb8 : Theme.muted;
+                font-size: 11px;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}
+
+// The chat beside the stage, like the web's ChatPanel. It keeps its draft while closed.
+export component ChatPanel inherits Rectangle {
+    in property <[ChatRow]> messages;
+    in property <bool> open;
+    in property <bool> can-send;
+    callback send(string) -> bool;
+    callback close();
+
+    background: Theme.surface;
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: @tr("Chat");
+
+    // Fixed width inside, so the text doesn't reflow while the panel opens; it slides in like .chat-inner
+    inner := VerticalLayout {
+        x: open ? 0 : 24px;
+        width: root.width;
+        opacity: open ? 1 : 0;
+        animate x { duration: Theme.slow; easing: Theme.ease; }
+        animate opacity { duration: Theme.med; easing: Theme.ease; }
+
+        HorizontalLayout {
+            padding-top: 10px;
+            padding-bottom: 10px;
+            padding-left: 18px;
+            padding-right: 8px;
+            Text {
+                text: @tr("Chat");
+                color: Theme.text;
+                font-weight: 650;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            IconButton {
+                icon: Icons.x;
+                label: @tr("Close chat");
+                size: 36px;
+                transparent: true;
+                clicked => { root.close(); }
+            }
+        }
+
+        list := Flickable {
+            vertical-stretch: 1;
+            content-height: column.preferred-height;
+
+            if messages.length == 0: Text {
+                x: (list.width - self.width) / 2;
+                y: (list.height - self.height) / 2;
+                width: min(240px, list.width - 28px);
+                text: @tr("No messages yet. They disappear when the room closes.");
+                color: Theme.muted;
+                font-size: 13px;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+            property <int> count: messages.length;
+            // New messages scroll into view, smoothly, like the web's scrollTo
+            changed count => { stick.start(); }
+            changed height => { stick.start(); }
+            animate content-y { duration: Theme.med; easing: Theme.ease; }
+
+            column := VerticalLayout {
+                width: list.width;
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 4px;
+                padding-bottom: 12px;
+                spacing: 6px;
+                for row in messages: Bubble {
+                    message: row;
+                    max-bubble: (root.width - 28px) * 0.85;
+                }
+            }
+        }
+        // The column's height settles a frame after a row is added, so the scroll waits for it
+        stick := Timer {
+            interval: 16ms;
+            running: false;
+            triggered => {
+                self.running = false;
+                list.content-y = min(0px, list.height - list.content-height);
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        HorizontalLayout {
+            padding: 10px;
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 8px;
+            Rectangle {
+                height: 44px;
+                horizontal-stretch: 1;
+                border-radius: self.height / 2;
+                border-width: 1px;
+                border-color: input.has-focus ? Theme.accent : Theme.border;
+                background: Theme.surface-2;
+                animate border-color { duration: Theme.fast; easing: Theme.ease; }
+                Text {
+                    x: 16px;
+                    text: @tr("Message");
+                    color: Theme.muted;
+                    visible: input.text == "";
+                    vertical-alignment: center;
+                    height: parent.height;
+                }
+                input := TextInput {
+                    x: 16px;
+                    width: parent.width - 32px;
+                    height: parent.height;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    single-line: true;
+                    accessible-label: @tr("Message");
+                    accepted => { send-button.clicked(); }
+                }
+            }
+            send-button := Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: self.height / 2;
+                property <bool> enabled: root.can-send && input.text != "";
+                background: !enabled ? Theme.surface-3 : touch.has-hover ? Theme.accent-hover : Theme.accent;
+                animate background { duration: Theme.fast; easing: Theme.ease; }
+                accessible-role: button;
+                accessible-label: @tr("Send");
+                accessible-enabled: enabled;
+                accessible-action-default => { self.clicked(); }
+                callback clicked();
+                clicked => {
+                    if (self.enabled && root.send(input.text)) {
+                        input.text = "";
+                    }
+                }
+                Image {
+                    source: Icons.send-horizontal;
+                    colorize: parent.enabled ? #fff : Theme.muted;
+                    width: 18px;
+                    height: 18px;
+                }
+                touch := TouchArea {
+                    mouse-cursor: parent.enabled ? pointer : default;
+                    clicked => { parent.clicked(); }
+                }
+            }
+        }
+    }
+
+    // Focus the message box when the chat opens, as the web does on a desktop
+    changed open => {
+        if (open) {
+            input.focus();
+        }
+    }
+}
