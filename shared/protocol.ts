@@ -1,6 +1,8 @@
 // Messages exchanged over the /ws socket. Shared by server and web client.
 
 export const MAX_CHAT_LENGTH = 2000;
+// WebRTC stream ids are UUIDs (Firefox wraps them in braces); anything longer is not one.
+export const MAX_STREAM_ID_LENGTH = 64;
 export const ROOM_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
 
 // The two languages the chat is translated between, also what each side's speech is recognized in.
@@ -52,7 +54,17 @@ export type ClientMessage =
   | { type: "leave" }
   | { type: "ping" }
   // Tells the other person you saved a picture of the call; carries nothing
-  | { type: "screenshot" };
+  | { type: "screenshot" }
+  | MediaMessage;
+
+// What you're sending, which the video tracks alone can't say: a camera turned off still sends black frames, and a
+// stopped share leaves its track in place. `screen` is the id of the stream your shared screen arrives in, null
+// when not sharing. Sent on every change and whenever the peer connection is (re)made.
+export interface MediaMessage {
+  type: "media";
+  camOn: boolean;
+  screen: string | null;
+}
 
 export type ServerMessage =
   | {
@@ -77,4 +89,5 @@ export type ServerMessage =
   | { type: "chat-translation"; id: string; translation: Translation }
   | { type: "pong" }
   | { type: "screenshot" }
+  | MediaMessage
   | { type: "error"; message: string };

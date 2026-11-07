@@ -1,62 +1,62 @@
 import { formatDuration } from "./CallTimer";
+import type { Corner } from "./useDragCorner";
 
 const FRAME_TIMEOUT_MS = 3_000;
 
+/** One video in a screenshot, drawn as it shows on screen. */
+export interface Shot {
+  stream: MediaStream;
+  /** Clockwise degrees, as the viewer rotated the other person's video */
+  rotation?: number;
+  mirror?: boolean;
+}
+
 /**
- * Draws the other person's frame at its full resolution, your camera as a rounded tile in the corner, and a small
- * date stamp. Reads from fresh <video> elements rather than the ones on screen, so the layout (swap, tile size)
- * doesn't matter.
+ * Draws the stage's video at its full resolution, the small tiles as rounded tiles in the corners they sit in on
+ * screen, and a small date stamp. Reads from fresh <video> elements rather than the ones on screen, so tile sizes and
+ * animations don't matter. A tile that has no frame to give is left out rather than failing the picture.
  */
 export async function captureCall({
-  remote,
-  local,
-  rotation,
-  mirrorLocal,
+  main,
+  tiles,
   elapsedMs,
 }: {
-  remote: MediaStream;
-  /** null when your camera is off */
-  local: MediaStream | null;
-  /** Clockwise degrees, as the viewer rotated the other person's video */
-  rotation: number;
-  mirrorLocal: boolean;
+  main: Shot;
+  tiles: (Shot & { corner: Corner })[];
   elapsedMs: number;
 }): Promise<Blob> {
-  const [them, me] = await Promise.all([frameSource(remote), local ? frameSource(local) : null]);
+  const [stage, ...small] = await Promise.all([
+    frameSource(main.stream),
+    ...tiles.map((tile) => frameSource(tile.stream).catch(() => null)),
+  ]);
   try {
-    const turned = rotation % 180 !== 0;
+    const turned = (main.rotation ?? 0) % 180 !== 0;
     const canvas = document.createElement("canvas");
-    canvas.width = turned ? them.videoHeight : them.videoWidth;
-    canvas.height = turned ? them.videoWidth : them.videoHeight;
+    canvas.width = turned ? stage.videoHeight : stage.videoWidth;
+    canvas.height = turned ? stage.videoWidth : stage.videoHeight;
     const ctx = canvas.getContext("2d")!;
     const short = Math.min(canvas.width, canvas.height);
     const margin = Math.round(short * 0.03);
+    drawCover(ctx, stage, main, 0, 0, canvas.width, canvas.height);
 
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    ctx.drawImage(them, -them.videoWidth / 2, -them.videoHeight / 2);
-    ctx.restore();
-
-    if (me) {
+    // How far along from its corner the next tile there goes
+    const taken: Record<Corner, number> = { tl: 0, tr: 0, bl: 0, br: 0 };
+    tiles.forEach((tile, i) => {
+      const video = small[i];
+      if (!video) return;
       const long = short * 0.3;
-      const aspect = me.videoWidth / me.videoHeight;
+      const aspect = (tile.rotation ?? 0) % 180 ? video.videoHeight / video.videoWidth : video.videoWidth / video.videoHeight;
       const [w, h] = aspect >= 1 ? [long, long / aspect] : [long * aspect, long];
-      const x = canvas.width - w - margin;
-      const y = canvas.height - h - margin;
+      const x = tile.corner.endsWith("l") ? margin : canvas.width - w - margin;
+      const y = tile.corner.startsWith("t") ? margin + taken[tile.corner] : canvas.height - h - margin - taken[tile.corner];
+      taken[tile.corner] += h + margin;
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(x, y, w, h, Math.min(w, h) * 0.08);
       ctx.clip();
-      if (mirrorLocal) {
-        ctx.translate(x + w, y);
-        ctx.scale(-1, 1);
-        ctx.drawImage(me, 0, 0, w, h);
-      } else {
-        ctx.drawImage(me, x, y, w, h);
-      }
+      drawCover(ctx, video, tile, x, y, w, h);
       ctx.restore();
-    }
+    });
 
     const at = new Date();
     const stamp = [
@@ -69,15 +69,30 @@ export async function captureCall({
     ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
     ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
     ctx.shadowBlur = Math.round(short * 0.01);
-    ctx.fillText(stamp, margin, canvas.height - margin);
+    // Above a tile in the bottom-left corner
+    ctx.fillText(stamp, margin, canvas.height - margin - taken.bl);
 
     return await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("could not encode screenshot"))), "image/jpeg", 0.92),
     );
   } finally {
-    them.srcObject = null;
-    if (me) me.srcObject = null;
+    for (const video of [stage, ...small]) if (video) video.srcObject = null;
   }
+}
+
+/** Fills the box with the video, cropping what overflows, turned and mirrored as the shot says. */
+function drawCover(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, shot: Shot, x: number, y: number, w: number, h: number) {
+  const rotation = shot.rotation ?? 0;
+  // The box as the unturned video sees it
+  const [bw, bh] = rotation % 180 ? [h, w] : [w, h];
+  const scale = Math.max(bw / video.videoWidth, bh / video.videoHeight);
+  const [sw, sh] = [bw / scale, bh / scale];
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  if (shot.mirror) ctx.scale(-1, 1);
+  ctx.drawImage(video, (video.videoWidth - sw) / 2, (video.videoHeight - sh) / 2, sw, sh, -bw / 2, -bh / 2, bw, bh);
+  ctx.restore();
 }
 
 /** A detached, muted video playing the stream, resolved once it has a frame to draw. */

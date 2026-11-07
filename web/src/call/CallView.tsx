@@ -8,12 +8,13 @@ import { ControlPill } from "./ControlPill";
 import type { CallController, CallState } from "./controller";
 import type { SpeechNotice } from "./speech/transcriber";
 import { Fade } from "./Fade";
-import { Feeds } from "./Feeds";
+import { arrangeFeeds, DEFAULT_CORNERS, Feeds, type FeedKey } from "./Feeds";
 import { isRearCamera } from "./media";
-import { captureCall, saveImage, screenshotName } from "./screenshot";
+import { captureCall, saveImage, screenshotName, type Shot } from "./screenshot";
 import { StatsOverlay } from "./StatsOverlay";
 import { Subtitle } from "./Subtitle";
 import { useAutoHide } from "./useAutoHide";
+import { useCorners } from "./useDragCorner";
 import { STACKED_QUERY, useMediaQuery } from "./useMediaQuery";
 import { useVisualViewport } from "./useVisualViewport";
 
@@ -22,7 +23,9 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const [showStats, setShowStats] = useState(state.forceRelay);
   const [seenCount, setSeenCount] = useState(0);
-  const [swapped, setSwapped] = useState(false);
+  // The feed the user tapped onto the stage; null for the default (their screen, else them)
+  const [picked, setPicked] = useState<FeedKey | null>(null);
+  const { corners, setCorner } = useCorners(DEFAULT_CORNERS);
   const [remoteRotation, setRemoteRotation] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoveringPill, setHoveringPill] = useState(false);
@@ -40,11 +43,16 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   // A new peer starts in the usual layout: them big, you small, upright
   useEffect(() => {
     if (state.remoteStream) return;
-    setSwapped(false);
+    setPicked(null);
     setRemoteRotation(0);
   }, [state.remoteStream]);
 
+  // A share that starts or stops brings back the default: the screen on the stage while there is one
+  const remoteSharing = !!state.remoteScreen;
+  useEffect(() => setPicked(null), [remoteSharing]);
+
   const connected = state.phase === "in-call" && !!state.remoteStream;
+  const remoteScreen = connected ? state.remoteScreen : null;
   const compact = stacked && chatOpen;
   const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !hoveringPill && !compact);
 
@@ -57,16 +65,43 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
 
   const banner = statusBanner(state, t);
   const camOn = state.camAccess === "granted" && state.camOn;
-  const canScreenshot = connected && !!state.remoteStream?.getVideoTracks().length;
+  const layout = arrangeFeeds({
+    self: !!state.localStream,
+    peer: connected,
+    screen: !!remoteScreen,
+    peerCamOn: state.remoteCamOn,
+    picked,
+  });
+  // Tapping a tile swaps it with the stage: the video that was there takes the tile's corner
+  const pick = (key: FeedKey) => {
+    setCorner(layout.main, corners[key]);
+    setPicked(key);
+  };
+
+  // What a screenshot draws for each feed, when there's a picture to draw
+  const shots: Record<FeedKey, Shot | null> = {
+    self:
+      camOn && state.localStream?.getVideoTracks().length
+        ? { stream: state.localStream, mirror: !isRearCamera(state.localStream) }
+        : null,
+    peer:
+      connected && state.remoteCamOn && state.remoteStream?.getVideoTracks().length
+        ? { stream: state.remoteStream, rotation: remoteRotation }
+        : null,
+    screen: remoteScreen ? { stream: remoteScreen } : null,
+  };
+  const canScreenshot = connected && !!shots[layout.main];
 
   const takeScreenshot = async () => {
-    if (!state.remoteStream) return;
+    const main = shots[layout.main];
+    if (!main) return;
     try {
       const blob = await captureCall({
-        remote: state.remoteStream,
-        local: camOn && state.localStream?.getVideoTracks().length ? state.localStream : null,
-        rotation: remoteRotation,
-        mirrorLocal: !!state.localStream && !isRearCamera(state.localStream),
+        main,
+        tiles: layout.tiles.flatMap((key) => {
+          const shot = shots[key];
+          return shot ? [{ ...shot, corner: corners[key] }] : [];
+        }),
         elapsedMs: state.callStartedAt === null ? 0 : performance.now() - state.callStartedAt,
       });
       setFlash((n) => n + 1);
@@ -88,10 +123,14 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         <Feeds
           localStream={state.localStream}
           remoteStream={connected ? state.remoteStream : null}
+          remoteScreen={remoteScreen}
           camOn={camOn}
-          swapped={swapped}
+          remoteCamOn={state.remoteCamOn}
+          layout={layout}
+          corners={corners}
           remoteRotation={remoteRotation}
-          onSwap={() => setSwapped((v) => !v)}
+          onPick={pick}
+          onMove={setCorner}
         />
 
         {!connected && (

@@ -98,3 +98,25 @@ export function saveOrientation(orientation: Orientation): void {
     // storage blocked: the choice just isn't remembered
   }
 }
+
+/**
+ * Asks for tab or system audio too; Chrome shows a "share audio" tick, other browsers ignore it or refuse audio, in
+ * which case it asks again for video alone. The call's own tab is left out of the picker: sharing it would echo the
+ * other person back to them.
+ */
+export async function getDisplayMedia(): Promise<MediaStream> {
+  const video = { frameRate: 15 };
+  // Chrome-only fields, not in TypeScript's DOM types yet
+  const withAudio: DisplayMediaStreamOptions & { selfBrowserSurface: string; systemAudio: string } = {
+    video,
+    audio: true,
+    selfBrowserSurface: "exclude",
+    systemAudio: "include",
+  };
+  try {
+    return await navigator.mediaDevices.getDisplayMedia(withAudio);
+  } catch (err) {
+    if ((err as DOMException).name !== "TypeError" && (err as DOMException).name !== "NotSupportedError") throw err;
+    return navigator.mediaDevices.getDisplayMedia({ video, audio: false });
+  }
+}
