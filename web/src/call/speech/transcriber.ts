@@ -18,11 +18,20 @@ export interface TranscriberHooks {
   onNotice(notice: SpeechNotice | null): void;
 }
 
+// Chinese browsers that have SpeechRecognition but get nothing back from it, without any error
+const SILENT_RECOGNITION_UA = /Quark|UCBrowser|MicroMessenger|MQQBrowser|baiduboxapp|HuaweiBrowser|MiuiBrowser/i;
+// Utterances the server path heard with nothing from the browser's recognition: that many in a row and
+// the browser's isn't working, even though it never said so
+const SILENT_UTTERANCES = 3;
+
 // ?stt=whisper skips the browser's recognition, to try the server path in a browser that has its own
-let serverOnly = new URLSearchParams(location.search).get("stt") === "whisper" || !BrowserRecognizer.supported();
+let serverOnly =
+  new URLSearchParams(location.search).get("stt") === "whisper" ||
+  !BrowserRecognizer.supported() ||
+  SILENT_RECOGNITION_UA.test(navigator.userAgent);
 
 export class Transcriber {
-  private engine: BrowserRecognizer | WhisperRecorder | null = null;
+  private engine: { stop(): void } | null = null;
   // What it's running for (track and language), so sync() only restarts when that changes
   private running: string | null = null;
   private unavailable = false;
@@ -47,15 +56,38 @@ export class Transcriber {
       this.engine = new WhisperRecorder(track, (wav) => this.upload(wav, lang));
       return;
     }
-    this.engine = new BrowserRecognizer(
+
+    // While the browser recognizes, the server path's recorder only listens: what you said while the
+    // browser stayed silent is kept, and sent to the server if it turns out the browser isn't working
+    let unheard: Blob[] = [];
+    let live = true;
+    const useServer = (reason: string) => {
+      if (!live) return;
+      console.info(`browser speech recognition failed (${reason}), using the server`);
+      serverOnly = true;
+      const missed = unheard;
+      this.start(track, lang);
+      missed.forEach((wav) => this.upload(wav, lang));
+    };
+    const browser = new BrowserRecognizer(
       RECOGNITION_LANG[lang],
-      (text) => this.hooks.sendText(text),
-      (reason) => {
-        console.info(`browser speech recognition failed (${reason}), using the server`);
-        serverOnly = true;
-        if (this.engine) this.start(track, lang);
+      (text) => {
+        unheard = [];
+        this.hooks.sendText(text);
       },
+      useServer,
     );
+    const watchdog = new WhisperRecorder(track, (wav) => {
+      unheard.push(wav);
+      if (unheard.length >= SILENT_UTTERANCES) useServer("no results");
+    });
+    this.engine = {
+      stop() {
+        live = false;
+        browser.stop();
+        watchdog.stop();
+      },
+    };
   }
 
   private stop(): void {
