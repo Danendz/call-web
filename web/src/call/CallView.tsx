@@ -3,11 +3,14 @@ import { ChatPanel } from "../chat/ChatPanel";
 import { CopyLink } from "../ui/CopyLink";
 import { useT, type Strings } from "../ui/i18n";
 import "./call.css";
+import { CallTimer } from "./CallTimer";
 import { ControlPill } from "./ControlPill";
 import type { CallController, CallState } from "./controller";
 import type { SpeechNotice } from "./speech/transcriber";
 import { Fade } from "./Fade";
 import { Feeds } from "./Feeds";
+import { isRearCamera } from "./media";
+import { captureCall, saveImage, screenshotName } from "./screenshot";
 import { StatsOverlay } from "./StatsOverlay";
 import { Subtitle } from "./Subtitle";
 import { useAutoHide } from "./useAutoHide";
@@ -23,6 +26,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const [remoteRotation, setRemoteRotation] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoveringPill, setHoveringPill] = useState(false);
+  const [flash, setFlash] = useState(0);
   const stacked = useMediaQuery(STACKED_QUERY);
   const finePointer = useMediaQuery("(pointer: fine)");
   useVisualViewport();
@@ -52,6 +56,26 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   };
 
   const banner = statusBanner(state, t);
+  const camOn = state.camAccess === "granted" && state.camOn;
+  const canScreenshot = connected && !!state.remoteStream?.getVideoTracks().length;
+
+  const takeScreenshot = async () => {
+    if (!state.remoteStream) return;
+    try {
+      const blob = await captureCall({
+        remote: state.remoteStream,
+        local: camOn && state.localStream?.getVideoTracks().length ? state.localStream : null,
+        rotation: remoteRotation,
+        mirrorLocal: !!state.localStream && !isRearCamera(state.localStream),
+        elapsedMs: state.callStartedAt === null ? 0 : performance.now() - state.callStartedAt,
+      });
+      setFlash((n) => n + 1);
+      controller.notifyScreenshot();
+      await saveImage(blob, screenshotName());
+    } catch (err) {
+      console.warn("screenshot failed", err);
+    }
+  };
 
   return (
     <div
@@ -64,7 +88,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         <Feeds
           localStream={state.localStream}
           remoteStream={connected ? state.remoteStream : null}
-          camOn={state.camAccess === "granted" && state.camOn}
+          camOn={camOn}
           swapped={swapped}
           remoteRotation={remoteRotation}
           onSwap={() => setSwapped((v) => !v)}
@@ -79,8 +103,12 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           </div>
         )}
 
+        {flash > 0 && <div key={flash} className="shot-flash" aria-hidden />}
+
         <div className="notices">
+          {connected && state.callStartedAt !== null && <CallTimer startedAt={state.callStartedAt} />}
           <Fade className="notice" text={banner} />
+          <Fade className="notice muted" text={state.peerScreenshot ? t.peerScreenshot : null} />
           <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
         </div>
         <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
@@ -101,6 +129,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           showStats={showStats}
           canRotate={connected}
           onRotate={() => setRemoteRotation((r) => (r + 90) % 360)}
+          canScreenshot={canScreenshot}
+          onScreenshot={takeScreenshot}
           onToggleChat={() => setChatOpen((v) => !v)}
           onToggleStats={() => setShowStats((v) => !v)}
           onMenuChange={setMenuOpen}

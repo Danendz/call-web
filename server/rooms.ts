@@ -11,6 +11,8 @@ const MAX_CHAT_HISTORY = 200;
 // How long a dropped socket keeps its seat, so a network switch resumes the call instead of ending it.
 const RESUME_GRACE_MS = 20_000;
 const CLIENT_ID_RE = /^[0-9a-f-]{36}$/;
+// A rejoin within this gap (a reload, a dropped network) continues the call timer; after it, a new call starts.
+const CALL_GAP_MS = 2 * 60_000;
 
 interface Member {
   clientId: string;
@@ -25,6 +27,9 @@ interface Room {
   id: string;
   members: Map<string, Member>;
   chat: ChatMessage[];
+  // When both members were first here, and since when one has been alone: drive the call timer.
+  callStart?: number;
+  aloneSince?: number;
 }
 
 const rooms = new Map<string, Room>();
@@ -33,6 +38,14 @@ if (!translate) console.warn("GROQ_API_KEY and LLM_API_KEY not set: chat message
 
 export function send(ws: WebSocket | null, msg: ServerMessage): void {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+/** Marks the room as having both members; keeps the running timer unless they were apart too long. */
+function startCall(room: Room): number {
+  const now = Date.now();
+  if (room.callStart === undefined || (room.aloneSince !== undefined && now - room.aloneSince > CALL_GAP_MS)) room.callStart = now;
+  room.aloneSince = undefined;
+  return now - room.callStart;
 }
 
 function otherMember(room: Room, clientId: string): Member | undefined {
@@ -58,15 +71,17 @@ export function join(roomId: string, requestedId: string | null, token: string |
     clearTimeout(existing.graceTimer);
     if (existing.ws && existing.ws !== ws) existing.ws.terminate();
     existing.ws = ws;
+    const peerPresent = otherMember(room, existing.clientId) !== undefined;
     send(ws, {
       type: "joined",
       clientId: existing.clientId,
       token: existing.token,
       resumed: true,
-      peerPresent: otherMember(room, existing.clientId) !== undefined,
+      peerPresent,
       polite: existing.polite,
       iceServers: iceServersFor(roomId),
       chat: room.chat,
+      ...(peerPresent && room.callStart !== undefined && { callElapsedMs: Date.now() - room.callStart }),
     });
     return existing.clientId;
   }
@@ -88,6 +103,7 @@ export function join(roomId: string, requestedId: string | null, token: string |
   // The newcomer is the polite peer in perfect negotiation; the one already waiting is impolite.
   const member: Member = { clientId, token: randomBytes(32).toString("base64url"), ws, polite: peer !== undefined };
   room.members.set(clientId, member);
+  const callElapsedMs = peer ? startCall(room) : undefined;
 
   send(ws, {
     type: "joined",
@@ -98,10 +114,11 @@ export function join(roomId: string, requestedId: string | null, token: string |
     polite: member.polite,
     iceServers: iceServersFor(roomId),
     chat: room.chat,
+    ...(callElapsedMs !== undefined && { callElapsedMs }),
   });
   if (peer) {
     peer.polite = false;
-    send(peer.ws, { type: "peer-joined", polite: false });
+    send(peer.ws, { type: "peer-joined", polite: false, callElapsedMs: callElapsedMs ?? 0 });
   }
   return clientId;
 }
@@ -114,7 +131,12 @@ export function leave(roomId: string, clientId: string): void {
   room.members.delete(clientId);
   const peer = otherMember(room, clientId);
   if (peer) send(peer.ws, { type: "peer-left" });
-  if (room.members.size === 0) rooms.delete(roomId);
+  if (room.members.size === 1) room.aloneSince = Date.now();
+  if (room.members.size === 0) {
+    // join() can put an emptied room back (evicting a ghost seat); it starts a new call then
+    room.callStart = room.aloneSince = undefined;
+    rooms.delete(roomId);
+  }
 }
 
 /** Socket closed without an explicit leave: hold the seat for a while in case the client reconnects. */

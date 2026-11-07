@@ -17,6 +17,7 @@ const connectsPerIp = rateLimit(30, 60_000);
 // Per member: typing fast is a few messages in 10 s; a renegotiation sends a few dozen ICE candidates.
 const chatPerMember = rateLimit(20, 10_000);
 const signalsPerMember = rateLimit(200, 10_000);
+const screenshotsPerMember = rateLimit(5, 10_000);
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -135,6 +136,9 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         break;
       case "ping":
         send(ws, { type: "pong" });
+        break;
+      case "screenshot":
+        if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
     }
   });
