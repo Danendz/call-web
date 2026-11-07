@@ -7,7 +7,7 @@ export const ROOM_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
 export const LANGS = ["zh", "en"] as const;
 export type Lang = (typeof LANGS)[number];
 
-// Speech sent to /api/transcribe: 16-bit mono WAV at this rate, one utterance of at most this long.
+// Speech streamed over /ws/speech: 16-bit little-endian mono PCM at this rate, one utterance of at most this long.
 export const TRANSCRIBE_SAMPLE_RATE = 16_000;
 export const MAX_UTTERANCE_S = 30;
 
@@ -25,12 +25,15 @@ export interface ChatMessage {
   translation?: Translation; // arrives after the message, in a chat-translation
 }
 
-export type TranscribeReply =
-  | { ok: true }
+// /ws/speech?room=&token= carries one utterance at a time: "start", its audio as binary frames while it's
+// being said, then "end" to transcribe it or "cancel" to drop it. Lines reach the chat in the order they ended.
+export type SpeechClientMessage = { type: "start"; lang: Lang } | { type: "end" } | { type: "cancel" };
+
+export type SpeechServerMessage =
   // Every speech model is out of quota until this epoch ms
-  | { paused: true; until: number }
+  | { type: "paused"; until: number }
   // The server has no speech model configured
-  | { unavailable: true };
+  | { type: "unavailable" };
 
 export interface IceServerConfig {
   urls: string[];
@@ -53,7 +56,7 @@ export type ServerMessage =
   | {
       type: "joined";
       clientId: string;
-      // Secret for resuming this seat and for /api/transcribe; never shown to the other member
+      // Secret for resuming this seat and for /ws/speech; never shown to the other member
       token: string;
       // true when this socket replaced the same client's dropped socket
       resumed: boolean;

@@ -64,8 +64,10 @@ export type Translate = (text: string) => Promise<Translation | null>;
 function createTranslator({ groq, deepseek }: TranslatorOptions): Translate {
   const withQuota = createQuota(GROQ_MODELS);
 
-  async function ask(endpoint: ChatEndpoint, body: object, count: number) {
+  async function ask(endpoint: ChatEndpoint, body: { model: string; [option: string]: unknown }, count: number) {
+    const startedAt = Date.now();
     const content = await chatCompletion(endpoint, { ...body, temperature: 0.2 }, TIMEOUT_MS, "Translate");
+    console.info(`translate model=${body.model} messages=${count} llm=${Date.now() - startedAt}ms reply=${content.length}chars`);
     const translations = readTranslations(content, count);
     if (translations.every((t) => t === null)) throw new Error("Translate: unreadable reply");
     return translations;
@@ -100,7 +102,7 @@ function createTranslator({ groq, deepseek }: TranslatorOptions): Translate {
     return texts.map(() => null);
   }
 
-  let waiting: { text: string; done: (translation: Translation | null) => void }[] = [];
+  let waiting: { text: string; done: (translation: Translation | null) => void; at: number }[] = [];
   let timer: NodeJS.Timeout | undefined;
 
   function send() {
@@ -108,6 +110,7 @@ function createTranslator({ groq, deepseek }: TranslatorOptions): Translate {
     timer = undefined;
     const batch = waiting;
     waiting = [];
+    console.info(`translate batch messages=${batch.length} queued=${Date.now() - batch[0].at}ms`);
     void translateAll(batch.map((w) => w.text))
       .catch(() => batch.map(() => null))
       .then((translations) => batch.forEach((w, i) => w.done(translations[i] ?? null)));
@@ -116,7 +119,7 @@ function createTranslator({ groq, deepseek }: TranslatorOptions): Translate {
   // null when nothing could translate it; the chat shows the original
   return (text) =>
     new Promise((resolve) => {
-      waiting.push({ text, done: resolve });
+      waiting.push({ text, done: resolve, at: Date.now() });
       if (waiting.length >= BATCH_MAX) send();
       else timer ??= setTimeout(send, BATCH_MS);
     });
