@@ -3,6 +3,7 @@
 
 mod bridge;
 mod chat;
+mod screenshot;
 mod settings;
 mod video;
 mod window;
@@ -139,6 +140,40 @@ fn main() -> anyhow::Result<()> {
             settings.transcribe = on;
             settings.save();
             engine.send(Command::SetTranscribe(on));
+        }
+    });
+    ui.on_screenshot({
+        let engine = engine.clone();
+        let weak = ui.as_weak();
+        move |rotation| {
+            let Some(ui) = weak.upgrade() else { return };
+            let Some(main) = ui.get_peer_video().to_rgba8() else { return };
+            let tile = ui.get_cam_on().then(|| ui.get_self_video().to_rgba8()).flatten();
+            let picture = screenshot::Picture {
+                main: screenshot::Shot { frame: main, rotation },
+                tile: tile.map(|frame| screenshot::Shot { frame, rotation: 0 }),
+                elapsed: ui.get_elapsed().to_string(),
+                lang: parse_lang(&ui.get_lang()),
+            };
+            engine.send(Command::NotifyScreenshot);
+            let weak = ui.as_weak();
+            // Encoding takes a moment; the window doesn't wait for it
+            std::thread::spawn(move || match screenshot::save(&picture) {
+                Ok(path) => {
+                    let _ = weak.upgrade_in_event_loop(move |ui| {
+                        ui.set_saved_shot(path.to_string_lossy().as_ref().into());
+                    });
+                }
+                Err(e) => tracing::warn!("screenshot failed: {e}"),
+            });
+        }
+    });
+    ui.on_show_shot({
+        let weak = ui.as_weak();
+        move || {
+            if let Some(ui) = weak.upgrade() {
+                screenshot::show_in_folder(std::path::Path::new(ui.get_saved_shot().as_str()));
+            }
         }
     });
     ui.on_set_force_relay({

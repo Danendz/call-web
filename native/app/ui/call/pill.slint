@@ -18,6 +18,8 @@ export component ControlPill inherits Rectangle {
     in property <bool> transcribe-on;
     in property <bool> chat-open;
     in property <int> unread;
+    in property <bool> can-screenshot;
+    callback screenshot();
     callback toggle-transcribe();
     callback toggle-chat();
     callback toggle-mic();
@@ -81,6 +83,8 @@ export component ControlPill inherits Rectangle {
                 portrait: root.portrait;
                 can-rotate: root.can-rotate;
                 stats-open: root.stats-open;
+                can-screenshot: root.can-screenshot;
+                screenshot => { root.screenshot(); }
                 pick-cam(id) => { root.pick-cam(id); }
                 next-cam => { root.next-cam(); }
                 toggle-portrait => { root.toggle-portrait(); }

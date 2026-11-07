@@ -7,6 +7,7 @@ import { Feeds } from "feeds.slint";
 import { StatsOverlay, StatsView } from "stats-overlay.slint";
 import { DeviceItem } from "../setup/device-row.slint";
 import { ChatPanel, ChatRow } from "../chat/chat.slint";
+import { Button } from "../components/button.slint";
 
 export { StatsView, ChatRow }
 
@@ -45,6 +46,8 @@ export component CallScreen inherits Rectangle {
     in property <int> speech-notice;
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
+    // Where the last screenshot was saved; a new one shows the toast for a while
+    in property <string> saved-shot;
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
@@ -53,6 +56,9 @@ export component CallScreen inherits Rectangle {
     callback set-force-relay(bool);
     callback toggle-transcribe();
     callback send-chat(string) -> bool;
+    // Clockwise degrees their video shows at, so the picture matches the screen
+    callback screenshot(int);
+    callback show-shot();
     callback hang-up();
 
     // Screen-only choices, reset for each new person like the web's
@@ -68,10 +74,36 @@ export component CallScreen inherits Rectangle {
     changed chat-open => { if (chat-open) { seen-count = others-count; } subtitle-shown = false; }
     property <length> chat-width: min(360px, root.width * 0.42);
 
+    property <bool> toast-shown;
+    changed saved-shot => {
+        toast-shown = saved-shot != "";
+        toast-timer.running = true;
+        toast-timer.restart();
+    }
+    toast-timer := Timer {
+        interval: 5s;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.toast-shown = false;
+        }
+    }
+
+    property <bool> flash;
+    flash-timer := Timer {
+        interval: 50ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.flash = false;
+        }
+    }
+
     property <bool> subtitle-shown;
     changed subtitle-serial => {
         if (!chat-open && subtitle != "") {
             subtitle-shown = true;
+            subtitle-timer.running = true;
             subtitle-timer.restart();
         }
     }
@@ -208,6 +240,46 @@ export component CallScreen inherits Rectangle {
             }
         }
 
+        // The camera flash, like the web's .shot-flash
+        Rectangle {
+            background: #fff;
+            opacity: root.flash ? 0.8 : 0;
+            animate opacity { duration: root.flash ? 0ms : 350ms; easing: Theme.ease; }
+        }
+
+        // Where the picture went, with a way to it
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 104px;
+            width: toast.preferred-width;
+            height: toast.preferred-height;
+            border-radius: self.height / 2;
+            border-width: 1px;
+            border-color: Theme.glass-border;
+            background: Theme.glass;
+            opacity: root.toast-shown ? 1 : 0;
+            visible: self.opacity > 0;
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+            toast := HorizontalLayout {
+                padding: 6px;
+                padding-left: 16px;
+                spacing: 10px;
+                Text {
+                    text: @tr("Screenshot saved");
+                    color: Theme.text;
+                    font-size: 13px;
+                    vertical-alignment: center;
+                }
+                Button {
+                    text: @tr("Show in folder");
+                    icon: Icons.folder-open;
+                    height-hint: 32px;
+                    font-size: 13px;
+                    clicked => { root.show-shot(); }
+                }
+            }
+        }
+
         // Their latest spoken line over the video while the chat is closed, like the web's Subtitle
         Rectangle {
             x: (parent.width - self.width) / 2;
@@ -250,6 +322,13 @@ export component CallScreen inherits Rectangle {
             portrait: root.portrait;
             can-rotate: root.connected;
             stats-open: root.stats-open;
+            can-screenshot: root.connected && root.peer-cam-on && root.peer-video.width > 0;
+            screenshot => {
+                root.flash = true;
+                flash-timer.running = true;
+                flash-timer.restart();
+                root.screenshot(root.peer-frame-rotation + root.user-rotation);
+            }
             transcribe-on: root.transcribe-on;
             chat-open: root.chat-open;
             unread: root.unread;

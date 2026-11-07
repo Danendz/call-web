@@ -656,6 +656,7 @@ dependencies = [
  "engine",
  "serde",
  "serde_json",
+ "skia-safe",
  "slint",
  "slint-build",
  "sys-locale",

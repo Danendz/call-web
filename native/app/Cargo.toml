@@ -24,6 +24,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 url = "2"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+skia-safe = { version = "=0.153.3", default-features = false }
 
 [features]
 # Slint's embedded MCP server for driving and screenshotting the app in development (SLINT_MCP_PORT=<port>); see

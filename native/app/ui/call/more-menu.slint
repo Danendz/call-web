@@ -62,6 +62,8 @@ export component MoreMenu inherits IconButton {
     in property <bool> portrait;
     in property <bool> can-rotate;
     in property <bool> stats-open;
+    in property <bool> can-screenshot;
+    callback screenshot();
     callback pick-cam(string);
     callback next-cam();
     callback toggle-portrait();
@@ -116,6 +118,12 @@ export component MoreMenu inherits IconButton {
                     text: @tr("Rotate their video");
                     enabled: root.can-rotate;
                     activated => { menu.close(); root.rotate(); }
+                }
+                MenuItem {
+                    icon: Icons.camera;
+                    text: @tr("Screenshot");
+                    enabled: root.can-screenshot;
+                    activated => { menu.close(); root.screenshot(); }
                 }
                 MenuItem {
                     icon: Icons.activity;

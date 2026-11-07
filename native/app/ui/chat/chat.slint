@@ -133,8 +133,8 @@ export component ChatPanel inherits Rectangle {
             }
             property <int> count: messages.length;
             // New messages scroll into view, smoothly, like the web's scrollTo
-            changed count => { stick.start(); }
-            changed height => { stick.start(); }
+            changed count => { stick.running = true; }
+            changed height => { stick.running = true; }
             animate content-y { duration: Theme.med; easing: Theme.ease; }
 
             column := VerticalLayout {

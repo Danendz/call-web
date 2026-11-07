@@ -46,6 +46,7 @@ export component AppWindow inherits Window {
     in property <int> speech-notice;
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
+    in property <string> saved-shot;
 
     // The web's deviceStatus: why a device can't be used
     property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
@@ -68,6 +69,8 @@ export component AppWindow inherits Window {
     callback set-force-relay(bool);
     callback toggle-transcribe();
     callback send-chat(string) -> bool;
+    callback screenshot(int);
+    callback show-shot();
 
     title: "Call Danya";
     icon: Icons.video;
@@ -139,6 +142,9 @@ export component AppWindow inherits Window {
         speech-notice: root.speech-notice;
         speech-paused-until: root.speech-paused-until;
         peer-screenshot: root.peer-screenshot;
+        saved-shot: root.saved-shot;
+        screenshot(rotation) => { root.screenshot(rotation); }
+        show-shot => { root.show-shot(); }
         toggle-transcribe => { root.toggle-transcribe(); }
         send-chat(text) => { root.send-chat(text) }
         toggle-mic => { root.toggle-mic(); }
