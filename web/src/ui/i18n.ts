@@ -54,6 +54,7 @@ const en = {
   hangUp: "Hang up",
   swapVideos: "Swap videos",
   rotateVideo: "Rotate their video",
+  switchCamera: "Switch camera",
 
   starting: "Starting…",
   waitingForPeer: "Waiting for the other person to join…",
@@ -123,6 +124,7 @@ const zh: Strings = {
   hangUp: "挂断",
   swapVideos: "切换画面",
   rotateVideo: "旋转对方画面",
+  switchCamera: "切换摄像头",
 
   starting: "正在启动…",
   waitingForPeer: "等待对方加入…",

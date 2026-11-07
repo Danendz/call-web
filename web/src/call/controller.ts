@@ -90,6 +90,7 @@ export class CallController {
   private camTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
   private mediaReady: Promise<void> | null = null;
+  private switchingDevice = false;
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
   private directRetries = 0;
@@ -143,10 +144,30 @@ export class CallController {
     await this.refreshDevices();
   }
 
-  /** Switches mic or camera before joining; remembered for next time. */
+  /**
+   * Switches mic or camera; remembered for next time. In a call only the camera can change: the new track replaces
+   * the old one in the sender, so there's no renegotiation.
+   */
   async selectDevice(kind: MediaKind, deviceId: string): Promise<void> {
     const stream = this.state.localStream;
-    if (!stream || this.peer) return;
+    if (!stream || (this.peer && kind === "audio") || this.switchingDevice) return;
+    this.switchingDevice = true;
+    try {
+      await this.swapDevice(stream, kind, deviceId);
+    } finally {
+      this.switchingDevice = false;
+    }
+  }
+
+  /** Moves to the next camera: front ↔ back on a phone. */
+  nextCamera(): void {
+    const { cams, camDeviceId } = this.state;
+    if (cams.length < 2) return;
+    const i = cams.findIndex((c) => c.id === camDeviceId);
+    void this.selectDevice("video", cams[(i + 1) % cams.length].id);
+  }
+
+  private async swapDevice(stream: MediaStream, kind: MediaKind, deviceId: string): Promise<void> {
     saveDevicePref(kind, deviceId);
     const others = stream.getTracks().filter((t) => t.kind !== kind);
     // Stop the old track first: iOS won't open a second camera while one is live.
@@ -155,7 +176,11 @@ export class CallController {
     if (!got.track) got = await getTrack(kind, null);
     if (got.track) got.track.enabled = kind === "audio" ? this.state.micOn : this.state.camOn;
     const next = new MediaStream(got.track ? [...others, got.track] : others);
-    if (kind === "video") this.camTrack = got.track;
+    if (kind === "video") {
+      this.camTrack = got.track;
+      // While sharing the screen the sender keeps the screen; stopScreenShare picks up the new camera
+      if (!this.screenTrack) await this.peer?.setVideoTrack(got.track, false);
+    }
     this.set({
       localStream: next,
       ...(kind === "audio" ? { micAccess: got.access } : { camAccess: got.access }),

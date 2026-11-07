@@ -62,6 +62,11 @@ export function selectedDevices(stream: MediaStream): { micDeviceId: string | nu
   };
 }
 
+/** Your own preview is shown mirrored like a selfie, except for a phone's back camera, which shows the world. */
+export function isRearCamera(stream: MediaStream): boolean {
+  return stream.getVideoTracks()[0]?.getSettings().facingMode === "environment";
+}
+
 export function loadDevicePref(kind: MediaKind): string | null {
   try {
     return localStorage.getItem(`device.${kind}`);
