@@ -1,0 +1,214 @@
+{
+  "clientMessages": [
+    {
+      "type": "signal",
+      "payload": {
+        "kind": "description",
+        "description": {
+          "type": "offer",
+          "sdp": "v=0\r\n"
+        }
+      }
+    },
+    {
+      "type": "signal",
+      "payload": {
+        "kind": "description",
+        "description": {
+          "type": "rollback"
+        }
+      }
+    },
+    {
+      "type": "signal",
+      "payload": {
+        "kind": "candidate",
+        "candidate": {
+          "candidate": "candidate:1 1 udp 1 1.2.3.4 5 typ host",
+          "sdpMid": "0",
+          "sdpMLineIndex": 0
+        }
+      }
+    },
+    {
+      "type": "chat",
+      "text": "hi"
+    },
+    {
+      "type": "chat",
+      "text": "hi",
+      "spoken": true
+    },
+    {
+      "type": "leave"
+    },
+    {
+      "type": "ping"
+    },
+    {
+      "type": "screenshot"
+    },
+    {
+      "type": "media",
+      "camOn": true,
+      "screen": null
+    },
+    {
+      "type": "media",
+      "camOn": false,
+      "screen": "{6f1c2c9e-0000-4000-8000-000000000000}"
+    }
+  ],
+  "constants": {
+    "MAX_CHAT_LENGTH": 2000,
+    "MAX_STREAM_ID_LENGTH": 64,
+    "ROOM_ID_RE": "^[A-Za-z0-9_-]{6,32}$",
+    "LANGS": [
+      "zh",
+      "en"
+    ],
+    "TRANSCRIBE_SAMPLE_RATE": 16000,
+    "MAX_UTTERANCE_S": 30
+  },
+  "serverMessages": [
+    {
+      "type": "joined",
+      "clientId": "c1",
+      "token": "secret",
+      "resumed": false,
+      "peerPresent": false,
+      "polite": false,
+      "iceServers": [
+        {
+          "urls": [
+            "stun:turn.danendz.com:3478"
+          ]
+        },
+        {
+          "urls": [
+            "turn:turn.danendz.com:3478"
+          ],
+          "username": "u",
+          "credential": "p"
+        }
+      ],
+      "chat": []
+    },
+    {
+      "type": "joined",
+      "clientId": "c1",
+      "token": "secret",
+      "resumed": true,
+      "peerPresent": true,
+      "polite": true,
+      "iceServers": [],
+      "chat": [
+        {
+          "id": "m1",
+          "from": "c1",
+          "text": "你好",
+          "ts": 1700000000000
+        },
+        {
+          "id": "m2",
+          "from": "c1",
+          "text": "你好",
+          "ts": 1700000000000,
+          "spoken": true,
+          "translation": {
+            "lang": "zh",
+            "text": {
+              "zh": "你好",
+              "en": "Hello"
+            }
+          }
+        }
+      ],
+      "callElapsedMs": 61000
+    },
+    {
+      "type": "peer-joined",
+      "polite": true,
+      "callElapsedMs": 0
+    },
+    {
+      "type": "peer-left"
+    },
+    {
+      "type": "full"
+    },
+    {
+      "type": "signal",
+      "payload": {
+        "kind": "description",
+        "description": {
+          "type": "answer",
+          "sdp": "v=0\r\n"
+        }
+      }
+    },
+    {
+      "type": "signal",
+      "payload": {
+        "kind": "candidate",
+        "candidate": null
+      }
+    },
+    {
+      "type": "chat",
+      "message": {
+        "id": "m1",
+        "from": "c1",
+        "text": "你好",
+        "ts": 1700000000000
+      }
+    },
+    {
+      "type": "chat-translation",
+      "id": "m1",
+      "translation": {
+        "lang": "zh",
+        "text": {
+          "zh": "你好",
+          "en": "Hello"
+        }
+      }
+    },
+    {
+      "type": "pong"
+    },
+    {
+      "type": "screenshot"
+    },
+    {
+      "type": "media",
+      "camOn": true,
+      "screen": "s1"
+    },
+    {
+      "type": "error",
+      "message": "bad message"
+    }
+  ],
+  "speechClientMessages": [
+    {
+      "type": "start",
+      "lang": "zh"
+    },
+    {
+      "type": "end"
+    },
+    {
+      "type": "cancel"
+    }
+  ],
+  "speechServerMessages": [
+    {
+      "type": "paused",
+      "until": 1700000000000
+    },
+    {
+      "type": "unavailable"
+    }
+  ]
+}

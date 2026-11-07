@@ -1,0 +1,31 @@
+[package]
+name = "call-danya"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+engine = { path = "../crates/engine" }
+anyhow = "1"
+serde.workspace = true
+serde_json.workspace = true
+slint = { version = "=1.18.1", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "accessibility",
+    "backend-winit",
+    "renderer-skia-opengl",
+    # Only for the window attributes hook in window.rs; it's why slint is pinned exactly
+    "unstable-winit-030",
+] }
+sys-locale = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+url = "2"
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[lints]
+workspace = true

@@ -7,11 +7,12 @@
 
 ## Repository layout
 
-One npm package: a Node server and a React client built with Vite.
+One npm package (a Node server and a React client built with Vite), plus the native desktop client in `native/`.
 
 - **`server/`** is the single Node service: WebSocket signaling and in-memory chat (`index.ts`, `rooms.ts`), TURN credentials (`turn.ts`), and serving the built client.
 - **`web/src/`** is the client. `App.tsx` only picks the screen for the call phase. `setup/` is the pre-join screen, `call/` the call screen plus the logic behind it (`controller.ts` owns media, signaling and the peer connection; React only renders its state), `chat/` the chat panel, `ui/` small components used by more than one screen.
-- **`shared/protocol.ts`** holds every message shape sent over `/ws`, used by both the server and the client. Add or change messages there, never as inline types on one side. Types and plain constants only: no Node or DOM imports.
+- **`shared/protocol.ts`** holds every message shape sent over `/ws`, used by both the server and the client. Add or change messages there, never as inline types on one side. Types and plain constants only: no Node or DOM imports. When a message changes, update `shared/protocol.fixtures.ts` and run `npm run fixtures`, so the native client's types are checked against it.
+- **`native/`** is the Rust + Slint desktop client, a Cargo workspace. Its own conventions are in `native/AGENTS.md`; read them before working there.
 - **`infra/`** is the coturn config and the deploy guide. `.railway/railway.ts` defines the Railway service.
 - **Code used by one screen stays in its folder.** Move it to `ui/` only once a second screen needs it.
 - **Split a file by what it does once it grows past ~300 lines of code.** Move a hook, a component or a group of helpers into its own file.

@@ -1,0 +1,74 @@
+import { Theme } from "../theme.slint";
+import { CopyLink } from "../components/copy-link.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { Icons } from "../components/icons.slint";
+
+// Joined and waiting for the other person, like the web's waiting card over the call screen.
+export component WaitingScreen inherits Rectangle {
+    in property <string> room-url;
+    in property <bool> starting;
+    in property <bool> peer-present;
+    in property <bool> reconnecting;
+    callback hang-up();
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
+
+    card := Rectangle {
+        width: min(440px, parent.width - 32px);
+        height: content.preferred-height;
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.glass;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        animate y, opacity { duration: Theme.slow; easing: Theme.ease; }
+
+        content := VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+
+            Text {
+                text: reconnecting ? @tr("Lost connection to server, reconnecting…")
+                    : starting ? @tr("Starting…")
+                    : peer-present ? @tr("The other person is here")
+                    : @tr("Waiting for the other person to join…");
+                color: Theme.text;
+                font-weight: 550;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            CopyLink {
+                url: root.room-url;
+                fill: #0000004d;
+            }
+        }
+    }
+
+    // The control pill's hang-up button, alone until the call controls arrive
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 24px;
+        width: hang.preferred-width + 12px;
+        height: 60px;
+        border-radius: self.height / 2;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.glass;
+        hang := Button {
+            x: 6px;
+            y: 6px;
+            width: self.preferred-width;
+            height: 48px;
+            text: @tr("Hang up");
+            icon: Icons.phone-off;
+            kind: ButtonKind.danger;
+            clicked => { root.hang-up(); }
+        }
+    }
+}

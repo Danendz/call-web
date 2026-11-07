@@ -1,0 +1,56 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "icons.slint";
+import { Button, ButtonKind } from "button.slint";
+
+// The room's web address with a copy button, like the web's CopyLink.
+export component CopyLink inherits Rectangle {
+    in property <string> url;
+    in property <color> fill: Theme.surface-2;
+    property <bool> copied: false;
+
+    height: 46px;
+    border-radius: self.height / 2;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: fill;
+
+    HorizontalLayout {
+        padding: 4px;
+        padding-left: 14px;
+        spacing: 4px;
+
+        field := TextInput {
+            text: root.url;
+            read-only: true;
+            single-line: true;
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+            accessible-label: @tr("Room link");
+        }
+
+        Button {
+            text: copied ? @tr("Copied") : @tr("Copy");
+            icon: copied ? Icons.check : Icons.copy;
+            kind: copied ? ButtonKind.success : ButtonKind.normal;
+            height-hint: 36px;
+            font-size: Theme.font-size-small;
+            clicked => {
+                field.select-all();
+                field.copy();
+                field.clear-selection();
+                copied = true;
+                reset.running = true;
+            }
+        }
+    }
+
+    reset := Timer {
+        interval: 1500ms;
+        running: false;
+        triggered => {
+            copied = false;
+            self.running = false;
+        }
+    }
+}

@@ -1,0 +1,78 @@
+# Chinese for the native app. Wording follows web/src/ui/i18n.ts so both clients say the same thing.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_CN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Back"
+msgstr "返回"
+
+msgid "Call ended"
+msgstr "通话已结束"
+
+msgid "Call link"
+msgstr "通话链接"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Copied"
+msgstr "已复制"
+
+msgid "Copy"
+msgstr "复制"
+
+msgid "Hang up"
+msgstr "挂断"
+
+msgid "I speak"
+msgstr "我说"
+
+msgid "Join by link"
+msgstr "通过链接加入"
+
+msgid "Join call"
+msgstr "加入通话"
+
+msgid "Join"
+msgstr "加入"
+
+msgid "Lost connection to server, reconnecting…"
+msgstr "与服务器断开连接，正在重连…"
+
+msgid "New room"
+msgstr "新房间"
+
+msgid "Ready to join?"
+msgstr "准备好加入了吗？"
+
+msgid "Rejoin"
+msgstr "重新加入"
+
+msgid "Room is full"
+msgstr "房间已满"
+
+msgid "Room link"
+msgstr "房间链接"
+
+msgid "Share this link with the person you want to call"
+msgstr "把这个链接发给你要通话的人"
+
+msgid "Start a new room"
+msgstr "创建新房间"
+
+msgid "Starting…"
+msgstr "正在启动…"
+
+msgid "That isn't a call link"
+msgstr "这不是通话链接"
+
+msgid "The other person is here"
+msgstr "对方已加入"
+
+msgid "This room already has two people in it."
+msgstr "这个房间已经有两个人了。"
+
+msgid "Waiting for the other person to join…"
+msgstr "等待对方加入…"

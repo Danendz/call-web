@@ -1,0 +1,103 @@
+import { Theme } from "../theme.slint";
+
+export enum ButtonKind { normal, primary, danger, success }
+
+// Pill button like the web's `button` / `button.primary`: hover tint, press shrink, focus ring.
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <ButtonKind> kind: normal;
+    in property <bool> enabled: true;
+    in property <length> height-hint: 44px;
+    in property <length> font-size: Theme.font-size;
+    callback clicked();
+
+    property <bool> has-icon: icon.width > 0;
+    // Focus ring only after Tab, like :focus-visible
+    property <bool> keyboard-focus: false;
+    property <color> base: kind == ButtonKind.primary ? Theme.accent
+        : kind == ButtonKind.danger ? Theme.danger
+        : kind == ButtonKind.success ? Theme.good-soft
+        : Theme.surface-3;
+    property <color> hover: kind == ButtonKind.primary ? Theme.accent-hover
+        : kind == ButtonKind.danger ? Theme.danger-hover
+        : kind == ButtonKind.success ? Theme.good-soft
+        : Theme.surface-3-hover;
+    property <color> fg: kind == ButtonKind.success ? Theme.good
+        : kind == ButtonKind.normal ? Theme.text
+        : #fff;
+
+    min-height: height-hint;
+    min-width: layout.min-width;
+    preferred-width: layout.preferred-width;
+    border-radius: self.height / 2;
+    border-width: kind == ButtonKind.normal ? 1px : 0;
+    border-color: Theme.border;
+    background: touch.has-hover && enabled ? hover : base;
+    opacity: enabled ? 1 : 0.38;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { clicked(); }
+    forward-focus: focus;
+
+    animate background, opacity { duration: Theme.fast; easing: Theme.ease; }
+
+    layout := HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 8px;
+        alignment: center;
+
+        transform-scale: touch.pressed && enabled ? 0.96 : 1;
+        animate transform-scale { duration: Theme.fast; easing: Theme.ease; }
+
+        if has-icon: Image {
+            source: icon;
+            colorize: fg;
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.text;
+            color: fg;
+            font-size: root.font-size;
+            font-weight: 550;
+            vertical-alignment: center;
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        // Clicks belong to the TouchArea above; this is only for the keyboard
+        focus-on-click: false;
+        focus-gained(reason) => { keyboard-focus = reason == FocusReason.tab-navigation; }
+        focus-lost => { keyboard-focus = false; }
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+
+    // Focus ring only for the keyboard, like :focus-visible
+    Rectangle {
+        x: -4px;
+        y: -4px;
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        border-radius: self.height / 2;
+        border-width: 2px;
+        border-color: Theme.accent;
+        visible: focus.has-focus && keyboard-focus;
+    }
+}

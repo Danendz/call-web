@@ -1,0 +1,84 @@
+// The window only picks the screen for the phase, like web/src/App.tsx. State comes from the engine via the bridge.
+
+import { Theme } from "theme.slint";
+import { Icons } from "components/icons.slint";
+import { Button, ButtonKind } from "components/button.slint";
+import { Centered } from "components/centered.slint";
+import { StartScreen } from "start/start.slint";
+import { SetupScreen } from "setup/setup.slint";
+import { WaitingScreen } from "call/waiting.slint";
+
+export enum AppPhase { start, setup, starting, waiting, full, ended }
+
+export component AppWindow inherits Window {
+    in property <AppPhase> phase: start;
+    in property <string> lang: "en";
+    in property <string> room-url;
+    in property <bool> peer-present;
+    in property <bool> reconnecting;
+
+    callback new-room();
+    callback open-link(string) -> bool;
+    callback set-lang(string);
+    callback join();
+    callback hang-up();
+    callback home();
+
+    title: "Call Danya";
+    icon: Icons.video;
+    min-width: 420px;
+    min-height: 560px;
+    preferred-width: 1100px;
+    preferred-height: 760px;
+    background: Theme.bg;
+    default-font-size: Theme.font-size;
+
+    if phase == AppPhase.start: StartScreen {
+        new-room => { root.new-room(); }
+        open-link(link) => { root.open-link(link) }
+    }
+
+    if phase == AppPhase.setup: SetupScreen {
+        room-url: root.room-url;
+        lang: root.lang;
+        set-lang(lang) => { root.set-lang(lang); }
+        join => { root.join(); }
+        back => { root.home(); }
+    }
+
+    if phase == AppPhase.starting || phase == AppPhase.waiting: WaitingScreen {
+        room-url: root.room-url;
+        starting: phase == AppPhase.starting;
+        peer-present: root.peer-present;
+        reconnecting: root.reconnecting;
+        hang-up => { root.hang-up(); }
+    }
+
+    if phase == AppPhase.full: Centered {
+        icon: Icons.users;
+        title: @tr("Room is full");
+        body: @tr("This room already has two people in it.");
+        Button {
+            text: @tr("Start a new room");
+            icon: Icons.plus;
+            kind: ButtonKind.primary;
+            clicked => { root.new-room(); }
+        }
+    }
+
+    if phase == AppPhase.ended: Centered {
+        icon: Icons.phone-off;
+        title: @tr("Call ended");
+        Button {
+            text: @tr("Rejoin");
+            icon: Icons.rotate-ccw;
+            kind: ButtonKind.primary;
+            clicked => { root.join(); }
+        }
+        Button {
+            text: @tr("New room");
+            icon: Icons.plus;
+            clicked => { root.new-room(); }
+        }
+    }
+}

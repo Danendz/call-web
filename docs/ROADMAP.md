@@ -26,18 +26,19 @@ Ordered by value per hour of work. The native app gets the same behavior from li
 - [ ] **Opus RED.** Put `audio/red` before Opus with `setCodecPreferences()`, so each audio packet also carries the previous one and a single lost packet leaves no gap. Falls back to plain Opus if the other side lacks it.
 - [ ] **Noise suppression with RNNoise or DeepFilterNet** in an `AudioWorklet`, between the mic and the peer connection. Clearer voice over fans and keyboard while gaming. The WASM is shipped in the bundle (no CDN); it needs `'wasm-unsafe-eval'` in the CSP, which has to be approved on purpose. Native: run DeepFilterNet directly in Rust.
 - [~] **Encoder settings.** Done: bitrate caps, `contentHint: 'detail'` for the screen, `degradationPreference`, high priority for the mic (`peer.ts` `tuneSenders`). Left: `scalabilityMode: 'L1T3'` so the stream survives loss better, and choosing the codec per device (H.264 for hardware encoding on weak machines, VP9 where the CPU allows).
+- [ ] **Self-hosted speech recognition.** SenseVoice-small through `sherpa-onnx` (`sherpa-onnx-node`) in the server: strong Mandarin, mixed zh+en, punctuation, far fewer made-up lines than Whisper, fast on Railway's CPUs and no quota. Groq Whisper stays as the fallback (or for English). Costs ~0.5 GB RAM and a ~230 MB model in the image, served from our own build, not fetched at runtime.
 - [ ] **FSR-style upscaling shader** on the receiving side (EASU + RCAS in WebGL). Sharper picture when the bitrate drops. Polish, not a fix for low bitrate.
 - [ ] **WebCodecs with custom FEC and retransmission** over an unreliable data channel. Only if the items above aren't enough: it means writing our own jitter buffer, A/V sync and congestion control. The native app (Phase 3) is the better place for this.
 
 ## Phase 2 — Native app (Rust + Slint)
 
-Target Windows and macOS first. Lives in `native/` as a Cargo workspace in this repo. The server stays as it is.
+Target Windows and macOS first. Lives in `native/` as a Cargo workspace in this repo, with its conventions in `native/AGENTS.md`. The server stays as it is. M0–M4 reach parity with the web app; nothing native-only goes in before that.
 
-- [ ] **M0 — Skeleton.** Slint window, join a room over `/ws` and show the waiting screen. The Rust types mirror `shared/protocol.ts` with serde; decide early whether to keep them in sync by hand or generate them (e.g. from a JSON Schema) and add a check that they match.
-- [ ] **M1 — Audio call with a browser peer.** WebRTC through Google's libwebrtc via LiveKit's Rust bindings (`libwebrtc` / `webrtc-sys`, prebuilt binaries). Not `webrtc-rs`: it has no capture, codecs or echo cancellation and weaker congestion control. TURN credentials from our `/api`.
-- [ ] **M2 — Camera video** both ways, rendered in Slint. Hardware encoders (Media Foundation, VideoToolbox) where available.
-- [ ] **M3 — Chat, speech-to-text, translation and subtitles**, using the server's existing endpoints and the member `token`.
-- [ ] **M4 — Screen share.** Windows Graphics Capture and ScreenCaptureKit, up to 60 fps, alongside the camera.
+- [x] **M0 — Skeleton.** Slint window (Skia renderer) with the web's tokens, start screen (new room, join by link), setup screen with "I speak", waiting screen, room full and call ended screens, `/ws` join with heartbeat and resume. English and Chinese UI from bundled `.po`. Protocol types written by hand in `crates/protocol` and checked against examples in `shared/protocol.fixtures.ts`. CI builds macOS and Windows (unsigned) on every PR.
+- [ ] **M1 — Audio call with a browser peer.** WebRTC through Google's libwebrtc via LiveKit's Rust bindings (`libwebrtc` / `webrtc-sys`, prebuilt binaries). Not `webrtc-rs`: it has no capture, codecs or echo cancellation and weaker congestion control. TURN credentials come in `joined`. Start with a spike that proves mic capture, playback and echo cancellation on both OSes before building on it. Device pickers and mic level on the setup screen.
+- [ ] **M2 — Camera video** both ways, rendered in Slint: I420 converted to RGBA on the CPU behind a `VideoSink`, conversion time in the stats overlay; Slint's `BorrowedOpenGLTexture` with a YUV shader if that proves too slow. Hardware encoders (Media Foundation, VideoToolbox) where available. Rotate and switch camera, stats overlay, relay → direct upgrade.
+- [ ] **M3 — Chat, speech-to-text, translation and subtitles**, using the server's existing endpoints and the member `token`. Speech goes through `/ws/speech` behind a `Recognizer` trait. Screenshot with date stamp.
+- [ ] **M4 — Screen share.** Windows Graphics Capture and ScreenCaptureKit, up to 60 fps, alongside the camera. Draggable tiles, auto-hiding controls and a final animation pass: parity with the web app.
 - [ ] **M5 — Overlay, notifications and desktop features.** See Phase 3.
 - [ ] **M6 — Distribution.** Installers, code signing (Windows certificate, Apple notarization), updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary.
 
@@ -60,6 +61,7 @@ During screen sharing she's in a game and can't see the chat, so new messages ha
 
 | Feature | Notes |
 |---|---|
+| [ ] On-device speech recognition | Apple SpeechAnalyzer on macOS 26+ (on-device, punctuated Mandarin), `sherpa-onnx` streaming zh+en elsewhere, the server as fallback. Free, live partial subtitles while speaking, works offline. Plugs in behind the `Recognizer` trait from M3. |
 | [ ] Share one app's audio | Only the game's sound, not Discord or music: Windows process loopback capture, ScreenCaptureKit per-app audio. The browser can only share a tab's or the whole system's audio. |
 | [ ] Native super-resolution | VideoToolbox super-resolution scaler on macOS, NVIDIA RTX Video Super Resolution on Windows. Stronger than the web shader. |
 | [ ] Custom FEC, retransmission and congestion control | libwebrtc field trials (FlexFEC, more RED redundancy) or changes to the source, tuned for the China link. |

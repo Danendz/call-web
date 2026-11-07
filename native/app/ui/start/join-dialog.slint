@@ -1,0 +1,116 @@
+import { Theme } from "../theme.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+
+// Asks for a call link (or room id) over a dimmed backdrop. `submit` returns false when it isn't a room.
+export component JoinDialog inherits Rectangle {
+    callback submit(string) -> bool;
+    callback close();
+    property <bool> invalid: false;
+    property <bool> shown: false;
+    init => {
+        shown = true;
+        input.focus();
+    }
+
+    background: shown ? #00000099 : #00000000;
+    animate background { duration: Theme.med; easing: Theme.ease; }
+
+    // Clicking outside the card closes it
+    TouchArea {
+        clicked => { root.close(); }
+    }
+
+    card := Rectangle {
+        width: min(440px, parent.width - 32px);
+        height: content.preferred-height;
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.surface;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+        // Swallows clicks so they don't reach the backdrop
+        TouchArea { }
+
+        content := VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+
+            Text {
+                text: @tr("Join by link");
+                color: Theme.text;
+                font-size: 20px;
+                font-weight: 650;
+            }
+
+            Rectangle {
+                height: 44px;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: invalid ? Theme.bad : input.has-focus ? Theme.accent : Theme.border;
+                background: Theme.surface-2;
+                animate border-color { duration: Theme.fast; easing: Theme.ease; }
+
+                input := TextInput {
+                    x: 14px;
+                    width: parent.width - 28px;
+                    single-line: true;
+                    color: Theme.text;
+                    font-size: Theme.font-size;
+                    vertical-alignment: center;
+                    accessible-label: @tr("Call link");
+                    edited => { invalid = false; }
+                    accepted => { go(); }
+                    key-pressed(event) => {
+                        if (event.text == Key.Escape) {
+                            root.close();
+                            return accept;
+                        }
+                        reject
+                    }
+                }
+                Text {
+                    x: 14px;
+                    text: "https://call.danendz.com/r/…";
+                    color: Theme.muted;
+                    font-size: Theme.font-size;
+                    vertical-alignment: center;
+                    height: parent.height;
+                    visible: input.text == "";
+                }
+            }
+
+            if invalid: Text {
+                text: @tr("That isn't a call link");
+                color: Theme.bad;
+                font-size: Theme.font-size-small;
+            }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+                Button {
+                    text: @tr("Cancel");
+                    clicked => { root.close(); }
+                }
+                Button {
+                    text: @tr("Join");
+                    kind: ButtonKind.primary;
+                    enabled: input.text != "";
+                    clicked => { go(); }
+                }
+            }
+        }
+    }
+
+    function go() {
+        if (!root.submit(input.text)) {
+            invalid = true;
+        }
+    }
+}
