@@ -12,12 +12,15 @@ export function Feeds({
   remoteStream,
   camOn,
   swapped,
+  remoteRotation,
   onSwap,
 }: {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   camOn: boolean;
   swapped: boolean;
+  /** Clockwise degrees, a multiple of 90: fixes a picture that arrives sideways. Only on this screen. */
+  remoteRotation: number;
   onSwap: () => void;
 }) {
   const [localAspect, setLocalAspect] = useState(16 / 9);
@@ -28,8 +31,8 @@ export function Feeds({
   return (
     <>
       {remoteStream && (
-        <Feed main={!localMain} aspect={remoteAspect} onSwap={onSwap}>
-          <Video stream={remoteStream} className="feed-video" onAspect={setRemoteAspect} />
+        <Feed main={!localMain} aspect={remoteRotation % 180 ? 1 / remoteAspect : remoteAspect} onSwap={onSwap}>
+          <Video stream={remoteStream} className="feed-video" rotation={remoteRotation} onAspect={setRemoteAspect} />
         </Feed>
       )}
       {localStream && (

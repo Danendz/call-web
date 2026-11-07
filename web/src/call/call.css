@@ -115,6 +115,19 @@
   object-fit: cover;
 }
 
+/* Rotated a quarter turn: the video's box takes the feed's sides swapped, centred, so contain/cover still fit */
+.feed {
+  container-type: size;
+}
+
+.feed-video.turned {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100cqh;
+  height: 100cqw;
+}
+
 video.mirror {
   transform: scaleX(-1);
 }
