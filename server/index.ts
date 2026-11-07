@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { MAX_CHAT_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
+import { MAX_CHAT_LENGTH, MAX_STREAM_ID_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
 import { clientIp, concurrencyLimit, ownHost, rateLimit, setSecurityHeaders } from "./limits.js";
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
 import { onSpeechConnection } from "./transcribe.js";
@@ -18,6 +18,8 @@ const connectsPerIp = rateLimit(30, 60_000);
 const chatPerMember = rateLimit(20, 10_000);
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
+// A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
+const mediaPerMember = rateLimit(30, 10_000);
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -140,6 +142,14 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
       case "screenshot":
         if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
+      case "media": {
+        const { camOn, screen } = msg;
+        const validScreen = screen === null || (typeof screen === "string" && screen.length <= MAX_STREAM_ID_LENGTH);
+        if (typeof camOn === "boolean" && validScreen && mediaPerMember(clientId)) {
+          relayToPeer(roomId, clientId, { type: "media", camOn, screen });
+        }
+        break;
+      }
     }
   });
 }

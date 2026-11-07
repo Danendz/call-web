@@ -4,10 +4,15 @@ const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
 // Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss.
 const VIDEO_MAX_BITRATE = 2_000_000;
+// While sharing, the same ~2 Mbps is split: most for the screen (text must stay sharp), a small face for the camera.
+const SHARE_SCREEN_BITRATE = 1_600_000;
+const SHARE_CAMERA_BITRATE = 400_000;
+const SHARE_CAMERA_SHORT_SIDE = 360;
 
 interface PeerCallbacks {
   sendSignal: (payload: SignalPayload) => void;
-  onRemoteStream: (stream: MediaStream) => void;
+  /** camera: the other person's mic and camera; screen: their shared screen and its audio, while they share */
+  onRemoteStreams: (camera: MediaStream | null, screen: MediaStream | null) => void;
   onStateChange: () => void;
 }
 
@@ -21,11 +26,19 @@ export class PeerSession {
   private makingOffer = false;
   private ignoreOffer = false;
   private signalQueue: Promise<void> = Promise.resolve();
-  private remoteStream = new MediaStream();
+  // Incoming tracks by the id of the stream the sender put them in; "" for tracks sent without one.
+  private remoteStreams = new Map<string, MediaStream>();
+  // Every id the other side announced as its screen, so a stopped share's tracks are never taken for the camera
+  private remoteScreenIds = new Set<string>();
+  private remoteScreenId: string | null = null;
+  private remoteCamera: MediaStream | null = null;
   private disconnectTimer?: number;
   private lastRestart = 0;
   private closed = false;
-  private screen = false;
+  // Our shared screen goes out in its own stream, so the other side can tell it from the camera by stream id.
+  private readonly screenStream = new MediaStream();
+  private screenVideo: RTCRtpSender | null = null;
+  private screenAudio: RTCRtpSender | null = null;
 
   constructor(
     config: RTCConfiguration,
@@ -43,9 +56,11 @@ export class PeerSession {
       pc.getSenders().find((s) => s.track?.kind === "video") ??
       pc.addTransceiver("video", { direction: "sendrecv", streams: [localStream] }).sender;
 
-    pc.ontrack = ({ track }) => {
-      this.remoteStream = new MediaStream([...this.remoteStream.getTracks().filter((t) => t.kind !== track.kind), track]);
-      cb.onRemoteStream(this.remoteStream);
+    pc.ontrack = ({ track, streams }) => {
+      const id = streams[0]?.id ?? "";
+      const others = this.remoteStreams.get(id)?.getTracks().filter((t) => t.kind !== track.kind) ?? [];
+      this.remoteStreams.set(id, new MediaStream([...others, track]));
+      this.emitRemote();
     };
 
     pc.onnegotiationneeded = async () => {
@@ -106,37 +121,84 @@ export class PeerSession {
     }
   }
 
-  /** Swaps camera ↔ screen without renegotiating, and retunes the encoder for the new content. */
-  async setVideoTrack(track: MediaStreamTrack | null, screen: boolean): Promise<void> {
-    this.screen = screen;
+  /** The id to announce in a `media` message while sharing. */
+  get screenId(): string {
+    return this.screenStream.id;
+  }
+
+  /** Swaps in another camera without renegotiating. */
+  async setCameraTrack(track: MediaStreamTrack | null): Promise<void> {
     await this.videoSender.replaceTrack(track);
     await this.tuneSenders();
   }
 
   /**
+   * Sends the shared screen alongside the camera. The first share adds its transceivers (one renegotiation); after
+   * that, stopping and starting again only swaps tracks in them. Screen audio gets its own transceiver the first time
+   * a share has any.
+   */
+  async setScreen(video: MediaStreamTrack | null, audio: MediaStreamTrack | null): Promise<void> {
+    this.screenVideo = await this.sendScreenTrack(this.screenVideo, video);
+    this.screenAudio = await this.sendScreenTrack(this.screenAudio, audio);
+    await this.tuneSenders();
+  }
+
+  private async sendScreenTrack(sender: RTCRtpSender | null, track: MediaStreamTrack | null): Promise<RTCRtpSender | null> {
+    if (sender) {
+      await sender.replaceTrack(track);
+      return sender;
+    }
+    return track ? this.pc.addTransceiver(track, { direction: "sendonly", streams: [this.screenStream] }).sender : null;
+  }
+
+  /** Which incoming stream is the other side's screen; null once they stop sharing. */
+  setRemoteScreen(id: string | null): void {
+    if (id) this.remoteScreenIds.add(id);
+    this.remoteScreenId = id;
+    this.emitRemote();
+  }
+
+  /** Everything not announced as a screen is the camera and mic. The camera stream is only remade when its tracks change. */
+  private emitRemote(): void {
+    const camera = [...this.remoteStreams]
+      .filter(([id]) => !this.remoteScreenIds.has(id))
+      .flatMap(([, stream]) => stream.getTracks());
+    const same = camera.length === this.remoteCamera?.getTracks().length && camera.every((t) => this.remoteCamera?.getTrackById(t.id));
+    if (!same) this.remoteCamera = camera.length ? new MediaStream(camera) : null;
+    const screen = (this.remoteScreenId && this.remoteStreams.get(this.remoteScreenId)) || null;
+    this.cb.onRemoteStreams(this.remoteCamera, screen?.getVideoTracks().length ? screen : null);
+  }
+
+  /**
    * Caps video bitrate and tells the encoder what to give up when bandwidth runs short: resolution for the camera
-   * (a smaller clean picture beats a blocky one), frame rate for screen share (text must stay readable).
-   * Audio gets priority so voices survive congestion. Encodings only exist after negotiation, so this runs after
-   * every description change.
+   * (a smaller clean picture beats a blocky one), frame rate for the screen (text must stay readable). While sharing,
+   * the camera shrinks to a small face so the screen gets the bandwidth. The mic gets priority so voices survive
+   * congestion. Encodings only exist after negotiation, so this runs after every description change.
    */
   private async tuneSenders(): Promise<void> {
+    const sharing = !!this.screenVideo?.track;
     for (const transceiver of this.pc.getTransceivers()) {
       const sender = transceiver.sender;
       const params = sender.getParameters();
-      if (!params.encodings?.length) continue;
+      if (!params.encodings?.length || sender === this.screenAudio) continue;
+      const isScreen = sender === this.screenVideo;
       const isVideo = transceiver.receiver.track.kind === "video";
+      const maxBitrate = isScreen ? SHARE_SCREEN_BITRATE : sharing ? SHARE_CAMERA_BITRATE : VIDEO_MAX_BITRATE;
+      const scale = !isScreen && sharing ? downscaleTo(sender.track, SHARE_CAMERA_SHORT_SIDE) : 1;
       for (const enc of params.encodings) {
-        if (isVideo) enc.maxBitrate = VIDEO_MAX_BITRATE;
-        else enc.priority = enc.networkPriority = "high";
+        if (isVideo) {
+          enc.maxBitrate = maxBitrate;
+          enc.scaleResolutionDownBy = scale;
+        } else enc.priority = enc.networkPriority = "high";
       }
-      if (isVideo) params.degradationPreference = this.screen ? "maintain-resolution" : "maintain-framerate";
+      if (isVideo) params.degradationPreference = isScreen ? "maintain-resolution" : "maintain-framerate";
       try {
         await sender.setParameters(params);
       } catch {
         // Some browsers reject priority/degradation fields; the bitrate cap is the part that matters.
         if (!isVideo) continue;
         const capped = sender.getParameters();
-        capped.encodings.forEach((enc) => (enc.maxBitrate = VIDEO_MAX_BITRATE));
+        capped.encodings.forEach((enc) => (enc.maxBitrate = maxBitrate));
         await sender.setParameters(capped).catch((err) => console.warn("setParameters failed", err));
       }
     }
@@ -161,4 +223,11 @@ export class PeerSession {
     this.pc.oniceconnectionstatechange = this.pc.onconnectionstatechange = null;
     this.pc.close();
   }
+}
+
+/** How much to scale a camera down so its short side is about `short` pixels; 1 when it's already that small. */
+function downscaleTo(track: MediaStreamTrack | null, short: number): number {
+  const { width = 0, height = 0 } = track?.getSettings() ?? {};
+  const side = Math.min(width, height);
+  return side > short ? side / short : 1;
 }

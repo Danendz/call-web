@@ -1,5 +1,6 @@
 import type { ChatMessage, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
 import {
+  getDisplayMedia,
   getLocalMedia,
   getTrack,
   loadDevicePref,
@@ -32,6 +33,10 @@ export interface CallState {
   myId: string | null;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
+  /** The other person's shared screen (with its audio, if they shared some), while they share. */
+  remoteScreen: MediaStream | null;
+  /** The other person's camera is on; when off, their video track still sends black frames. */
+  remoteCamOn: boolean;
   iceState: RTCIceConnectionState | null;
   chat: ChatMessage[];
   micOn: boolean;
@@ -62,6 +67,8 @@ const initialState: CallState = {
   myId: null,
   localStream: null,
   remoteStream: null,
+  remoteScreen: null,
+  remoteCamOn: true,
   iceState: null,
   chat: [],
   micOn: true,
@@ -96,7 +103,9 @@ export class CallController {
   private iceServers: IceServerConfig[] = [];
   private token: string | null = null;
   private camTrack: MediaStreamTrack | null = null;
-  private screenTrack: MediaStreamTrack | null = null;
+  private screen: MediaStream | null = null;
+  // The id the other side last announced for its screen, kept until they leave: it can arrive before our peer exists.
+  private remoteScreenId: string | null = null;
   private mediaReady: Promise<void> | null = null;
   private switchingDevice = false;
   private statsTimer?: number;
@@ -187,14 +196,14 @@ export class CallController {
     const next = new MediaStream(got.track ? [...others, got.track] : others);
     if (kind === "video") {
       this.camTrack = got.track;
-      // While sharing the screen the sender keeps the screen; stopScreenShare picks up the new camera
-      if (!this.screenTrack) await this.peer?.setVideoTrack(got.track, false);
+      await this.peer?.setCameraTrack(got.track);
     }
     this.set({
       localStream: next,
       ...(kind === "audio" ? { micAccess: got.access } : { camAccess: got.access }),
       ...selectedDevices(next),
     });
+    if (kind === "video") this.sendMedia();
   }
 
   private refreshDevices = async () => {
@@ -252,6 +261,7 @@ export class CallController {
     const on = !this.state.camOn;
     this.camTrack.enabled = on;
     this.set({ camOn: on });
+    this.sendMedia();
   }
 
   /** Reshapes the live camera track in place, so a call in progress needs no renegotiation. */
@@ -263,27 +273,40 @@ export class CallController {
     });
   }
 
+  /** Shares the screen next to the camera, with tab or system audio when the browser offers it and the user ticks it. */
   async toggleScreenShare(): Promise<void> {
-    if (this.screenTrack) return this.stopScreenShare();
-    let track: MediaStreamTrack;
+    if (this.screen) return this.stopScreenShare();
+    let display: MediaStream;
     try {
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
-      track = display.getVideoTracks()[0];
+      display = await getDisplayMedia();
     } catch {
       return; // user cancelled the picker
     }
-    track.contentHint = "detail";
-    track.onended = () => this.stopScreenShare();
-    this.screenTrack = track;
-    await this.peer?.setVideoTrack(track, true);
+    const [video] = display.getVideoTracks();
+    if (!video) return display.getTracks().forEach((t) => t.stop());
+    video.contentHint = "detail";
+    video.onended = () => this.stopScreenShare();
+    this.screen = display;
     this.set({ sharing: true });
+    // Announce first, so the other side knows the screen's stream before its tracks arrive
+    this.sendMedia();
+    await this.peer?.setScreen(video, display.getAudioTracks()[0] ?? null);
   }
 
   private async stopScreenShare(): Promise<void> {
-    this.screenTrack?.stop();
-    this.screenTrack = null;
-    await this.peer?.setVideoTrack(this.camTrack, false);
+    if (!this.screen) return;
+    this.screen.getTracks().forEach((t) => t.stop());
+    this.screen = null;
     this.set({ sharing: false });
+    this.sendMedia();
+    await this.peer?.setScreen(null, null);
+  }
+
+  /** Tells the other side what we're sending; see MediaMessage. */
+  private sendMedia(): void {
+    if (!this.peer) return;
+    const camOn = !!this.camTrack && this.state.camOn;
+    this.signaling.send({ type: "media", camOn, screen: this.screen ? this.peer.screenId : null });
   }
 
   setForceRelay(forceRelay: boolean): void {
@@ -300,8 +323,10 @@ export class CallController {
         this.set({ myId: msg.clientId, chat: msg.chat });
         if (msg.resumed && this.peer) {
           // Our socket dropped (network switch); the media path likely died with it.
-          if (msg.peerPresent) this.peer.restartIce();
-          else this.dropPeer();
+          if (msg.peerPresent) {
+            this.peer.restartIce();
+            this.sendMedia(); // in case an update was lost with the socket
+          } else this.dropPeer();
         } else {
           this.polite = msg.polite;
           if (msg.peerPresent) this.createPeer();
@@ -315,7 +340,9 @@ export class CallController {
         this.setCallElapsed(msg.callElapsedMs);
         break;
       case "peer-left":
+        this.remoteScreenId = null;
         this.dropPeer();
+        this.set({ remoteCamOn: true });
         break;
       case "signal":
         this.peer?.handleSignal(msg.payload);
@@ -335,6 +362,11 @@ export class CallController {
         this.set({ peerScreenshot: true });
         this.peerScreenshotTimer = window.setTimeout(() => this.set({ peerScreenshot: false }), PEER_SCREENSHOT_SHOWN_MS);
         break;
+      case "media":
+        this.remoteScreenId = msg.screen;
+        this.peer?.setRemoteScreen(msg.screen);
+        this.set({ remoteCamOn: msg.camOn });
+        break;
       case "error":
         console.warn("server error", msg.message);
         break;
@@ -350,11 +382,13 @@ export class CallController {
       this.polite,
       {
         sendSignal: (payload) => this.signaling.send({ type: "signal", payload }),
-        onRemoteStream: (remoteStream) => this.set({ remoteStream }),
+        onRemoteStreams: (remoteStream, remoteScreen) => this.set({ remoteStream, remoteScreen }),
         onStateChange: () => this.set({ iceState: this.peer?.pc.iceConnectionState ?? null }),
       },
     );
-    if (this.screenTrack) void this.peer.setVideoTrack(this.screenTrack, true);
+    if (this.remoteScreenId) this.peer.setRemoteScreen(this.remoteScreenId);
+    this.sendMedia();
+    if (this.screen) void this.peer.setScreen(this.screen.getVideoTracks()[0], this.screen.getAudioTracks()[0] ?? null);
     this.statsCounters = null;
     this.directRetries = this.nextDirectRetry = 0;
     this.set({ phase: "in-call", iceState: this.peer.pc.iceConnectionState });
@@ -367,7 +401,7 @@ export class CallController {
   private dropPeer(): void {
     this.peer?.close();
     this.peer = null;
-    this.set({ phase: "waiting", remoteStream: null, iceState: null, stats: null, callStartedAt: null });
+    this.set({ phase: "waiting", remoteStream: null, remoteScreen: null, iceState: null, stats: null, callStartedAt: null });
   }
 
   private async pollStats(): Promise<void> {
@@ -420,10 +454,21 @@ export class CallController {
     this.peer?.close();
     this.peer = null;
     this.signaling.close(leave);
-    this.screenTrack?.stop();
-    this.screenTrack = null;
+    this.screen?.getTracks().forEach((t) => t.stop());
+    this.screen = null;
+    this.remoteScreenId = null;
     this.state.localStream?.getTracks().forEach((t) => t.stop());
     clearTimeout(this.peerScreenshotTimer);
-    this.set({ localStream: null, remoteStream: null, iceState: null, stats: null, sharing: false, callStartedAt: null, peerScreenshot: false });
+    this.set({
+      localStream: null,
+      remoteStream: null,
+      remoteScreen: null,
+      remoteCamOn: true,
+      iceState: null,
+      stats: null,
+      sharing: false,
+      callStartedAt: null,
+      peerScreenshot: false,
+    });
   }
 }

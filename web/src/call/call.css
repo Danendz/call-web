@@ -47,7 +47,7 @@
   cursor: none;
 }
 
-/* ---- the two videos ---- */
+/* ---- the videos: one on the stage, the rest as tiles in the corners ---- */
 
 .feed {
   position: absolute;
@@ -61,6 +61,7 @@
     height var(--slow) var(--ease),
     border-radius var(--slow) var(--ease),
     box-shadow var(--slow) var(--ease),
+    opacity var(--slow) var(--ease),
     transform var(--fast) var(--ease);
 }
 
@@ -74,16 +75,39 @@
   background: #000;
 }
 
+/* --pip-stack moves a second tile in the same corner past the first */
 .feed.pip {
-  top: calc(100% - var(--pip-h) - var(--pill-space));
-  left: calc(100% - var(--pip-w) - var(--pip-gap));
+  top: calc(100% - var(--pip-h) - var(--pill-space) - var(--pip-stack, 0px));
+  left: calc(100% - var(--pip-w) - var(--pip-gap) - env(safe-area-inset-right));
   z-index: 3;
+  touch-action: none;
   width: var(--pip-w);
   height: var(--pip-h);
   border-radius: var(--radius);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.12),
     var(--shadow);
+}
+
+.feed.pip[data-corner^="t"] {
+  top: calc(var(--pip-gap) + env(safe-area-inset-top) + var(--pip-stack, 0px));
+}
+
+.feed.pip[data-corner$="l"] {
+  left: calc(var(--pip-gap) + env(safe-area-inset-left));
+}
+
+/* Following the pointer: placed inline, no glide until it's let go */
+.feed.pip.dragging {
+  z-index: 4;
+  cursor: grabbing;
+  transition: none;
+}
+
+/* The other person's camera while it's off during their share: still playing their voice, just not shown */
+.feed.gone {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .feed.pip[role="button"] {
