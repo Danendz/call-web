@@ -31,7 +31,7 @@ const withQuota = createQuota(WHISPER_MODELS);
 const key = process.env.GROQ_API_KEY;
 if (!key) console.warn("GROQ_API_KEY not set: speech is transcribed only in browsers that can do it themselves");
 
-async function transcribe(wav: Buffer, lang: Lang): Promise<string> {
+async function transcribe(wav: Buffer, lang: Lang): Promise<{ text: string; model: string }> {
   return withQuota(
     async (model) => {
       const form = new FormData();
@@ -48,11 +48,12 @@ async function transcribe(wav: Buffer, lang: Lang): Promise<string> {
       });
       await failIfNotOk(res, "Transcribe");
       const reply = (await res.json()) as { segments?: { text: string; no_speech_prob?: number }[] };
-      return (reply.segments ?? [])
+      const text = (reply.segments ?? [])
         .filter((s) => (s.no_speech_prob ?? 0) < NO_SPEECH_PROB && !HALLUCINATION_RE.test(s.text))
         .map((s) => s.text.trim())
         .join(lang === "zh" ? "" : " ")
         .trim();
+      return { text, model };
     },
     ({ until }) => Promise.reject(new OutOfQuota(until)),
   );
@@ -89,11 +90,18 @@ export async function handleTranscribe(req: IncomingMessage, res: ServerResponse
   if (!uploadsPerMember(clientId)) return reply(res, 429, { error: "too many utterances" });
   if (!key) return reply(res, 503, { unavailable: true });
 
+  const startedAt = Date.now();
   const wav = await readBody(req, MAX_BODY);
   if (!wav) return reply(res, 413, { error: "utterance too long" });
+  const uploadedAt = Date.now();
 
   try {
-    const text = await transcribe(wav, lang);
+    const { text, model } = await transcribe(wav, lang);
+    // Timings only, never what was said
+    const audioS = (wav.length - 44) / (TRANSCRIBE_SAMPLE_RATE * 2);
+    console.info(
+      `transcribe lang=${lang} audio=${audioS.toFixed(1)}s kb=${Math.round(wav.length / 1024)} upload=${uploadedAt - startedAt}ms whisper=${Date.now() - uploadedAt}ms model=${model} chars=${text.length}`,
+    );
     if (text) postChat(roomId, clientId, text, true);
     reply(res, 200, { ok: true });
   } catch (error) {
