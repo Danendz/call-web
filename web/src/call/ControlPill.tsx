@@ -9,6 +9,7 @@ import {
   RotateCw,
   ScreenShare,
   ScreenShareOff,
+  SwitchCamera,
   Video as VideoIcon,
   VideoOff,
 } from "lucide-react";
@@ -65,7 +66,20 @@ export function ControlPill({
     disabled: !micGranted,
     onSelect: () => controller.toggleTranscribe(),
   };
+  // Two cameras is a phone's front and back: one flip item. More (a laptop with USB cameras) are listed to pick from.
+  const cameras: MenuItem[] =
+    !camGranted || state.cams.length < 2
+      ? []
+      : state.cams.length === 2
+        ? [{ label: t.switchCamera, icon: <SwitchCamera size={18} />, onSelect: () => controller.nextCamera() }]
+        : state.cams.map((cam) => ({
+            label: cam.label,
+            icon: <VideoIcon size={18} />,
+            checked: cam.id === state.camDeviceId,
+            onSelect: () => void controller.selectDevice("video", cam.id),
+          }));
   const items: MenuItem[] = [
+    ...cameras,
     ...(compact ? [{ ...transcribe, icon: <Captions size={18} /> }] : []),
     ...(canShare
       ? [

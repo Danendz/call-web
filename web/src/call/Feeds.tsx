@@ -2,6 +2,7 @@ import { VideoOff } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useT } from "../ui/i18n";
 import { Video } from "../ui/Video";
+import { isRearCamera } from "./media";
 
 /**
  * The two videos: one fills the stage, the other is the small tile. Swapping only changes their classes, so each
@@ -37,7 +38,7 @@ export function Feeds({
       )}
       {localStream && (
         <Feed main={localMain} aspect={localAspect} onSwap={remoteStream ? onSwap : null}>
-          <Video stream={localStream} className="feed-video" muted mirror onAspect={setLocalAspect} />
+          <Video stream={localStream} className="feed-video" muted mirror={!isRearCamera(localStream)} onAspect={setLocalAspect} />
           <div className={`feed-off ${camOn ? "" : "shown"}`} aria-hidden={camOn}>
             <VideoOff size={localMain ? 36 : 20} />
           </div>

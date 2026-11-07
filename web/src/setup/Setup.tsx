@@ -3,6 +3,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
+import { isRearCamera } from "../call/media";
 import { CopyLink } from "../ui/CopyLink";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
@@ -37,7 +38,7 @@ export function Setup({ controller, state, roomUrl }: { controller: CallControll
     <div className="setup">
       <div className="preview" style={{ "--ar": aspect ?? (portrait ? 9 / 16 : 16 / 9) } as CSSProperties}>
         {showVideo ? (
-          <Video stream={state.localStream!} className="preview-video" muted mirror onAspect={setAspect} />
+          <Video stream={state.localStream!} className="preview-video" muted mirror={!isRearCamera(state.localStream!)} onAspect={setAspect} />
         ) : (
           <div className="preview-off">
             <VideoOff size={28} />
