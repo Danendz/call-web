@@ -55,6 +55,8 @@ const en = {
   swapVideos: "Swap videos",
   rotateVideo: "Rotate their video",
   switchCamera: "Switch camera",
+  screenshot: "Screenshot",
+  peerScreenshot: "The other person took a screenshot",
 
   starting: "Starting…",
   waitingForPeer: "Waiting for the other person to join…",
@@ -125,6 +127,8 @@ const zh: Strings = {
   swapVideos: "切换画面",
   rotateVideo: "旋转对方画面",
   switchCamera: "切换摄像头",
+  screenshot: "截图",
+  peerScreenshot: "对方截了一张图",
 
   starting: "正在启动…",
   waitingForPeer: "等待对方加入…",

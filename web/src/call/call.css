@@ -232,6 +232,34 @@ video.mirror {
   display: none;
 }
 
+/* Stays put when the controls hide: a glance at how long you've talked */
+.call-timer {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.shot-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: #fff;
+  pointer-events: none;
+  animation: shot-flash 0.35s var(--ease) forwards;
+}
+
+@keyframes shot-flash {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .subtitle {
   position: absolute;
   left: 50%;

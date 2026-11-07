@@ -50,6 +50,10 @@ export interface CallState {
   lang: Lang;
   transcribeOn: boolean;
   speechNotice: SpeechNotice | null;
+  /** performance.now() at which the call with the other person began; null while alone. */
+  callStartedAt: number | null;
+  /** The other person just saved a screenshot of the call. */
+  peerScreenshot: boolean;
 }
 
 const initialState: CallState = {
@@ -76,7 +80,11 @@ const initialState: CallState = {
   lang: loadLang(),
   transcribeOn: loadTranscribeOn(),
   speechNotice: null,
+  callStartedAt: null,
+  peerScreenshot: false,
 };
+
+const PEER_SCREENSHOT_SHOWN_MS = 3_000;
 
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
 export class CallController {
@@ -93,6 +101,7 @@ export class CallController {
   private switchingDevice = false;
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
+  private peerScreenshotTimer?: number;
   private directRetries = 0;
   private nextDirectRetry = 0;
   private lastDirectRetry = 0;
@@ -213,6 +222,11 @@ export class CallController {
     this.set({ phase: "ended" });
   }
 
+  /** Lets the other person know a picture of the call was saved. */
+  notifyScreenshot(): void {
+    this.signaling.send({ type: "screenshot" });
+  }
+
   sendChat(text: string): boolean {
     return this.signaling.send({ type: "chat", text });
   }
@@ -293,10 +307,12 @@ export class CallController {
           if (msg.peerPresent) this.createPeer();
         }
         if (!this.peer) this.set({ phase: "waiting" });
+        else this.setCallElapsed(msg.callElapsedMs);
         break;
       case "peer-joined":
         this.polite = msg.polite;
-        this.createPeer();
+        this.createPeer(); // drops any old peer, and its timer with it
+        this.setCallElapsed(msg.callElapsedMs);
         break;
       case "peer-left":
         this.dropPeer();
@@ -313,6 +329,11 @@ export class CallController {
       case "full":
         this.teardown(false);
         this.set({ phase: "full" });
+        break;
+      case "screenshot":
+        clearTimeout(this.peerScreenshotTimer);
+        this.set({ peerScreenshot: true });
+        this.peerScreenshotTimer = window.setTimeout(() => this.set({ peerScreenshot: false }), PEER_SCREENSHOT_SHOWN_MS);
         break;
       case "error":
         console.warn("server error", msg.message);
@@ -339,10 +360,14 @@ export class CallController {
     this.set({ phase: "in-call", iceState: this.peer.pc.iceConnectionState });
   }
 
+  private setCallElapsed(ms: unknown): void {
+    if (typeof ms === "number" && Number.isFinite(ms) && ms >= 0) this.set({ callStartedAt: performance.now() - ms });
+  }
+
   private dropPeer(): void {
     this.peer?.close();
     this.peer = null;
-    this.set({ phase: "waiting", remoteStream: null, iceState: null, stats: null });
+    this.set({ phase: "waiting", remoteStream: null, iceState: null, stats: null, callStartedAt: null });
   }
 
   private async pollStats(): Promise<void> {
@@ -398,6 +423,7 @@ export class CallController {
     this.screenTrack?.stop();
     this.screenTrack = null;
     this.state.localStream?.getTracks().forEach((t) => t.stop());
-    this.set({ localStream: null, remoteStream: null, iceState: null, stats: null, sharing: false });
+    clearTimeout(this.peerScreenshotTimer);
+    this.set({ localStream: null, remoteStream: null, iceState: null, stats: null, sharing: false, callStartedAt: null, peerScreenshot: false });
   }
 }

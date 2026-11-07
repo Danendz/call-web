@@ -1,5 +1,6 @@
 import {
   Activity,
+  Camera,
   Captions,
   MessageSquare,
   Mic,
@@ -29,6 +30,8 @@ export function ControlPill({
   showStats,
   canRotate,
   onRotate,
+  canScreenshot,
+  onScreenshot,
   onToggleChat,
   onToggleStats,
   onMenuChange,
@@ -42,6 +45,8 @@ export function ControlPill({
   showStats: boolean;
   canRotate: boolean;
   onRotate: () => void;
+  canScreenshot: boolean;
+  onScreenshot: () => void;
   onToggleChat: () => void;
   onToggleStats: () => void;
   onMenuChange: (open: boolean) => void;
@@ -99,6 +104,7 @@ export function ControlPill({
       onSelect: () => controller.setOrientation(state.orientation === "portrait" ? "landscape" : "portrait"),
     },
     { label: t.rotateVideo, icon: <RotateCw size={18} />, disabled: !canRotate, onSelect: onRotate },
+    { label: t.screenshot, icon: <Camera size={18} />, disabled: !canScreenshot, onSelect: onScreenshot },
     { label: t.stats, icon: <Activity size={18} />, checked: showStats, onSelect: onToggleStats },
   ];
 

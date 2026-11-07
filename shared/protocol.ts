@@ -50,7 +50,9 @@ export type ClientMessage =
   | { type: "signal"; payload: SignalPayload }
   | { type: "chat"; text: string; spoken?: boolean }
   | { type: "leave" }
-  | { type: "ping" };
+  | { type: "ping" }
+  // Tells the other person you saved a picture of the call; carries nothing
+  | { type: "screenshot" };
 
 export type ServerMessage =
   | {
@@ -64,12 +66,15 @@ export type ServerMessage =
       polite: boolean;
       iceServers: IceServerConfig[];
       chat: ChatMessage[];
+      // How long the call has run, when the other member is here. A duration, not a time: clocks differ.
+      callElapsedMs?: number;
     }
-  | { type: "peer-joined"; polite: boolean }
+  | { type: "peer-joined"; polite: boolean; callElapsedMs: number }
   | { type: "peer-left" }
   | { type: "full" }
   | { type: "signal"; payload: SignalPayload }
   | { type: "chat"; message: ChatMessage }
   | { type: "chat-translation"; id: string; translation: Translation }
   | { type: "pong" }
+  | { type: "screenshot" }
   | { type: "error"; message: string };
