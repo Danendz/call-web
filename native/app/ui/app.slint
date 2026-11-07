@@ -6,16 +6,25 @@ import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
 import { StartScreen } from "start/start.slint";
 import { SetupScreen } from "setup/setup.slint";
-import { WaitingScreen } from "call/waiting.slint";
+import { DeviceItem } from "setup/device-row.slint";
+import { CallScreen, CallLink } from "call/call.slint";
 
-export enum AppPhase { start, setup, starting, waiting, full, ended }
+export { DeviceItem, CallLink }
+
+export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 
 export component AppWindow inherits Window {
     in property <AppPhase> phase: start;
     in property <string> lang: "en";
     in property <string> room-url;
-    in property <bool> peer-present;
     in property <bool> reconnecting;
+    in property <CallLink> link;
+    in property <string> elapsed;
+    in property <bool> mic-on: true;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    in property <string> mic-label;
+    in property <float> mic-level;
 
     callback new-room();
     callback open-link(string) -> bool;
@@ -23,6 +32,8 @@ export component AppWindow inherits Window {
     callback join();
     callback hang-up();
     callback home();
+    callback toggle-mic();
+    callback pick-mic(string);
 
     title: "Call Danya";
     icon: Icons.video;
@@ -41,16 +52,28 @@ export component AppWindow inherits Window {
     if phase == AppPhase.setup: SetupScreen {
         room-url: root.room-url;
         lang: root.lang;
+        mics: root.mics;
+        mic-id: root.mic-id;
+        mic-label: root.mic-label;
+        mic-on: root.mic-on;
+        mic-level: root.mic-level;
+        toggle-mic => { root.toggle-mic(); }
         set-lang(lang) => { root.set-lang(lang); }
+        pick-mic(id) => { root.pick-mic(id); }
         join => { root.join(); }
         back => { root.home(); }
     }
 
-    if phase == AppPhase.starting || phase == AppPhase.waiting: WaitingScreen {
+    if phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call: CallScreen {
         room-url: root.room-url;
         starting: phase == AppPhase.starting;
-        peer-present: root.peer-present;
+        connected: phase == AppPhase.in-call;
         reconnecting: root.reconnecting;
+        link: root.link;
+        elapsed: root.elapsed;
+        mic-on: root.mic-on;
+        has-mic: root.mics.length > 0;
+        toggle-mic => { root.toggle-mic(); }
         hang-up => { root.hang-up(); }
     }
 

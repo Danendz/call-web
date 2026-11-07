@@ -15,6 +15,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tracing = "0.1"
 url = "2"
+libwebrtc = "0.4"
+cpal = "0.18.2"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 
 [lints]
 workspace = true

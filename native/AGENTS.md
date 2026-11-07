@@ -46,6 +46,13 @@ native/
 - The binary must not contact anything but our server (`call.danendz.com`, default; `CALL_SERVER` env overrides it for development) and our coturn. No crash reporters, analytics, update checks or crates that phone home.
 - Build-time downloads (Skia, libwebrtc prebuilt) are fine; nothing is downloaded at runtime.
 
+## WebRTC
+
+- **LiveKit's `libwebrtc` crate**, Google's libwebrtc prebuilt. The first build downloads it (~200 MB) into `target/`. On macOS it needs `-ObjC` at link time (`.cargo/config.toml`), or creating the factory crashes.
+- **Audio uses WebRTC's platform audio device** (`media.rs`): it captures the picked mic and plays the other person through the default output, with WebRTC's echo canceller, noise suppression and gain control, like a browser with the web's constraints. Its blocking calls (starting playout) run on WebRTC's signaling thread, so a peer connection call from the engine can wait on them.
+- **The setup screen's mic level** opens the mic separately with `cpal` (`level.rs`), only while that screen is up: WebRTC captures nothing until a call.
+- **macOS needs the app bundle** (`packaging/macos/`) for mic and camera permission prompts; a bare binary borrows the terminal's permissions, which in dev is often "denied", so a dev build sends silence.
+
 ## Before saying it's done
 
 From `native/`:
@@ -59,4 +66,9 @@ cargo build --release
 
 When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `CALL_SERVER=http://localhost:8090 cargo run` here. Leave real two-person calls to the user.
 
-Drive the running app with `swift dev/ui.swift` (macOS), not synthetic mouse clicks: it presses buttons by their accessible label through the Accessibility API and screenshots the window even behind others, so the user's mouse and focus are left alone. `tree` lists what's there, `press <label>`, `set <label> <text>`, `shot <file.png>`. Labels are in the app's current language. An element it can't find usually needs an `accessible-label`, which it should have anyway.
+Drive the running app by accessible label, never with synthetic mouse clicks, so the user's mouse and focus are left alone. Both drivers take `tree`, `press <label>`, `set <label> <text>` and `shot <file.png>`; labels are in the app's current language, and an element neither can find needs an `accessible-label`, which it should have anyway.
+
+- `python3 dev/ui.py` goes through Slint's embedded MCP server, so it also works with the screen locked and on Windows. It needs a dev build made for it: `SLINT_EMIT_DEBUG_INFO=1 cargo build -p call-danya --features dev-mcp`, run with `SLINT_MCP_PORT=8765`. Prefer it.
+- `swift dev/ui.swift` (macOS) uses the Accessibility API on any build, but needs an unlocked screen and Accessibility and Screen Recording permission for the terminal.
+
+For the other side of a call, `cargo run -p engine --example join -- http://localhost:8090 <room> [seconds]` joins headless and logs its state. Two of them, or one against the app, check signaling and negotiation; whether sound really goes both ways is still for the user to hear.

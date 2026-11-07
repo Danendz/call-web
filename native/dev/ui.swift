@@ -30,9 +30,11 @@ func labels(_ element: AXUIElement) -> [String] {
         .filter { !$0.isEmpty }
 }
 
-/// Depth-first; stops when `visit` returns true. Skips the menu bar, which is the system's, not ours.
+/// Depth-first; stops when `visit` returns true. Skips the menu bar, which is the system's, not ours. The depth cap
+/// keeps a cycle in the tree from recursing forever.
 @discardableResult
 func walk(_ element: AXUIElement, depth: Int = 0, _ visit: (AXUIElement, Int) -> Bool) -> Bool {
+    if depth > 40 { return false }
     if visit(element, depth) { return true }
     for child in (attr(element, kAXChildrenAttribute) as? [AXUIElement]) ?? [] {
         if (attr(child, kAXRoleAttribute) as? String) == kAXMenuBarRole { continue }

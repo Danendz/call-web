@@ -3,85 +3,180 @@ import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
 import { CopyLink } from "../components/copy-link.slint";
 import { LangSwitch } from "lang-switch.slint";
+import { DeviceRow, DeviceItem } from "device-row.slint";
+import { Preview } from "preview.slint";
 
-// Pre-join screen. Camera preview and device pickers arrive with media (M1, M2).
+// The column beside the preview: the link to share, devices, language and the join button.
+component SetupPanel {
+    in property <string> room-url;
+    in property <string> lang;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    in property <string> mic-label;
+    callback set-lang(string);
+    callback pick-mic(string);
+    callback join();
+
+    VerticalLayout {
+        spacing: 18px;
+
+        Text {
+            text: @tr("Ready to join?");
+            color: Theme.text;
+            font-size: Theme.font-size-h1;
+            font-weight: 650;
+        }
+
+        VerticalLayout {
+            spacing: 8px;
+            Text {
+                text: @tr("Share this link with the person you want to call");
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                wrap: word-wrap;
+            }
+            CopyLink { url: root.room-url; }
+        }
+
+        DeviceRow {
+            icon: Icons.mic;
+            name: @tr("Microphone");
+            devices: root.mics;
+            selected: root.mic-id;
+            selected-label: root.mic-label;
+            picked(id) => { root.pick-mic(id); }
+        }
+
+        Rectangle {
+            height: 46px;
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface-2;
+
+            HorizontalLayout {
+                padding-right: 5px;
+                Rectangle {
+                    width: 42px;
+                    Image {
+                        source: Icons.languages;
+                        colorize: Theme.muted;
+                        width: 18px;
+                        height: 18px;
+                    }
+                }
+                Text {
+                    text: @tr("I speak");
+                    color: Theme.muted;
+                    font-size: Theme.font-size-small;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                LangSwitch {
+                    y: (parent.height - self.height) / 2;
+                    lang: root.lang;
+                    picked(lang) => { root.set-lang(lang); }
+                }
+            }
+        }
+
+        Button {
+            text: @tr("Join call");
+            kind: ButtonKind.primary;
+            height-hint: 52px;
+            font-size: 16px;
+            clicked => { root.join(); }
+        }
+    }
+}
+
+// Pre-join screen, like the web's Setup: preview and panel side by side, stacked when the window is narrow.
 export component SetupScreen inherits Rectangle {
     in property <string> room-url;
     in property <string> lang;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    in property <string> mic-label;
+    in property <bool> mic-on;
+    in property <float> mic-level;
     callback set-lang(string);
+    callback pick-mic(string);
+    callback toggle-mic();
     callback join();
     callback back();
     property <bool> shown: false;
+    property <bool> wide: root.width >= 1000px;
+    property <length> panel-width: min(380px, root.width - 48px);
     init => { shown = true; }
 
-    HorizontalLayout {
+    // Both arrangements hold the same two pieces; only one exists at a time
+    if wide: HorizontalLayout {
         alignment: center;
+        spacing: 40px;
         padding: 24px;
         opacity: shown ? 1 : 0;
         animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
         VerticalLayout {
             alignment: center;
-            spacing: 18px;
-            width: min(380px, root.width - 48px);
-
-            Text {
-                text: @tr("Ready to join?");
-                color: Theme.text;
-                font-size: Theme.font-size-h1;
-                font-weight: 650;
+            Preview {
+                width: min(640px, root.width - panel-width - 88px);
+                height: self.width * 9 / 16;
+                mic-on: root.mic-on;
+                has-mic: root.mics.length > 0;
+                mic-level: root.mic-level;
+                toggle-mic => { root.toggle-mic(); }
             }
-
-            VerticalLayout {
-                spacing: 8px;
-                Text {
-                    text: @tr("Share this link with the person you want to call");
-                    color: Theme.muted;
-                    font-size: Theme.font-size-small;
-                    wrap: word-wrap;
-                }
-                CopyLink { url: root.room-url; }
+        }
+        VerticalLayout {
+            alignment: center;
+            width: panel-width;
+            SetupPanel {
+                room-url: root.room-url;
+                lang: root.lang;
+                mics: root.mics;
+                mic-id: root.mic-id;
+                mic-label: root.mic-label;
+                set-lang(lang) => { root.set-lang(lang); }
+                pick-mic(id) => { root.pick-mic(id); }
+                join => { root.join(); }
             }
+        }
+    }
 
-            Rectangle {
-                height: 46px;
-                border-radius: Theme.radius-sm;
-                border-width: 1px;
-                border-color: Theme.border;
-                background: Theme.surface-2;
+    if !wide: VerticalLayout {
+        alignment: center;
+        spacing: 24px;
+        padding: 24px;
+        padding-top: 88px;
+        opacity: shown ? 1 : 0;
+        animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
-                HorizontalLayout {
-                    padding-right: 5px;
-                    Rectangle {
-                        width: 42px;
-                        Image {
-                            source: Icons.languages;
-                            colorize: Theme.muted;
-                            width: 18px;
-                            height: 18px;
-                        }
-                    }
-                    Text {
-                        text: @tr("I speak");
-                        color: Theme.muted;
-                        font-size: Theme.font-size-small;
-                        vertical-alignment: center;
-                    }
-                    Rectangle { horizontal-stretch: 1; }
-                    LangSwitch {
-                        y: (parent.height - self.height) / 2;
-                        lang: root.lang;
-                        picked(lang) => { root.set-lang(lang); }
-                    }
-                }
+        HorizontalLayout {
+            alignment: center;
+            Preview {
+                // Short enough that the panel still fits under it
+                height: min((root.width - 48px) * 9 / 16, max(0px, root.height - 560px));
+                width: self.height * 16 / 9;
+                visible: self.height > 120px;
+                mic-on: root.mic-on;
+                has-mic: root.mics.length > 0;
+                mic-level: root.mic-level;
+                toggle-mic => { root.toggle-mic(); }
             }
-
-            Button {
-                text: @tr("Join call");
-                kind: ButtonKind.primary;
-                height-hint: 52px;
-                font-size: 16px;
-                clicked => { root.join(); }
+        }
+        HorizontalLayout {
+            alignment: center;
+            SetupPanel {
+                width: panel-width;
+                room-url: root.room-url;
+                lang: root.lang;
+                mics: root.mics;
+                mic-id: root.mic-id;
+                mic-label: root.mic-label;
+                set-lang(lang) => { root.set-lang(lang); }
+                pick-mic(id) => { root.pick-mic(id); }
+                join => { root.join(); }
             }
         }
     }

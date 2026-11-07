@@ -1,0 +1,84 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+
+// The camera preview with the mic and camera toggles over it, like the web's `.preview`. Until video arrives (M2)
+// it shows the camera as off.
+export component Preview inherits Rectangle {
+    in property <bool> mic-on;
+    in property <bool> has-mic;
+    // 0..=1, drawn as a ring around the mic button so you can see the right mic is picked up before joining
+    in property <float> mic-level;
+    callback toggle-mic();
+
+    border-radius: Theme.radius-lg;
+    background: Theme.surface;
+    drop-shadow-blur: 30px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: Theme.shadow;
+    clip: true;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 10px;
+        padding-bottom: 70px;
+        Image {
+            source: Icons.video-off;
+            colorize: Theme.muted;
+            width: 28px;
+            height: 28px;
+            x: (parent.width - self.width) / 2;
+        }
+        Text {
+            text: @tr("Camera is off");
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            horizontal-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 14px;
+        width: controls.preferred-width;
+        height: controls.preferred-height;
+        border-radius: self.height / 2;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.glass;
+
+        controls := HorizontalLayout {
+            padding: 6px;
+            spacing: 10px;
+
+            Rectangle {
+                width: mic.width;
+                height: mic.height;
+                // The web's box-shadow ring: grows up to 6px with the level
+                property <length> ring: has-mic && mic-on ? mic-level * 6px : 0;
+                // A border, not a fill: the button is see-through and the web's shadow only shows outside it
+                Rectangle {
+                    width: parent.width + 2 * ring;
+                    height: parent.height + 2 * ring;
+                    border-radius: self.height / 2;
+                    border-width: ring;
+                    border-color: Theme.level;
+                }
+                mic := IconButton {
+                    size: 46px;
+                    icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
+                    label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
+                    kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
+                    enabled: has-mic;
+                    clicked => { root.toggle-mic(); }
+                }
+            }
+            IconButton {
+                size: 46px;
+                icon: Icons.video-off;
+                label: @tr("Turn on camera");
+                enabled: false;
+            }
+        }
+    }
+}

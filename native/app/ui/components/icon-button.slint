@@ -1,0 +1,53 @@
+import { Theme } from "../theme.slint";
+
+// The web's `variant` on icon buttons: what state the thing it controls is in.
+export enum IconButtonKind { normal, active, off, danger }
+
+// Round icon-only button like the web's `button.icon-btn`. The label is for screen readers and tooltips.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <IconButtonKind> kind: normal;
+    in property <bool> enabled: true;
+    in property <length> size: 48px;
+    callback clicked();
+
+    property <color> base: kind == IconButtonKind.active ? Theme.text
+        : kind == IconButtonKind.off ? Theme.danger-soft
+        : kind == IconButtonKind.danger ? Theme.danger
+        : Theme.icon-btn;
+    property <color> hover: kind == IconButtonKind.active ? #fff
+        : kind == IconButtonKind.off ? Theme.danger-soft-hover
+        : kind == IconButtonKind.danger ? Theme.danger-hover
+        : Theme.icon-btn-hover;
+    property <color> fg: kind == IconButtonKind.active ? Theme.bg
+        : kind == IconButtonKind.off ? Theme.danger-text
+        : #fff;
+
+    width: kind == IconButtonKind.danger ? size + 12px : size;
+    height: size;
+    border-radius: self.height / 2;
+    background: touch.has-hover && enabled ? hover : base;
+    opacity: enabled ? 1 : 0.38;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-action-default => { clicked(); }
+    animate background, opacity { duration: Theme.fast; easing: Theme.ease; }
+
+    Image {
+        source: icon;
+        colorize: fg;
+        width: 20px;
+        height: 20px;
+        transform-scale: touch.pressed && enabled ? 0.9 : 1;
+        animate transform-scale { duration: Theme.fast; easing: Theme.ease; }
+        animate colorize { duration: Theme.fast; easing: Theme.ease; }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}

@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Settings {
     pub lang: Option<Lang>,
+    /// The picked mic's id, applied when it's plugged in
+    pub mic: Option<String>,
 }
 
 impl Settings {

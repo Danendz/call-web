@@ -8,15 +8,20 @@ use url::Url;
 const ROOM_ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_ID_LEN: usize = 10;
 
-#[expect(clippy::expect_used, reason = "the OS random source failing is not something a call can work around")]
 pub fn new_room_id() -> String {
-    let mut bytes = [0u8; ROOM_ID_LEN];
+    random_string::<ROOM_ID_LEN>(ROOM_ALPHABET)
+}
+
+/// For ids the other side sees but that grant nothing, like the stream our mic is sent in.
+pub fn random_id() -> String {
+    random_string::<32>(b"0123456789abcdef")
+}
+
+#[expect(clippy::expect_used, reason = "the OS random source failing is not something a call can work around")]
+fn random_string<const N: usize>(alphabet: &[u8]) -> String {
+    let mut bytes = [0u8; N];
     getrandom::fill(&mut bytes).expect("OS randomness");
-    bytes
-        .iter()
-        .filter_map(|b| ROOM_ALPHABET.get(usize::from(*b) % ROOM_ALPHABET.len()))
-        .map(|&c| char::from(c))
-        .collect()
+    bytes.iter().filter_map(|b| alphabet.get(usize::from(*b) % alphabet.len())).map(|&c| char::from(c)).collect()
 }
 
 /// The room in what someone pasted: a full link (any host, so a link from a dev server works too), a link

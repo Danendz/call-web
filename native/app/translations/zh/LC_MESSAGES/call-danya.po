@@ -14,8 +14,20 @@ msgstr "通话已结束"
 msgid "Call link"
 msgstr "通话链接"
 
+msgid "Camera is off"
+msgstr "摄像头已关闭"
+
 msgid "Cancel"
 msgstr "取消"
+
+msgid "Connecting…"
+msgstr "正在连接…"
+
+msgid "Connection failed, retrying…"
+msgstr "连接失败，正在重试…"
+
+msgid "Connection unstable, reconnecting…"
+msgstr "连接不稳定，正在重连…"
 
 msgid "Copied"
 msgstr "已复制"
@@ -29,17 +41,20 @@ msgstr "挂断"
 msgid "I speak"
 msgstr "我说"
 
+msgid "Join"
+msgstr "加入"
+
 msgid "Join by link"
 msgstr "通过链接加入"
 
 msgid "Join call"
 msgstr "加入通话"
 
-msgid "Join"
-msgstr "加入"
-
 msgid "Lost connection to server, reconnecting…"
 msgstr "与服务器断开连接，正在重连…"
+
+msgid "Microphone"
+msgstr "麦克风"
 
 msgid "New room"
 msgstr "新房间"
@@ -68,11 +83,20 @@ msgstr "正在启动…"
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
 
-msgid "The other person is here"
-msgstr "对方已加入"
-
 msgid "This room already has two people in it."
 msgstr "这个房间已经有两个人了。"
 
+msgid "Turn off microphone"
+msgstr "关闭麦克风"
+
+msgid "Turn on camera"
+msgstr "打开摄像头"
+
+msgid "Turn on microphone"
+msgstr "打开麦克风"
+
 msgid "Waiting for the other person to join…"
 msgstr "等待对方加入…"
+
+msgid "{}: Not found"
+msgstr "{}：未找到"

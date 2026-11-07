@@ -1,5 +1,5 @@
 # Checks and builds the native app. Builds are unsigned until M6: macOS needs right-click → Open the first
-# time, Windows SmartScreen needs "Run anyway".
+# time, Windows SmartScreen needs "Run anyway". The first build of a cache downloads prebuilt WebRTC (~200 MB).
 name: native
 
 on:
@@ -48,10 +48,12 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
       - run: cargo build --release --locked
+      - if: runner.os == 'macOS'
+        run: packaging/macos/bundle.sh
       - uses: actions/upload-artifact@v4
         with:
           name: call-danya-${{ runner.os }}
           path: |
-            native/target/release/call-danya
+            native/target/release/call-danya-macos.zip
             native/target/release/call-danya.exe
           if-no-files-found: error

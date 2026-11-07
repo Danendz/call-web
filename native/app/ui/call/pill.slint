@@ -1,0 +1,49 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+
+// Floating call controls at the bottom of the stage, like the web's ControlPill. The camera arrives with video.
+export component ControlPill inherits Rectangle {
+    in property <bool> mic-on;
+    in property <bool> has-mic;
+    callback toggle-mic();
+    callback hang-up();
+
+    width: row.preferred-width;
+    height: row.preferred-height;
+    border-radius: self.height / 2;
+    border-width: 1px;
+    border-color: Theme.glass-border;
+    background: Theme.glass;
+    drop-shadow-blur: 30px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: Theme.shadow;
+
+    row := HorizontalLayout {
+        padding: 8px;
+        // The web's extra margin before hang up
+        spacing: 16px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            IconButton {
+                icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
+                label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
+                kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
+                enabled: has-mic;
+                clicked => { root.toggle-mic(); }
+            }
+            IconButton {
+                icon: Icons.video-off;
+                label: @tr("Turn on camera");
+                enabled: false;
+            }
+        }
+        IconButton {
+            icon: Icons.phone-off;
+            label: @tr("Hang up");
+            kind: IconButtonKind.danger;
+            clicked => { root.hang-up(); }
+        }
+    }
+}

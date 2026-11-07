@@ -1,0 +1,122 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { CopyLink } from "../components/copy-link.slint";
+import { ControlPill } from "pill.slint";
+import { Notice } from "notice.slint";
+
+export enum CallLink { none, connecting, connected, unstable, failed }
+
+// The call: the other person fills the stage, the controls float over it. Before they're here a card with the
+// room link sits on the stage instead, like the web's CallView.
+export component CallScreen inherits Rectangle {
+    in property <string> room-url;
+    in property <bool> starting;
+    in property <bool> connected;
+    in property <bool> reconnecting;
+    in property <CallLink> link;
+    in property <string> elapsed;
+    in property <bool> mic-on;
+    in property <bool> has-mic;
+    callback toggle-mic();
+    callback hang-up();
+
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    background: #000;
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Theme.slow; easing: Theme.ease; }
+
+    // No video yet: the other person's feed shows as a camera that's off
+    Rectangle {
+        background: Theme.surface-2;
+        opacity: connected ? 1 : 0;
+        animate opacity { duration: Theme.med; easing: Theme.ease; }
+        Image {
+            source: Icons.video-off;
+            colorize: Theme.muted;
+            width: 36px;
+            height: 36px;
+        }
+    }
+
+    if !connected: Rectangle {
+        background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
+        property <bool> card-shown: false;
+        init => { card-shown = true; }
+
+        Rectangle {
+            width: min(440px, parent.width - 32px);
+            height: content.preferred-height;
+            y: (parent.height - self.height) / 2 + (card-shown ? 0 : 10px);
+            opacity: card-shown ? 1 : 0;
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.glass-border;
+            background: Theme.glass;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+            animate y, opacity { duration: Theme.slow; easing: Theme.ease; }
+
+            content := VerticalLayout {
+                padding: 22px;
+                spacing: 14px;
+                Text {
+                    text: starting ? @tr("Starting…") : @tr("Waiting for the other person to join…");
+                    color: Theme.text;
+                    font-weight: 550;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                CopyLink {
+                    url: root.room-url;
+                    fill: #0000004d;
+                }
+            }
+        }
+    }
+
+    // Below the macOS traffic lights, which sit over the content
+    VerticalLayout {
+        y: 40px;
+        height: self.preferred-height;
+        alignment: start;
+        spacing: 6px;
+
+        if connected && elapsed != "": HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: timer.preferred-width + 24px;
+                height: timer.preferred-height + 8px;
+                border-radius: self.height / 2;
+                background: Theme.timer;
+                timer := Text {
+                    text: elapsed;
+                    color: #ffffffe6;
+                    font-size: 13px;
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            Notice {
+                text: reconnecting ? @tr("Lost connection to server, reconnecting…")
+                    : !connected ? ""
+                    : link == CallLink.connecting ? @tr("Connecting…")
+                    : link == CallLink.unstable ? @tr("Connection unstable, reconnecting…")
+                    : link == CallLink.failed ? @tr("Connection failed, retrying…")
+                    : "";
+            }
+        }
+    }
+
+    ControlPill {
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height - 20px;
+        mic-on: root.mic-on;
+        has-mic: root.has-mic;
+        toggle-mic => { root.toggle-mic(); }
+        hang-up => { root.hang-up(); }
+    }
+}

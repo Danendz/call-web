@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Call Danya</string>
+    <key>CFBundleDisplayName</key>
+    <string>Call Danya</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.danendz.call-danya</string>
+    <key>CFBundleExecutable</key>
+    <string>call-danya</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Your microphone is sent to the person you call. 你的麦克风声音会发送给通话对象。</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Your camera is sent to the person you call. 你的摄像头画面会发送给通话对象。</string>
+</dict>
+</plist>

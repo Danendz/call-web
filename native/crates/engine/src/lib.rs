@@ -2,8 +2,12 @@
 //! back, like the web's `CallController`.
 
 mod controller;
+mod level;
+mod media;
+mod peer;
 pub mod room;
 mod signaling;
 
-pub use controller::{Command, Engine, Phase, State};
+pub use controller::{Command, Engine, Link, Phase, State};
+pub use media::Device;
 pub use protocol::Lang;
