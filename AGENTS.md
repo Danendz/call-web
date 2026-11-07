@@ -43,6 +43,10 @@ The service is public: anyone can open the site and connect to `/ws` or `/api`. 
 
 - **Don't add hint or description text that repeats what the control already shows.** Add helper text only when it tells the user something they can't see: why to do something, where to find it, or what a non-obvious state means (like the permission help on the setup screen).
 
+## Roadmap
+
+- **`docs/ROADMAP.md` lists planned work.** When you finish a feature listed there, mark it `[x]` (or `[~]` with what's left) in the same branch and PR that ships it. Add newly planned work there too, under the right phase with its **Where** (Web + Native or Native only). Overlay and notification features are native only: don't add browser workarounds for them to the web app.
+
 ## Tests
 
 - **Only write tests that matter.** Cover real behavior, tricky logic, and regressions for bugs that actually happened.
