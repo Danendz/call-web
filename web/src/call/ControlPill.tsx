@@ -6,6 +6,7 @@ import {
   MicOff,
   PhoneOff,
   RectangleVertical,
+  RotateCw,
   ScreenShare,
   ScreenShareOff,
   Video as VideoIcon,
@@ -25,6 +26,8 @@ export function ControlPill({
   chatOpen,
   unread,
   showStats,
+  canRotate,
+  onRotate,
   onToggleChat,
   onToggleStats,
   onMenuChange,
@@ -36,6 +39,8 @@ export function ControlPill({
   chatOpen: boolean;
   unread: number;
   showStats: boolean;
+  canRotate: boolean;
+  onRotate: () => void;
   onToggleChat: () => void;
   onToggleStats: () => void;
   onMenuChange: (open: boolean) => void;
@@ -79,6 +84,7 @@ export function ControlPill({
       disabled: !camGranted,
       onSelect: () => controller.setOrientation(state.orientation === "portrait" ? "landscape" : "portrait"),
     },
+    { label: t.rotateVideo, icon: <RotateCw size={18} />, disabled: !canRotate, onSelect: onRotate },
     { label: t.stats, icon: <Activity size={18} />, checked: showStats, onSelect: onToggleStats },
   ];
 

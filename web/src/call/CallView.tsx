@@ -20,6 +20,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const [showStats, setShowStats] = useState(state.forceRelay);
   const [seenCount, setSeenCount] = useState(0);
   const [swapped, setSwapped] = useState(false);
+  const [remoteRotation, setRemoteRotation] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoveringPill, setHoveringPill] = useState(false);
   const stacked = useMediaQuery(STACKED_QUERY);
@@ -32,9 +33,11 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   }, [chatOpen, othersCount]);
   const unread = othersCount - seenCount;
 
-  // A new peer starts in the usual layout: them big, you small
+  // A new peer starts in the usual layout: them big, you small, upright
   useEffect(() => {
-    if (!state.remoteStream) setSwapped(false);
+    if (state.remoteStream) return;
+    setSwapped(false);
+    setRemoteRotation(0);
   }, [state.remoteStream]);
 
   const connected = state.phase === "in-call" && !!state.remoteStream;
@@ -63,6 +66,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           remoteStream={connected ? state.remoteStream : null}
           camOn={state.camAccess === "granted" && state.camOn}
           swapped={swapped}
+          remoteRotation={remoteRotation}
           onSwap={() => setSwapped((v) => !v)}
         />
 
@@ -95,6 +99,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           chatOpen={chatOpen}
           unread={unread}
           showStats={showStats}
+          canRotate={connected}
+          onRotate={() => setRemoteRotation((r) => (r + 90) % 360)}
           onToggleChat={() => setChatOpen((v) => !v)}
           onToggleStats={() => setShowStats((v) => !v)}
           onMenuChange={setMenuOpen}
