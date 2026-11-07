@@ -7,11 +7,12 @@ import { Centered } from "components/centered.slint";
 import { StartScreen } from "start/start.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
-import { CallScreen, CallLink } from "call/call.slint";
+import { CallScreen, CallLink, StatsView } from "call/call.slint";
 
-export { DeviceItem, CallLink }
+export { DeviceItem, CallLink, StatsView }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
+export enum CamAccess { pending, granted, denied, missing }
 
 export component AppWindow inherits Window {
     in property <AppPhase> phase: start;
@@ -25,6 +26,24 @@ export component AppWindow inherits Window {
     in property <string> mic-id;
     in property <string> mic-label;
     in property <float> mic-level;
+    in property <bool> cam-on: true;
+    in property <CamAccess> cam-access;
+    in property <[DeviceItem]> cams;
+    in property <string> cam-id;
+    in property <string> cam-label;
+    in property <bool> portrait;
+    in property <image> self-video;
+    in property <image> peer-video;
+    in property <int> peer-frame-rotation;
+    in property <bool> peer-cam-on: true;
+    in property <StatsView> stats;
+    in property <bool> force-relay;
+
+    // The web's deviceStatus: why a device can't be used
+    property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
+        : cam-access == CamAccess.denied ? @tr("Camera: Blocked in System Settings")
+        : cam-access == CamAccess.missing ? @tr("Camera: Not found")
+        : "";
 
     callback new-room();
     callback open-link(string) -> bool;
@@ -34,6 +53,11 @@ export component AppWindow inherits Window {
     callback home();
     callback toggle-mic();
     callback pick-mic(string);
+    callback toggle-cam();
+    callback pick-cam(string);
+    callback next-cam();
+    callback set-portrait(bool);
+    callback set-force-relay(bool);
 
     title: "Call Danya";
     icon: Icons.video;
@@ -57,9 +81,22 @@ export component AppWindow inherits Window {
         mic-label: root.mic-label;
         mic-on: root.mic-on;
         mic-level: root.mic-level;
+        mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
+        video: root.self-video;
+        cam-on: root.cam-on;
+        cam-granted: root.cam-access == CamAccess.granted;
+        cam-pending: root.cam-access == CamAccess.pending;
+        cams: root.cams;
+        cam-id: root.cam-id;
+        cam-label: root.cam-label;
+        cam-status: root.cam-status;
+        portrait: root.portrait;
         toggle-mic => { root.toggle-mic(); }
+        toggle-cam => { root.toggle-cam(); }
+        set-portrait(p) => { root.set-portrait(p); }
         set-lang(lang) => { root.set-lang(lang); }
         pick-mic(id) => { root.pick-mic(id); }
+        pick-cam(id) => { root.pick-cam(id); }
         join => { root.join(); }
         back => { root.home(); }
     }
@@ -73,7 +110,23 @@ export component AppWindow inherits Window {
         elapsed: root.elapsed;
         mic-on: root.mic-on;
         has-mic: root.mics.length > 0;
+        cam-on: root.cam-on;
+        cam-granted: root.cam-access == CamAccess.granted;
+        cams: root.cams;
+        cam-id: root.cam-id;
+        portrait: root.portrait;
+        peer-video: root.peer-video;
+        peer-frame-rotation: root.peer-frame-rotation;
+        peer-cam-on: root.peer-cam-on;
+        self-video: root.self-video;
+        stats: root.stats;
+        force-relay: root.force-relay;
         toggle-mic => { root.toggle-mic(); }
+        toggle-cam => { root.toggle-cam(); }
+        pick-cam(id) => { root.pick-cam(id); }
+        next-cam => { root.next-cam(); }
+        set-portrait(p) => { root.set-portrait(p); }
+        set-force-relay(r) => { root.set-force-relay(r); }
         hang-up => { root.hang-up(); }
     }
 

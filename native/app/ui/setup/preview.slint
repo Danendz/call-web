@@ -2,14 +2,23 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton, IconButtonKind } from "../components/icon-button.slint";
 
-// The camera preview with the mic and camera toggles over it, like the web's `.preview`. Until video arrives (M2)
-// it shows the camera as off.
+// The camera preview with the mic and camera toggles over it, like the web's `.preview`.
 export component Preview inherits Rectangle {
     in property <bool> mic-on;
     in property <bool> has-mic;
     // 0..=1, drawn as a ring around the mic button so you can see the right mic is picked up before joining
     in property <float> mic-level;
+    in property <image> video;
+    in property <bool> cam-on;
+    in property <bool> cam-granted;
+    // Why there's no picture when the camera can't be used, e.g. "Camera: Not found"
+    in property <string> cam-status;
+    in property <bool> portrait;
     callback toggle-mic();
+    callback toggle-cam();
+    callback toggle-portrait();
+
+    property <bool> showing: cam-granted && cam-on && video.width > 0;
 
     border-radius: Theme.radius-lg;
     background: Theme.surface;
@@ -18,22 +27,35 @@ export component Preview inherits Rectangle {
     drop-shadow-color: Theme.shadow;
     clip: true;
 
-    VerticalLayout {
+    Image {
+        width: 100%;
+        height: 100%;
+        source: video;
+        image-fit: cover;
+        opacity: showing ? 1 : 0;
+        animate opacity { duration: Theme.med; easing: Theme.ease; }
+    }
+
+    if !showing: VerticalLayout {
         alignment: center;
         spacing: 10px;
-        padding-bottom: 70px;
-        Image {
-            source: Icons.video-off;
-            colorize: Theme.muted;
-            width: 28px;
-            height: 28px;
-            x: (parent.width - self.width) / 2;
+        padding: 16px;
+        padding-bottom: 80px;
+        HorizontalLayout {
+            alignment: center;
+            Image {
+                source: Icons.video-off;
+                colorize: Theme.muted;
+                width: 28px;
+                height: 28px;
+            }
         }
         Text {
-            text: @tr("Camera is off");
+            text: cam-status != "" ? cam-status : cam-granted && !cam-on ? @tr("Camera is off") : "";
             color: Theme.muted;
             font-size: Theme.font-size-small;
             horizontal-alignment: center;
+            wrap: word-wrap;
         }
     }
 
@@ -75,9 +97,18 @@ export component Preview inherits Rectangle {
             }
             IconButton {
                 size: 46px;
-                icon: Icons.video-off;
-                label: @tr("Turn on camera");
-                enabled: false;
+                icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
+                label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
+                kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
+                enabled: cam-granted;
+                clicked => { root.toggle-cam(); }
+            }
+            IconButton {
+                size: 46px;
+                icon: portrait ? Icons.rectangle-vertical : Icons.rectangle-horizontal;
+                label: portrait ? @tr("Send landscape video") : @tr("Send portrait video");
+                enabled: cam-granted;
+                clicked => { root.toggle-portrait(); }
             }
         }
     }

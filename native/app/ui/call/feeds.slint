@@ -1,0 +1,75 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+
+// A picture that's off: the web's `.feed-off`, over the feed's last frame
+component CamOff inherits Rectangle {
+    in property <bool> shown;
+    in property <length> icon-size: 20px;
+    background: Theme.surface-2;
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
+    Image {
+        source: Icons.video-off;
+        colorize: Theme.muted;
+        width: icon-size;
+        height: icon-size;
+    }
+}
+
+// The other person fills the stage; your own camera is a small tile in the corner above the controls, like the
+// web's Feeds. Tiles move and swap in M4.
+export component Feeds inherits Rectangle {
+    in property <image> peer-video;
+    in property <image> self-video;
+    // Clockwise degrees: what their frames say plus what the user picked with "Rotate their video"
+    in property <int> peer-rotation;
+    in property <bool> peer-cam-on;
+    in property <bool> self-shown;
+    in property <bool> self-cam-on;
+    // Room the control pill takes at the bottom of the stage
+    in property <length> pill-space: 96px;
+
+    property <bool> turned: Math.mod(peer-rotation, 180) != 0;
+    property <bool> has-peer-video: peer-video.width > 0;
+
+    Rectangle {
+        background: #000;
+        Image {
+            width: turned ? parent.height : parent.width;
+            height: turned ? parent.width : parent.height;
+            source: peer-video;
+            image-fit: contain;
+            transform-rotation: peer-rotation * 1deg;
+            opacity: has-peer-video ? 1 : 0;
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+        }
+        CamOff {
+            shown: !peer-cam-on || !has-peer-video;
+            icon-size: 36px;
+        }
+    }
+
+    // The web's --pip-long: clamp(120px, 22vw, 240px) on the long edge, the short one from the picture's shape
+    property <float> self-aspect: self-video.height > 0 ? self-video.width / self-video.height : 16 / 9;
+    property <length> pip-long: clamp(root.width * 0.22, 120px, 240px);
+    if self-shown: Rectangle {
+        width: self-aspect >= 1 ? pip-long : pip-long * self-aspect;
+        height: self-aspect >= 1 ? pip-long / self-aspect : pip-long;
+        x: root.width - self.width - 16px;
+        y: root.height - self.height - pill-space;
+        border-radius: Theme.radius;
+        clip: true;
+        background: #111216;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: Theme.shadow;
+        animate width, height { duration: Theme.slow; easing: Theme.ease; }
+
+        Image {
+            width: 100%;
+            height: 100%;
+            source: self-video;
+            image-fit: cover;
+        }
+        CamOff { shown: !self-cam-on; }
+    }
+}

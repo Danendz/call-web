@@ -11,6 +11,10 @@ pub struct Settings {
     pub lang: Option<Lang>,
     /// The picked mic's id, applied when it's plugged in
     pub mic: Option<String>,
+    pub cam: Option<String>,
+    /// Send 9:16 video instead of 16:9
+    #[serde(default)]
+    pub portrait: bool,
 }
 
 impl Settings {

@@ -26,6 +26,8 @@ export component LangSwitch inherits Rectangle {
             clicked => { root.picked(option.id); }
             accessible-role: button;
             accessible-label: option.name;
+            accessible-checked: root.lang == option.id;
+            accessible-action-default => { root.picked(option.id); }
             Text {
                 text: option.name;
                 color: root.lang == option.id ? #fff : Theme.muted;

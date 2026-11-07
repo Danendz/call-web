@@ -14,8 +14,20 @@ msgstr "通话已结束"
 msgid "Call link"
 msgstr "通话链接"
 
+msgid "Camera"
+msgstr "摄像头"
+
 msgid "Camera is off"
 msgstr "摄像头已关闭"
+
+msgid "Camera: Asking for permission…"
+msgstr "摄像头：正在请求授权…"
+
+msgid "Camera: Blocked in System Settings"
+msgstr "摄像头：被系统设置阻止"
+
+msgid "Camera: Not found"
+msgstr "摄像头：未找到"
 
 msgid "Cancel"
 msgstr "取消"
@@ -25,6 +37,9 @@ msgstr "正在连接…"
 
 msgid "Connection failed, retrying…"
 msgstr "连接失败，正在重试…"
+
+msgid "Connection stats"
+msgstr "连接统计"
 
 msgid "Connection unstable, reconnecting…"
 msgstr "连接不稳定，正在重连…"
@@ -56,8 +71,17 @@ msgstr "与服务器断开连接，正在重连…"
 msgid "Microphone"
 msgstr "麦克风"
 
+msgid "Microphone: Not found"
+msgstr "麦克风：未找到"
+
+msgid "More"
+msgstr "更多"
+
 msgid "New room"
 msgstr "新房间"
+
+msgid "Portrait video"
+msgstr "竖屏视频"
 
 msgid "Ready to join?"
 msgstr "准备好加入了吗？"
@@ -71,6 +95,15 @@ msgstr "房间已满"
 msgid "Room link"
 msgstr "房间链接"
 
+msgid "Rotate their video"
+msgstr "旋转对方画面"
+
+msgid "Send landscape video"
+msgstr "发送横屏视频"
+
+msgid "Send portrait video"
+msgstr "发送竖屏视频"
+
 msgid "Share this link with the person you want to call"
 msgstr "把这个链接发给你要通话的人"
 
@@ -80,11 +113,17 @@ msgstr "创建新房间"
 msgid "Starting…"
 msgstr "正在启动…"
 
+msgid "Switch camera"
+msgstr "切换摄像头"
+
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
 
 msgid "This room already has two people in it."
 msgstr "这个房间已经有两个人了。"
+
+msgid "Turn off camera"
+msgstr "关闭摄像头"
 
 msgid "Turn off microphone"
 msgstr "关闭麦克风"
@@ -97,6 +136,3 @@ msgstr "打开麦克风"
 
 msgid "Waiting for the other person to join…"
 msgstr "等待对方加入…"
-
-msgid "{}: Not found"
-msgstr "{}：未找到"

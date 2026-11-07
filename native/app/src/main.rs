@@ -1,15 +1,18 @@
 // No console window behind the app on Windows release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bridge;
 mod settings;
+mod video;
 mod window;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::Context;
-use engine::{Command, Engine, Lang, Link, Phase, State, room};
+use bridge::Bridge;
+use engine::{Command, Engine, Lang, room};
 use settings::Settings;
 use url::Url;
 
@@ -18,10 +21,15 @@ use url::Url;
 mod ui {
     slint::include_modules!();
 }
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
-use ui::{AppPhase, AppWindow, CallLink, DeviceItem};
+use slint::ComponentHandle;
+use ui::{AppPhase, AppWindow};
 
 const DEFAULT_SERVER: &str = "https://call.danendz.com";
+
+thread_local! {
+    // The engine's state callback reaches the UI-thread bridge through this: models aren't `Send`
+    static BRIDGE: RefCell<Option<Bridge>> = const { RefCell::new(None) };
+}
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -38,25 +46,21 @@ fn main() -> anyhow::Result<()> {
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
 
-    let mics = Rc::new(VecModel::<DeviceItem>::default());
-    ui.set_mics(ModelRc::from(mics.clone()));
-    // The call timer ticks on the UI thread from the start time the engine reports
-    let call_started = Rc::new(RefCell::new(None::<Instant>));
+    let bridge = Bridge::new(&ui);
+    let call_started = bridge.call_started.clone();
+    BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
     let weak = ui.as_weak();
-    let engine = Rc::new(Engine::start(server, lang, move |state| {
+    let sink = video::SlintSink::new(ui.as_weak());
+    let engine = Rc::new(Engine::start(server, lang, sink, move |state| {
         let _ = weak.upgrade_in_event_loop(move |ui| {
-            // Only the UI thread touches the models and the timer's start; the engine thread just hands state over
             BRIDGE.with(|bridge| {
                 if let Some(bridge) = bridge.borrow().as_ref() {
-                    *bridge.call_started.borrow_mut() = state.call_started;
-                    sync_devices(&bridge.mics, &state);
+                    bridge.render(&ui, &state);
                 }
             });
-            render(&ui, &state);
         });
     })?);
-    BRIDGE.with(|bridge| *bridge.borrow_mut() = Some(Bridge { mics, call_started: call_started.clone() }));
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
     // mic level while the setup screen shows it
@@ -66,7 +70,7 @@ fn main() -> anyhow::Result<()> {
         let engine = engine.clone();
         move || {
             let Some(ui) = weak.upgrade() else { return };
-            let text = call_started.borrow().map(|at| format_duration(at.elapsed())).unwrap_or_default();
+            let text = call_started.borrow().map(|at| bridge::format_duration(at.elapsed())).unwrap_or_default();
             if ui.get_elapsed() != text.as_str() {
                 ui.set_elapsed(text.into());
             }
@@ -76,14 +80,30 @@ fn main() -> anyhow::Result<()> {
             }
         }
     });
-    if let Some(mic) = settings.borrow().mic.clone() {
-        engine.send(Command::SelectMic(mic));
+    {
+        let settings = settings.borrow();
+        if let Some(mic) = settings.mic.clone() {
+            engine.send(Command::SelectMic(mic));
+        }
+        if let Some(cam) = settings.cam.clone() {
+            engine.send(Command::SelectCam(cam));
+        }
+        if settings.portrait {
+            engine.send(Command::SetPortrait(true));
+        }
     }
 
-    ui.on_new_room({
+    let send = |command: Command| {
         let engine = engine.clone();
-        move || engine.send(Command::NewRoom)
-    });
+        move || engine.send(command.clone())
+    };
+    ui.on_new_room(send(Command::NewRoom));
+    ui.on_join(send(Command::Join));
+    ui.on_hang_up(send(Command::HangUp));
+    ui.on_home(send(Command::Home));
+    ui.on_toggle_mic(send(Command::ToggleMic));
+    ui.on_toggle_cam(send(Command::ToggleCam));
+    ui.on_next_cam(send(Command::NextCam));
     ui.on_open_link({
         let engine = engine.clone();
         move |link| match room::parse_room(&link) {
@@ -94,41 +114,39 @@ fn main() -> anyhow::Result<()> {
             None => false,
         }
     });
-    ui.on_set_lang({
+    ui.on_set_force_relay({
+        let engine = engine.clone();
+        move |relay| engine.send(Command::SetForceRelay(relay))
+    });
+    // Choices that are remembered for next time
+    let remember = |change: fn(&mut Settings, String), command: fn(String) -> Command| {
         let engine = engine.clone();
         let settings = settings.clone();
-        move |code| {
-            let lang = if code == "zh" { Lang::Zh } else { Lang::En };
-            select_translation(lang);
+        move |value: slint::SharedString| {
             let mut settings = settings.borrow_mut();
-            settings.lang = Some(lang);
+            change(&mut settings, value.to_string());
             settings.save();
-            engine.send(Command::SetLang(lang));
+            engine.send(command(value.into()));
         }
-    });
-    ui.on_join({
+    };
+    ui.on_pick_mic(remember(|s, id| s.mic = Some(id), Command::SelectMic));
+    ui.on_pick_cam(remember(|s, id| s.cam = Some(id), Command::SelectCam));
+    ui.on_set_lang(remember(
+        |s, code| s.lang = Some(parse_lang(&code)),
+        |code| {
+            let lang = parse_lang(&code);
+            select_translation(lang);
+            Command::SetLang(lang)
+        },
+    ));
+    ui.on_set_portrait({
         let engine = engine.clone();
-        move || engine.send(Command::Join)
-    });
-    ui.on_hang_up({
-        let engine = engine.clone();
-        move || engine.send(Command::HangUp)
-    });
-    ui.on_home({
-        let engine = engine.clone();
-        move || engine.send(Command::Home)
-    });
-    ui.on_toggle_mic({
-        let engine = engine.clone();
-        move || engine.send(Command::ToggleMic)
-    });
-    ui.on_pick_mic({
-        let engine = engine.clone();
-        move |id| {
+        let settings = settings.clone();
+        move |portrait| {
             let mut settings = settings.borrow_mut();
-            settings.mic = Some(id.to_string());
+            settings.portrait = portrait;
             settings.save();
-            engine.send(Command::SelectMic(id.into()));
+            engine.send(Command::SetPortrait(portrait));
         }
     });
 
@@ -139,6 +157,10 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn parse_lang(code: &str) -> Lang {
+    if code == "zh" { Lang::Zh } else { Lang::En }
+}
+
 /// `CALL_SERVER` points the app at another server, e.g. `http://localhost:8090` from `PORT=8090 npm run dev:server`.
 fn server_url() -> anyhow::Result<Url> {
     let raw = std::env::var("CALL_SERVER").unwrap_or_else(|_| DEFAULT_SERVER.into());
@@ -147,66 +169,7 @@ fn server_url() -> anyhow::Result<Url> {
     Ok(url)
 }
 
-/// UI-thread state the engine callback reaches through a thread-local, since models aren't `Send`.
-struct Bridge {
-    mics: Rc<VecModel<DeviceItem>>,
-    call_started: Rc<RefCell<Option<Instant>>>,
-}
-
-thread_local! {
-    static BRIDGE: RefCell<Option<Bridge>> = const { RefCell::new(None) };
-}
-
-fn render(ui: &AppWindow, state: &State) {
-    ui.set_phase(match state.phase {
-        Phase::Start => AppPhase::Start,
-        Phase::Setup => AppPhase::Setup,
-        Phase::Starting => AppPhase::Starting,
-        Phase::Waiting => AppPhase::Waiting,
-        Phase::InCall => AppPhase::InCall,
-        Phase::Full => AppPhase::Full,
-        Phase::Ended => AppPhase::Ended,
-    });
-    ui.set_lang(lang_code(state.lang).into());
-    ui.set_room_url(state.room_url.clone().unwrap_or_default().into());
-    ui.set_reconnecting(state.reconnecting);
-    ui.set_link(match state.link {
-        None => CallLink::None,
-        Some(Link::Connecting) => CallLink::Connecting,
-        Some(Link::Connected) => CallLink::Connected,
-        Some(Link::Unstable) => CallLink::Unstable,
-        Some(Link::Failed) => CallLink::Failed,
-    });
-    ui.set_mic_on(state.mic_on);
-    // Nothing picked means the system default, which the OS lists first
-    let mic = state.mic_id.as_ref().and_then(|id| state.mics.iter().find(|d| &d.id == id)).or(state.mics.first());
-    ui.set_mic_id(mic.map(|d| d.id.as_str()).unwrap_or_default().into());
-    ui.set_mic_label(mic.map(|d| d.label.as_str()).unwrap_or_default().into());
-}
-
-/// Updated in place, and only when the list really changed, so an open picker isn't rebuilt under the pointer.
-fn sync_devices(model: &VecModel<DeviceItem>, state: &State) {
-    let same = model.row_count() == state.mics.len()
-        && model.iter().zip(&state.mics).all(|(row, d)| row.id == d.id.as_str() && row.label == d.label.as_str());
-    if !same {
-        model.set_vec(
-            state
-                .mics
-                .iter()
-                .map(|d| DeviceItem { id: SharedString::from(&d.id), label: SharedString::from(&d.label) })
-                .collect::<Vec<_>>(),
-        );
-    }
-}
-
-/// 4:05, or 1:04:05 past an hour, like the web's call timer.
-fn format_duration(elapsed: Duration) -> String {
-    let total = elapsed.as_secs();
-    let (h, m, s) = (total / 3600, total % 3600 / 60, total % 60);
-    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
-}
-
-fn lang_code(lang: Lang) -> &'static str {
+pub fn lang_code(lang: Lang) -> &'static str {
     match lang {
         Lang::Zh => "zh",
         Lang::En => "en",

@@ -13,8 +13,15 @@ component SetupPanel {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> cams;
+    in property <string> cam-id;
+    in property <string> cam-label;
+    in property <string> cam-status;
+    in property <bool> cam-pending;
+    in property <string> mic-status;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-cam(string);
     callback join();
 
     VerticalLayout {
@@ -44,7 +51,19 @@ component SetupPanel {
             devices: root.mics;
             selected: root.mic-id;
             selected-label: root.mic-label;
+            status: root.mic-status;
             picked(id) => { root.pick-mic(id); }
+        }
+
+        DeviceRow {
+            icon: Icons.video;
+            name: @tr("Camera");
+            devices: root.cams;
+            selected: root.cam-id;
+            selected-label: root.cam-label;
+            status: root.cam-status;
+            pending: root.cam-pending;
+            picked(id) => { root.pick-cam(id); }
         }
 
         Rectangle {
@@ -99,9 +118,22 @@ export component SetupScreen inherits Rectangle {
     in property <string> mic-label;
     in property <bool> mic-on;
     in property <float> mic-level;
+    in property <string> mic-status;
+    in property <image> video;
+    in property <bool> cam-on;
+    in property <bool> cam-granted;
+    in property <bool> cam-pending;
+    in property <[DeviceItem]> cams;
+    in property <string> cam-id;
+    in property <string> cam-label;
+    in property <string> cam-status;
+    in property <bool> portrait;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-cam(string);
     callback toggle-mic();
+    callback toggle-cam();
+    callback set-portrait(bool);
     callback join();
     callback back();
     property <bool> shown: false;
@@ -120,12 +152,22 @@ export component SetupScreen inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Preview {
-                width: min(640px, root.width - panel-width - 88px);
-                height: self.width * 9 / 16;
+                // The web sizes the box from the frame's shape: min(640px, 64vh * ar) wide
+                property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
+                width: min(min(640px, root.width - panel-width - 88px), root.height * 0.64 * ar);
+                height: self.width / ar;
+                animate width, height { duration: Theme.slow; easing: Theme.ease; }
                 mic-on: root.mic-on;
                 has-mic: root.mics.length > 0;
                 mic-level: root.mic-level;
+                video: root.video;
+                cam-on: root.cam-on;
+                cam-granted: root.cam-granted;
+                cam-status: root.cam-status;
+                portrait: root.portrait;
                 toggle-mic => { root.toggle-mic(); }
+                toggle-cam => { root.toggle-cam(); }
+                toggle-portrait => { root.set-portrait(!root.portrait); }
             }
         }
         VerticalLayout {
@@ -137,8 +179,15 @@ export component SetupScreen inherits Rectangle {
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                mic-status: root.mic-status;
+                cams: root.cams;
+                cam-id: root.cam-id;
+                cam-label: root.cam-label;
+                cam-status: root.cam-status;
+                cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
         }
@@ -156,13 +205,21 @@ export component SetupScreen inherits Rectangle {
             alignment: center;
             Preview {
                 // Short enough that the panel still fits under it
-                height: min((root.width - 48px) * 9 / 16, max(0px, root.height - 560px));
-                width: self.height * 16 / 9;
+                property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
+                height: min((root.width - 48px) / ar, max(0px, root.height - 610px));
+                width: self.height * ar;
                 visible: self.height > 120px;
                 mic-on: root.mic-on;
                 has-mic: root.mics.length > 0;
                 mic-level: root.mic-level;
+                video: root.video;
+                cam-on: root.cam-on;
+                cam-granted: root.cam-granted;
+                cam-status: root.cam-status;
+                portrait: root.portrait;
                 toggle-mic => { root.toggle-mic(); }
+                toggle-cam => { root.toggle-cam(); }
+                toggle-portrait => { root.set-portrait(!root.portrait); }
             }
         }
         HorizontalLayout {
@@ -174,8 +231,15 @@ export component SetupScreen inherits Rectangle {
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                mic-status: root.mic-status;
+                cams: root.cams;
+                cam-id: root.cam-id;
+                cam-label: root.cam-label;
+                cam-status: root.cam-status;
+                cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
         }

@@ -1,6 +1,7 @@
 //! Owns the call's state and everything that changes it, on its own tokio runtime. The UI only sends
 //! [`Command`]s and renders each [`State`] it's handed. Mirrors the web's `controller.ts`.
 
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -10,11 +11,15 @@ use protocol::{ClientMessage, IceServerConfig, Lang, ServerMessage};
 use tokio::sync::mpsc;
 use url::Url;
 
+use crate::camera::CameraAccess;
+use crate::camera::local::LocalCamera;
 use crate::level::{Level, Meter};
 use crate::media::{Device, Media};
 use crate::peer::{Peer, PeerConfig, PeerEvent};
 use crate::room;
 use crate::signaling::{SignalEvent, Signaling, SocketStatus};
+use crate::stats::{CallStats, Path};
+use crate::video::{self, Feed, VideoSink};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -58,6 +63,19 @@ pub struct State {
     pub mic_id: Option<String>,
     /// The other person's camera is on (from their `media` messages).
     pub remote_cam_on: bool,
+    /// Their video track has arrived; frames go to the sink as [`Feed::Peer`]
+    pub remote_video: bool,
+    pub cam_on: bool,
+    pub cam_access: CameraAccess,
+    pub cams: Vec<Device>,
+    pub cam_id: Option<String>,
+    /// We send a 9:16 picture instead of 16:9
+    pub portrait: bool,
+    pub stats: Option<CallStats>,
+    /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
+    pub force_relay: bool,
+    /// An ICE restart to get off the relay just went out
+    pub trying_direct: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +91,24 @@ pub enum Command {
     ToggleMic,
     /// Only before joining, as on the web: switching the mic mid-call would restart capture under the call.
     SelectMic(String),
+    ToggleCam,
+    /// Any time: the new camera feeds the same track, so a call needs no renegotiation
+    SelectCam(String),
+    /// The next camera in the list: a phone's front and back, or a laptop's two
+    NextCam,
+    SetPortrait(bool),
+    SetForceRelay(bool),
+}
+
+// While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
+// through Singapore, and a P2P attempt that failed at call start often works a few minutes later.
+const DIRECT_RETRY_DELAYS: [Duration; 4] =
+    [Duration::from_secs(15), Duration::from_secs(30), Duration::from_secs(60), Duration::from_secs(120)];
+const TRYING_DIRECT_SHOWN: Duration = Duration::from_secs(5);
+
+/// What the engine tells itself from other threads.
+enum Internal {
+    CameraAccess(CameraAccess),
 }
 
 /// Handle to the engine thread. Dropping it leaves the room and stops the thread.
@@ -83,13 +119,22 @@ pub struct Engine {
 
 impl Engine {
     /// `on_state` runs on the engine's thread for every change; the UI hops to its own thread from there.
-    pub fn start(server: Url, lang: Lang, on_state: impl Fn(State) + Send + 'static) -> std::io::Result<Self> {
+    /// Video frames go to `sink`, from video threads; see [`VideoSink`].
+    pub fn start(
+        server: Url,
+        lang: Lang,
+        sink: Arc<dyn VideoSink>,
+        on_state: impl Fn(State) + Send + 'static,
+    ) -> std::io::Result<Self> {
         let (commands, rx) = mpsc::unbounded_channel();
         let level = Level::default();
         let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
         let controller_level = level.clone();
         thread::Builder::new().name("engine".into()).spawn(move || {
-            runtime.block_on(Controller::new(server, lang, controller_level, Box::new(on_state)).run(rx));
+            // Built inside the runtime: WebRTC's video source needs one to exist
+            runtime.block_on(async move {
+                Controller::new(server, lang, controller_level, sink, Box::new(on_state)).run(rx).await;
+            });
         })?;
         Ok(Self { commands, level })
     }
@@ -121,6 +166,15 @@ struct Controller {
     meter: Option<Meter>,
     /// Our side of the call: the mic track and the stream id it's sent in, kept across peers
     mic: Option<MediaStreamTrack>,
+    camera: LocalCamera,
+    sink: Arc<dyn VideoSink>,
+    /// Shows the other person's video while it lasts
+    remote_video: Option<tokio::task::JoinHandle<()>>,
+    internal_tx: mpsc::UnboundedSender<Internal>,
+    internal_rx: mpsc::UnboundedReceiver<Internal>,
+    direct_retries: usize,
+    next_direct_retry: Option<Instant>,
+    last_direct_retry: Option<Instant>,
     stream_id: String,
     signaling: Option<Signaling>,
     signal_tx: mpsc::UnboundedSender<SignalEvent>,
@@ -132,10 +186,18 @@ struct Controller {
 }
 
 impl Controller {
-    fn new(server: Url, lang: Lang, level: Level, on_state: Box<dyn Fn(State) + Send>) -> Self {
+    fn new(
+        server: Url,
+        lang: Lang,
+        level: Level,
+        sink: Arc<dyn VideoSink>,
+        on_state: Box<dyn Fn(State) + Send>,
+    ) -> Self {
         let (signal_tx, signal_rx) = mpsc::unbounded_channel();
         let (peer_tx, peer_rx) = mpsc::unbounded_channel();
+        let (internal_tx, internal_rx) = mpsc::unbounded_channel();
         let media = Media::new();
+        let camera = LocalCamera::new(media.factory(), sink.clone());
         let state = State {
             phase: Phase::Start,
             lang,
@@ -148,6 +210,15 @@ impl Controller {
             mics: media.mics(),
             mic_id: None,
             remote_cam_on: true,
+            remote_video: false,
+            cam_on: true,
+            cam_access: CameraAccess::Pending,
+            cams: Vec::new(),
+            cam_id: None,
+            portrait: false,
+            stats: None,
+            force_relay: false,
+            trying_direct: false,
         };
         Self {
             server,
@@ -157,6 +228,14 @@ impl Controller {
             level,
             meter: None,
             mic: None,
+            camera,
+            sink,
+            remote_video: None,
+            internal_tx,
+            internal_rx,
+            direct_retries: 0,
+            next_direct_retry: None,
+            last_direct_retry: None,
             stream_id: room::random_id(),
             signaling: None,
             signal_tx,
@@ -173,15 +252,14 @@ impl Controller {
         loop {
             tokio::select! {
                 command = commands.recv() => match command {
-                    Some(command) => {
-                        self.command(command);
-                        self.sync_meter();
-                    }
+                    Some(command) => self.command(command),
                     None => break,
                 },
                 Some(event) = self.signal_rx.recv() => self.signal_event(event),
                 Some(event) = self.peer_rx.recv() => self.peer_event(event),
+                Some(Internal::CameraAccess(access)) = self.internal_rx.recv() => self.camera.set_access(access),
             }
+            self.sync_devices();
             self.publish();
         }
         if let Some(signaling) = self.signaling.take() {
@@ -221,10 +299,27 @@ impl Controller {
                     self.meter = None;
                 }
             }
+            Command::ToggleCam => {
+                self.camera.on = !self.camera.on;
+                // The light goes off at once; the other side hears about it after the sync below
+                self.camera.sync(self.camera_wanted());
+                self.send_media();
+            }
+            Command::SelectCam(id) => self.camera.select(id),
+            Command::NextCam => self.camera.next(),
+            Command::SetPortrait(portrait) => self.camera.set_portrait(portrait),
+            Command::SetForceRelay(relay) => {
+                self.state.force_relay = relay;
+                if let Some(peer) = &self.peer {
+                    peer.set_force_relay(relay);
+                }
+            }
         }
     }
 
-    fn sync_meter(&mut self) {
+    /// Starts and stops what depends on the screen: the mic meter on setup, the camera while a screen shows it or a
+    /// call sends it. Runs after everything, so no path forgets it.
+    fn sync_devices(&mut self) {
         if self.state.phase != Phase::Setup || self.state.mics.is_empty() {
             self.meter = None;
         } else if self.meter.is_none() {
@@ -232,6 +327,29 @@ impl Controller {
             let name = self.state.mics.iter().find(|d| Some(&d.id) == id).map(|d| d.label.clone());
             self.meter = Some(Meter::start(name, self.level.clone()));
         }
+
+        if self.camera_wanted() && !self.camera.asked {
+            // Asked once per launch, on the first screen that shows the camera, like the browser's prompt
+            self.camera.asked = true;
+            let tx = self.internal_tx.clone();
+            crate::camera::request_access(move |access| {
+                let _ = tx.send(Internal::CameraAccess(access));
+            });
+        }
+        let was_sending = self.camera.sending();
+        self.camera.sync(self.camera_wanted());
+        if self.camera.sending() != was_sending {
+            self.send_media();
+        }
+        self.state.cam_on = self.camera.on;
+        self.state.cam_access = self.camera.access;
+        self.state.cams.clone_from(&self.camera.devices);
+        self.state.cam_id = self.camera.id.clone().or_else(|| self.camera.devices.first().map(|d| d.id.clone()));
+        self.state.portrait = self.camera.portrait;
+    }
+
+    fn camera_wanted(&self) -> bool {
+        matches!(self.state.phase, Phase::Setup | Phase::Starting | Phase::Waiting | Phase::InCall)
     }
 
     fn open_room(&mut self, id: String) {
@@ -342,12 +460,15 @@ impl Controller {
         self.drop_peer();
         let config = PeerConfig {
             ice_servers: self.seat.ice_servers.clone(),
+            force_relay: self.state.force_relay,
             polite: self.seat.polite,
             stream_id: self.stream_id.clone(),
         };
-        match Peer::start(self.media.factory(), config, self.mic.clone(), self.peer_tx.clone()) {
+        match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {
             Ok(peer) => {
                 self.peer = Some(peer);
+                self.direct_retries = 0;
+                self.next_direct_retry = None;
                 self.state.phase = Phase::InCall;
                 self.state.link = Some(Link::Connecting);
                 self.send_media();
@@ -361,6 +482,12 @@ impl Controller {
 
     fn drop_peer(&mut self) {
         self.peer = None;
+        if let Some(pump) = self.remote_video.take() {
+            pump.abort();
+            self.sink.clear(Feed::Peer);
+        }
+        self.state.remote_video = false;
+        self.state.stats = None;
         // Events from the old connection still queued must not touch the next one
         while self.peer_rx.try_recv().is_ok() {}
         self.state.link = None;
@@ -376,13 +503,14 @@ impl Controller {
         self.state.call_started = Some(now.checked_sub(Duration::from_millis(ms)).unwrap_or(now));
     }
 
-    /// Tells the other side what we're sending, which the tracks alone can't say. No camera yet.
+    /// Tells the other side what we're sending, which the tracks alone can't say: a camera turned off still sends
+    /// black frames.
     fn send_media(&self) {
         if self.peer.is_none() {
             return;
         }
         if let Some(signaling) = &self.signaling {
-            signaling.send(ClientMessage::Media { cam_on: false, screen: None });
+            signaling.send(ClientMessage::Media { cam_on: self.camera.sending(), screen: None });
         }
     }
 
@@ -393,6 +521,18 @@ impl Controller {
                     signaling.send(ClientMessage::Signal { payload });
                 }
             }
+            PeerEvent::RemoteVideo { track } => {
+                // Screen share (M4) will pick by stream id; until then every video is their camera
+                if let Some(old) = self.remote_video.replace(video::pump(track, Feed::Peer, self.sink.clone())) {
+                    old.abort();
+                }
+                self.state.remote_video = true;
+            }
+            PeerEvent::Stats(stats) => {
+                self.maybe_retry_direct(&stats);
+                self.state.trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);
+                self.state.stats = Some(*stats);
+            }
             PeerEvent::IceState(ice) => {
                 self.state.link = Some(match ice {
                     IceConnectionState::Connected | IceConnectionState::Completed => Link::Connected,
@@ -401,6 +541,35 @@ impl Controller {
                     _ => Link::Connecting,
                 });
             }
+        }
+    }
+
+    /// Upgrades a relayed call to direct P2P with an ICE restart, backing off between tries. Only the impolite side
+    /// drives it, so the two sides don't restart over each other.
+    fn maybe_retry_direct(&mut self, stats: &CallStats) {
+        if stats.path == Path::Direct || self.state.force_relay || self.seat.polite {
+            self.direct_retries = 0;
+            self.next_direct_retry = None;
+            return;
+        }
+        if stats.path != Path::Relay {
+            return;
+        }
+        let now = Instant::now();
+        let Some(next) = self.next_direct_retry else {
+            self.next_direct_retry = Some(now + DIRECT_RETRY_DELAYS[0]);
+            return;
+        };
+        if now < next {
+            return;
+        }
+        self.direct_retries += 1;
+        let delay =
+            DIRECT_RETRY_DELAYS.get(self.direct_retries).or(DIRECT_RETRY_DELAYS.last()).copied().unwrap_or_default();
+        self.next_direct_retry = Some(now + delay);
+        self.last_direct_retry = Some(now);
+        if let Some(peer) = &self.peer {
+            peer.restart_ice();
         }
     }
 

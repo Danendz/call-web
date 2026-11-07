@@ -16,6 +16,7 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = ["c
 tracing = "0.1"
 url = "2"
 libwebrtc = "0.4"
+# The setup screen's mic level; WebRTC captures nothing until a call
 cpal = "0.18.2"
 
 [dev-dependencies]
@@ -23,3 +24,18 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 
 [lints]
 workspace = true
+
+# AVFoundation camera capture
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+dispatch2 = "0.3"
+objc2 = "0.6"
+objc2-av-foundation = "0.3"
+objc2-core-foundation = "0.3"
+objc2-core-media = "0.3"
+objc2-core-video = "0.3"
+objc2-foundation = "0.3"
+
+# Media Foundation camera capture, raw formats only: its MJPEG decoding would add another libjpeg
+[target.'cfg(target_os = "windows")'.dependencies]
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-msmf"] }

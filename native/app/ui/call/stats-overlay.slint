@@ -1,0 +1,114 @@
+import { Theme } from "../theme.slint";
+
+// Formatted by the bridge; "—" where there's nothing yet
+export struct StatsView {
+    path: string,
+    rtt: string,
+    // 0 good, 1 ok, 2 bad, -1 unknown
+    rtt-level: int,
+    loss: string,
+    jitter: string,
+    rates: string,
+    budget: string,
+    video-in: string,
+    video-out: string,
+    limited-by: string,
+    convert: string,
+}
+
+component Row inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> value;
+    in property <color> color: Theme.text;
+    spacing: 14px;
+    Text {
+        text: name;
+        color: Theme.muted;
+        width: 96px;
+        font-size: 12px;
+        font-family: "Menlo";
+    }
+    Text {
+        text: value;
+        color: root.color;
+        font-size: 12px;
+        font-family: "Menlo";
+    }
+}
+
+// The web's stats panel, top left of the stage. Engineering text: English only, as on the web.
+export component StatsOverlay inherits Rectangle {
+    in property <bool> open;
+    in property <StatsView> stats;
+    in property <bool> force-relay;
+    callback set-force-relay(bool);
+
+    width: rows.preferred-width;
+    height: rows.preferred-height;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.glass-border;
+    background: Theme.glass;
+    opacity: open ? 1 : 0;
+    visible: self.opacity > 0;
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
+
+    rows := VerticalLayout {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 2px;
+        Row { name: "Path"; value: stats.path; }
+        Row {
+            name: "RTT";
+            value: stats.rtt;
+            color: stats.rtt-level == 0 ? Theme.good : stats.rtt-level == 1 ? Theme.ok : stats.rtt-level == 2 ? Theme.bad : Theme.text;
+        }
+        Row { name: "Loss in / out"; value: stats.loss; }
+        Row { name: "Jitter"; value: stats.jitter; }
+        Row { name: "Down / Up"; value: stats.rates; }
+        Row { name: "Send budget"; value: stats.budget; }
+        Row { name: "Video in"; value: stats.video-in; }
+        Row {
+            name: "Video out";
+            value: stats.video-out + (stats.limited-by != "" ? " (" + stats.limited-by + ")" : "");
+            color: stats.limited-by != "" ? Theme.bad : Theme.text;
+        }
+        Row { name: "Convert"; value: stats.convert; }
+
+        HorizontalLayout {
+            padding-top: 8px;
+            spacing: 6px;
+            accessible-role: checkbox;
+            accessible-label: "Force TURN relay";
+            accessible-checked: force-relay;
+            accessible-action-default => { root.set-force-relay(!force-relay); }
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                border-width: force-relay ? 0 : 1px;
+                border-color: Theme.border-strong;
+                background: force-relay ? Theme.accent : transparent;
+                Image {
+                    source: @image-url("../icons/check.svg");
+                    width: 10px;
+                    height: 10px;
+                    visible: force-relay;
+                }
+            }
+            Text {
+                text: "Force TURN relay";
+                color: Theme.text;
+                font-size: 12px;
+                font-family: "Menlo";
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.set-force-relay(!force-relay); }
+                }
+            }
+        }
+    }
+}

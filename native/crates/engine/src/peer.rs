@@ -8,23 +8,33 @@ use std::time::Duration;
 use libwebrtc::MediaType;
 use libwebrtc::ice_candidate::IceCandidate;
 use libwebrtc::media_stream_track::MediaStreamTrack;
-use libwebrtc::peer_connection::{IceConnectionState, OfferOptions, PeerConnection, SignalingState};
-use libwebrtc::peer_connection_factory::{IceServer, PeerConnectionFactory, RtcConfiguration};
-use libwebrtc::rtp_parameters::Priority;
+use libwebrtc::peer_connection::{IceConnectionState, OfferOptions, PeerConnection, SignalingState, TrackEvent};
+use libwebrtc::peer_connection_factory::{IceServer, IceTransportsType, PeerConnectionFactory, RtcConfiguration};
+use libwebrtc::rtp_parameters::{DegradationPreference, Priority};
 use libwebrtc::rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit};
 use libwebrtc::session_description::{SdpType, SessionDescription};
+use libwebrtc::video_track::RtcVideoTrack;
 use protocol::{IceServerConfig, SessionDescription as Description, SignalPayload};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{Instant, sleep_until};
+use tokio::time::{Instant, interval, sleep_until};
+
+use crate::stats::{self, CallStats, Counters};
 
 const DISCONNECTED_GRACE: Duration = Duration::from_secs(4);
 const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
+const STATS_EVERY: Duration = Duration::from_secs(1);
+// Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss
+const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 
-#[derive(Debug)]
 pub enum PeerEvent {
     Signal(SignalPayload),
     IceState(IceConnectionState),
+    /// A video track from the other side
+    RemoteVideo {
+        track: RtcVideoTrack,
+    },
+    Stats(Box<CallStats>),
 }
 
 enum Input {
@@ -32,11 +42,14 @@ enum Input {
     Negotiate,
     Candidate(IceCandidate),
     IceState(IceConnectionState),
+    Track(TrackEvent),
     RestartIce,
+    ForceRelay(bool),
 }
 
 pub struct PeerConfig {
     pub ice_servers: Vec<IceServerConfig>,
+    pub force_relay: bool,
     pub polite: bool,
     /// The stream id our mic (and later camera) is sent in; the other side groups tracks by it.
     pub stream_id: String,
@@ -55,9 +68,10 @@ impl Peer {
         factory: &PeerConnectionFactory,
         config: PeerConfig,
         mic: Option<MediaStreamTrack>,
+        camera: MediaStreamTrack,
         events: mpsc::UnboundedSender<PeerEvent>,
     ) -> Result<Self, libwebrtc::RtcError> {
-        let pc = factory.create_peer_connection(rtc_config(&config.ice_servers))?;
+        let pc = factory.create_peer_connection(rtc_config(&config.ice_servers, config.force_relay))?;
         let (input, input_rx) = mpsc::unbounded_channel();
 
         // Everything comes through one queue, so candidates go out after the description they belong to and
@@ -74,6 +88,10 @@ impl Peer {
         pc.on_ice_connection_state_change(Some(Box::new(move |state| {
             let _ = tx.send(Input::IceState(state));
         })));
+        let tx = input.clone();
+        pc.on_track(Some(Box::new(move |event| {
+            let _ = tx.send(Input::Track(event));
+        })));
 
         let stream_ids = vec![config.stream_id.clone()];
         match mic {
@@ -84,10 +102,14 @@ impl Peer {
                 pc.add_transceiver_for_media(MediaType::Audio, init(RtpTransceiverDirection::SendRecv, &stream_ids))?;
             }
         }
+        // add_track, not add_transceiver: the other side's offer can then reuse this transceiver instead of adding one
+        pc.add_track(camera, &stream_ids)?;
 
         let session = Session {
             pc,
             polite: config.polite,
+            ice_servers: config.ice_servers,
+            counters: None,
             ignore_offer: false,
             last_restart: None,
             disconnected_since: None,
@@ -105,13 +127,18 @@ impl Peer {
     pub fn restart_ice(&self) {
         let _ = self.input.send(Input::RestartIce);
     }
+
+    /// Sends everything through our TURN server, for testing the relay path from the stats overlay.
+    pub fn set_force_relay(&self, relay: bool) {
+        let _ = self.input.send(Input::ForceRelay(relay));
+    }
 }
 
 fn init(direction: RtpTransceiverDirection, stream_ids: &[String]) -> RtpTransceiverInit {
     RtpTransceiverInit { direction, stream_ids: stream_ids.to_vec(), send_encodings: vec![] }
 }
 
-fn rtc_config(servers: &[IceServerConfig]) -> RtcConfiguration {
+fn rtc_config(servers: &[IceServerConfig], relay: bool) -> RtcConfiguration {
     let mut config = RtcConfiguration::default();
     config.ice_servers = servers
         .iter()
@@ -121,12 +148,15 @@ fn rtc_config(servers: &[IceServerConfig]) -> RtcConfiguration {
             password: s.credential.clone().unwrap_or_default(),
         })
         .collect();
+    config.ice_transport_type = if relay { IceTransportsType::Relay } else { IceTransportsType::All };
     config
 }
 
 struct Session {
     pc: PeerConnection,
     polite: bool,
+    ice_servers: Vec<IceServerConfig>,
+    counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
     disconnected_since: Option<Instant>,
@@ -135,12 +165,14 @@ struct Session {
 
 impl Session {
     async fn run(mut self, mut input: mpsc::UnboundedReceiver<Input>, mut closed: oneshot::Receiver<()>) {
+        let mut stats = interval(STATS_EVERY);
         loop {
             let grace = self.disconnected_since.map(|since| since + DISCONNECTED_GRACE);
             tokio::select! {
                 // The Peer was dropped
                 _ = &mut closed => break,
                 Some(msg) = input.recv() => self.handle(msg).await,
+                _ = stats.tick() => self.sample_stats().await,
                 () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
                     self.disconnected_since = None;
                     self.restart_ice();
@@ -150,6 +182,7 @@ impl Session {
         self.pc.on_negotiation_needed(None);
         self.pc.on_ice_candidate(None);
         self.pc.on_ice_connection_state_change(None);
+        self.pc.on_track(None);
         self.pc.close();
     }
 
@@ -175,7 +208,20 @@ impl Session {
                 }
                 self.emit(PeerEvent::IceState(state));
             }
+            Input::Track(event) => {
+                if let MediaStreamTrack::Video(track) = event.track {
+                    self.emit(PeerEvent::RemoteVideo { track });
+                }
+                // Audio plays through the platform audio device by itself
+            }
             Input::RestartIce => self.restart_ice(),
+            Input::ForceRelay(relay) => {
+                if let Err(e) = self.pc.set_configuration(rtc_config(&self.ice_servers, relay)) {
+                    tracing::warn!("couldn't change the relay policy: {}", e.message);
+                }
+                self.last_restart = None;
+                self.restart_ice();
+            }
         }
     }
 
@@ -244,24 +290,42 @@ impl Session {
         }));
     }
 
-    /// The mic gets priority so voices survive congestion. Video caps arrive with the camera.
+    /// Like the web's tuneSenders: caps the camera's bitrate and has it give up resolution rather than frame rate
+    /// when bandwidth runs short (a smaller clean picture beats a blocky one), and gives the mic priority so voices
+    /// survive congestion. Encodings only exist after negotiation, so this runs after every description change.
     fn tune_senders(&self) {
         for transceiver in self.pc.transceivers() {
             let sender = transceiver.sender();
-            if !matches!(sender.track(), Some(MediaStreamTrack::Audio(_))) {
-                continue;
-            }
+            let video = match sender.track() {
+                Some(MediaStreamTrack::Video(_)) => true,
+                Some(MediaStreamTrack::Audio(_)) => false,
+                None => continue,
+            };
             let mut params = sender.parameters();
             if params.encodings.is_empty() {
                 continue;
             }
             for enc in &mut params.encodings {
-                enc.priority = Priority::High;
+                if video {
+                    enc.max_bitrate = Some(VIDEO_MAX_BITRATE);
+                } else {
+                    enc.priority = Priority::High;
+                }
+            }
+            if video {
+                params.set_degradation_preference(DegradationPreference::MaintainFramerate);
             }
             if let Err(e) = sender.set_parameters(params) {
-                tracing::debug!("couldn't raise the mic's priority: {}", e.message);
+                tracing::debug!("couldn't tune a sender: {}", e.message);
             }
         }
+    }
+
+    async fn sample_stats(&mut self) {
+        let Ok(report) = self.pc.get_stats().await else { return };
+        let (stats, counters) = stats::sample(&report, self.counters.as_ref(), Instant::now().into_std());
+        self.counters = Some(counters);
+        self.emit(PeerEvent::Stats(Box::new(stats)));
     }
 
     fn restart_ice(&mut self) {

@@ -4,7 +4,7 @@ import { Icons } from "../components/icons.slint";
 export struct DeviceItem { id: string, label: string }
 
 // Device picker like the web's DeviceRow: the picked device in a bordered row, the others in a list that drops
-// down under it. With no device it says so instead.
+// down under it. When the device can't be used, `status` says why instead.
 export component DeviceRow inherits Rectangle {
     in property <image> icon;
     in property <string> name;
@@ -12,10 +12,14 @@ export component DeviceRow inherits Rectangle {
     in property <string> selected;
     // Slint expressions can't search a model, so the bridge passes the picked device's label too
     in property <string> selected-label;
+    // "Microphone: Not found" and the like; empty when the device works
+    in property <string> status;
+    // Waiting for permission rather than refused: muted, not red
+    in property <bool> pending;
     callback picked(string);
 
-    property <bool> can-pick: devices.length > 1;
-    property <bool> missing: devices.length == 0;
+    property <bool> can-pick: status == "" && devices.length > 1;
+    property <bool> missing: status != "" && !pending;
 
     height: 46px;
     border-radius: Theme.radius-sm;
@@ -40,8 +44,8 @@ export component DeviceRow inherits Rectangle {
             }
         }
         Text {
-            text: missing ? @tr("{}: Not found", name) : selected-label;
-            color: missing ? Theme.danger-text : Theme.text;
+            text: status != "" ? status : selected-label;
+            color: missing ? Theme.danger-text : status != "" ? Theme.muted : Theme.text;
             font-size: Theme.font-size-small;
             vertical-alignment: center;
             overflow: elide;
