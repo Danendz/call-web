@@ -5,6 +5,7 @@ mod bridge;
 mod chat;
 mod screenshot;
 mod settings;
+mod update;
 mod video;
 mod window;
 
@@ -36,6 +37,8 @@ thread_local! {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Velopack's install, uninstall and update hooks run here and may end the process, so before anything else
+    velopack::VelopackApp::build().run();
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
@@ -49,10 +52,26 @@ fn main() -> anyhow::Result<()> {
     // Only works once a component exists
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
+    ui.set_version(env!("CARGO_PKG_VERSION").into());
 
     let bridge = Bridge::new(&ui, lang);
     let call_started = bridge.call_started.clone();
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
+
+    let updater = update::Updater::start(&server, {
+        let weak = ui.as_weak();
+        move |version| {
+            let _ = weak.upgrade_in_event_loop(move |ui| ui.set_update_version(version.into()));
+        }
+    });
+    ui.on_update_now({
+        let updater = updater.clone();
+        move || {
+            if let Some(updater) = &updater {
+                updater.restart_now();
+            }
+        }
+    });
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
@@ -247,6 +266,9 @@ fn main() -> anyhow::Result<()> {
     // Dropping the engine leaves the room before the process ends
     drop(ui);
     drop(engine);
+    if let Some(updater) = updater {
+        updater.install_on_exit();
+    }
     Ok(())
 }
 

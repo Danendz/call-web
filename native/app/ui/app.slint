@@ -54,6 +54,9 @@ export component AppWindow inherits Window {
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
     in property <string> saved-shot;
+    in property <string> version;
+    // Set once an update has downloaded; it installs on quit, or now from the start screen
+    in property <string> update-version;
 
     // The web's deviceStatus: why a device can't be used
     property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
@@ -82,6 +85,7 @@ export component AppWindow inherits Window {
     callback close-screen-picker();
     callback corner-moved(string, string);
     callback show-shot();
+    callback update-now();
 
     title: "Call Danya";
     icon: Icons.video;
@@ -93,6 +97,9 @@ export component AppWindow inherits Window {
     default-font-size: Theme.font-size;
 
     if phase == AppPhase.start: StartScreen {
+        version: root.version;
+        update-version: root.update-version;
+        update-now => { root.update-now(); }
         new-room => { root.new-room(); }
         open-link(link) => { root.open-link(link) }
     }

@@ -1,0 +1,6 @@
+# zip 8.6, through velopack 1.2.161 (the latest stable; only the 1.3 preview has zip 9). All four are about
+# extracting a malicious archive. Updates only come from our own releases bucket and are checked against the
+# SHA256 in its feed, and anyone who can write to the bucket can already ship any code. Drop these once a stable
+# Velopack uses zip 9, moving the crate and vpk (native.yml) together.
+[advisories]
+ignore = ["RUSTSEC-2026-0367", "RUSTSEC-2026-0368", "RUSTSEC-2026-0369", "RUSTSEC-2026-0429"]

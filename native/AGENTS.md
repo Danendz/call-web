@@ -43,8 +43,8 @@ native/
 
 ## Reachable from China
 
-- The binary must not contact anything but our server (`call.danendz.com` in release builds, `http://localhost:8090` in debug builds; `CALL_SERVER` env overrides either) and our coturn. No crash reporters, analytics, update checks or crates that phone home.
-- Build-time downloads (Skia, libwebrtc prebuilt) are fine; nothing is downloaded at runtime.
+- The binary must not contact anything but our server (`call.danendz.com` in release builds, `http://localhost:8090` in debug builds; `CALL_SERVER` env overrides either) and our coturn. Updates come from our server too (`/updates`, see Distribution). No crash reporters, analytics or crates that phone home.
+- Build-time downloads (Skia, libwebrtc prebuilt) are fine. At runtime the app downloads only from our own server (app updates, speech models), never from Hugging Face, GitHub or other third-party hosts, and checks each downloaded file against a SHA-256 built into the binary before using it.
 
 ## WebRTC
 
@@ -58,6 +58,12 @@ native/
 - **Screenshots** are drawn with Skia (`skia-safe`, pinned to the version Slint's renderer uses, so nothing extra is built) from the frames on screen.
 - **macOS needs the app bundle** (`packaging/macos/`) for mic and camera permission prompts; a bare binary borrows the terminal's permissions, which in dev is often "denied", so a dev build sends silence.
 
+## Distribution
+
+- **Velopack** (`velopack` crate, `vpk` CLI, same pinned version in `app/Cargo.toml` and `native.yml`) installs the app per user and updates it (`app/src/update.rs`): it checks `{server}/updates` at launch and every 4 hours, downloads quietly, and installs on quit or from the start screen's "Update to …" button, never during a call. A dev build isn't installed, so it skips all of this.
+- **A release is a version bump.** Raise `version` in `app/Cargo.toml` on a `bump/*` branch; when it merges to `main`, CI builds both OSes and `packaging/release.sh` packs them and uploads to the Railway `releases` bucket, which the server serves at `/updates/*` (`server/updates.ts`). Feed `releases.{win,osx}.json`, first installs `CallDanya-win-Setup.exe` and `CallDanya-osx-Setup.pkg` (or `-Portable.zip`).
+- **Signing costs nothing:** Windows is unsigned (SmartScreen "Run anyway" once; add the install folder, `%LocalAppData%\CallDanya`, to an antivirus's trust list if it flags an update). macOS is signed with our self-signed "Call Danya" certificate (`MACOS_CERT_P12` secret) and the hardened runtime with `packaging/macos/call-danya.entitlements`, so camera, mic and screen recording permissions survive updates; first install is right-click → Open. Replacing the certificate makes macOS ask for those permissions once more.
+
 ## Before saying it's done
 
 From `native/`:
@@ -69,7 +75,7 @@ cargo test
 cargo build --release
 ```
 
-CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds only build: they make the installable artifacts and are the only compile of Windows-only code (which no CI lints, so keep it clippy-clean by eye), and still take a while, so they run on `main`, on new commits pushed to a `build/**` branch, or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Start one (or push to a `build/**` branch) only when the user asks for a build; don't offer to. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
+CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds only build: they make the installable artifacts and are the only compile of Windows-only code (which no CI lints, so keep it clippy-clean by eye), and still take a while, so they run on new commits pushed to a `build/**` branch, for a release (a version bump merged to `main`, see Distribution), or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Start one (or push to a `build/**` branch) only when the user asks for a build; don't offer to. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
 
 When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `cargo run` here (a debug build uses `http://localhost:8090` unless `CALL_SERVER` says otherwise). Leave real two-person calls to the user.
 

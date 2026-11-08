@@ -70,6 +70,8 @@ railway variable set --service web TURN_SECRET=<static-auth-secret>  # kept out 
 railway domain call.danendz.com --service web                       # IaC can't register custom domains
 ```
 
+The `releases` bucket holds native app releases, uploaded by CI and served at `/updates/*` by the web service, which gets the bucket's credentials as `RELEASES_*` variables from the IaC. CI needs the same values as GitHub secrets (`RELEASES_ENDPOINT`, `RELEASES_BUCKET`, `RELEASES_KEY_ID`, `RELEASES_SECRET`; `railway bucket credentials` shows them), plus `MACOS_CERT_P12` (base64 of the self-signed "Call Danya" code-signing certificate's .p12) and `MACOS_CERT_PASSWORD`. See `native/AGENTS.md` (Distribution).
+
 The service is connected to GitHub `Danendz/call-web` (branch `main`): every push to `main` deploys automatically. `railway up --service web --ci` still works for deploying an uncommitted working copy.
 
 `railway domain` prints the CNAME target and a `_railway-verify.call` TXT record. Add both in Cloudflare as DNS only.

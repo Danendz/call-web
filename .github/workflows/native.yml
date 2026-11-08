@@ -1,8 +1,10 @@
-# Checks and builds the native app. Pull requests get fmt, clippy and tests on macOS; the macOS and Windows release
-# builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner) and run on `main`, on `build/**` branches (push a branch there to get
-# installable artifacts) and when started by hand from the Actions tab. Builds are unsigned until M6: macOS needs
-# right-click → Open the first time, Windows SmartScreen needs "Run anyway". The first build of a cache downloads
-# prebuilt WebRTC (~200 MB).
+# Checks, builds and releases the native app. Pull requests get fmt, clippy and tests on macOS. The macOS and Windows
+# release builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner): test
+# builds run on `build/**` branches (push a branch there to get installable artifacts) and when started by hand from
+# the Actions tab. A merge to `main` that bumps app/Cargo.toml's version (from a `bump/*` branch) builds and publishes
+# a release with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh). Windows
+# is unsigned (SmartScreen needs "Run anyway" on the first install); macOS is signed with our self-signed certificate
+# (right-click → Open on the first install). The first build of a cache downloads prebuilt WebRTC (~200 MB).
 name: native
 
 on:
@@ -15,7 +17,8 @@ on:
 
 concurrency:
   group: native-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cut off a release halfway through its upload
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   fixtures:
@@ -50,7 +53,7 @@ jobs:
       - run: cargo test --locked
 
   build:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/build/')
     strategy:
       fail-fast: false
       matrix:
@@ -73,3 +76,51 @@ jobs:
             native/target/release/call-danya-macos.zip
             native/target/release/call-danya.exe
           if-no-files-found: error
+
+  # Is app/Cargo.toml's version missing from either channel of the published feed? Only then is a release built.
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' native/app/Cargo.toml)
+          release=false
+          for channel in win osx; do
+            curl -fsS "https://call.danendz.com/updates/releases.$channel.json" | grep -q "\"Version\": *\"$version\"" || release=true
+          done
+          echo "$version: release=$release"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: native
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      # Same version as the velopack crate in app/Cargo.toml
+      - run: dotnet tool install -g vpk --version 1.2.161
+      - run: cargo build --release --locked
+      - run: packaging/release.sh
+        env:
+          RELEASES_ENDPOINT: ${{ secrets.RELEASES_ENDPOINT }}
+          RELEASES_BUCKET: ${{ secrets.RELEASES_BUCKET }}
+          RELEASES_KEY_ID: ${{ secrets.RELEASES_KEY_ID }}
+          RELEASES_SECRET: ${{ secrets.RELEASES_SECRET }}
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
