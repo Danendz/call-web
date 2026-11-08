@@ -21,7 +21,7 @@ import { Transcriber, type SpeechNotice } from "./speech/transcriber";
 import { sampleStats, type CallStats } from "./stats";
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
-// through Singapore, and a P2P attempt that failed at call start often works a few minutes later.
+// through the relay, and a P2P attempt that failed at call start often works a few minutes later.
 const DIRECT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
 const TRYING_DIRECT_SHOWN_MS = 5_000;
 
