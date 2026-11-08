@@ -170,7 +170,14 @@ fn empty_stats() -> StatsView {
 
 fn fmt_video(v: Option<&VideoStats>) -> String {
     match v {
-        Some(v) if v.width > 0 => format!("{}×{} @ {}", v.width, v.height, fmt(Some(v.fps), "fps", 0)),
+        Some(v) if v.width > 0 => {
+            let size = format!("{}×{} @ {}", v.width, v.height, fmt(Some(v.fps), "fps", 0));
+            match (&v.codec, &v.implementation) {
+                (Some(codec), Some(by)) => format!("{size} · {codec} ({by})"),
+                (Some(codec), None) => format!("{size} · {codec}"),
+                _ => size,
+            }
+        }
         _ => "—".to_owned(),
     }
 }

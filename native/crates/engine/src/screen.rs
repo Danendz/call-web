@@ -1,7 +1,7 @@
 //! Sharing your screen, sent alongside the camera like the web's. macOS shows its own picker (ScreenCaptureKit);
 //! Windows has none, so the app lists screens and windows itself (captured with Windows Graphics Capture). Frames are
-//! captured at up to 60 fps, scaled to fit 1080p, and sent through a screencast video source, which tells the encoder
-//! to keep text sharp: when bandwidth runs short it drops frames, not detail. The sound goes with it
+//! captured at up to 60 fps, scaled to fit 1080p, and sent through a screencast video source, which tunes the encoder
+//! for text and sharp edges; what it gives up when bandwidth runs short is set in `peer.rs`. The sound goes with it
 //! ([`crate::screen_audio`]).
 
 use std::sync::Arc;
@@ -214,7 +214,7 @@ pub(crate) struct LocalScreen {
 
 impl LocalScreen {
     pub(crate) fn new(factory: &PeerConnectionFactory) -> Self {
-        // Screencast: the encoder keeps detail and drops frames rather than blurring text
+        // Screencast: the encoder is tuned for text and sharp edges
         let source = NativeVideoSource::new(VideoResolution { width: 1920, height: 1080 }, true);
         let track = factory.create_video_track(crate::peer::SCREEN_TRACK, source.clone());
         let audio_source = screen_audio::source();

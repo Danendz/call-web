@@ -105,7 +105,9 @@ export function saveOrientation(orientation: Orientation): void {
  * other person back to them.
  */
 export async function getDisplayMedia(): Promise<MediaStream> {
-  const video = { frameRate: 15 };
+  // As smooth as the browser can capture: a playing video or a game needs it, and short of bandwidth the encoder
+  // lowers the frame rate itself
+  const video = { frameRate: { ideal: 60 } };
   // Chrome-only fields, not in TypeScript's DOM types yet
   const withAudio: DisplayMediaStreamOptions & { selfBrowserSurface: string; systemAudio: string } = {
     video,

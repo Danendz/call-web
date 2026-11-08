@@ -30,9 +30,10 @@ const STATS_EVERY: Duration = Duration::from_secs(1);
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 // A camera that gives 60 fps gets half again, so its frames aren't blurrier than at 30
 const VIDEO_60FPS_MAX_BITRATE: u64 = 3_000_000;
-// While sharing: most for the screen at up to 60 fps (short of bandwidth, the encoder drops frames, not detail), and
-// a small face for the camera at 30
-const SHARE_SCREEN_BITRATE: u64 = 3_000_000;
+// While sharing: the screen at up to 60 fps, and a small face for the camera at 30. The screen's cap is only a
+// ceiling: congestion control finds what the path carries below it, so a LAN or a good link gets a sharp, smooth
+// screen (a playing video needs far more than text), and a weak one isn't hurt
+const SHARE_SCREEN_BITRATE: u64 = 15_000_000;
 const SHARE_SCREEN_FPS: f64 = 60.0;
 const SHARE_CAMERA_BITRATE: u64 = 400_000;
 const SHARE_CAMERA_FPS: f64 = 30.0;
@@ -357,10 +358,10 @@ impl Session {
     }
 
     /// Like the web's tuneSenders: caps video bitrate and tells the encoder what to give up when bandwidth runs
-    /// short: resolution for the camera (a smaller clean picture beats a blocky one), frame rate for the screen (text
-    /// must stay readable). While sharing, the camera shrinks to a small face so the screen gets the bandwidth. The
-    /// mic gets priority so voices survive congestion. Encodings only exist after negotiation, so this runs after
-    /// every description change.
+    /// short: resolution for the camera (a smaller clean picture beats a blocky one), some of both for the screen (a
+    /// playing video stays watchable instead of freezing, and text is sharp again once it settles). While sharing,
+    /// the camera shrinks to a small face so the screen gets the bandwidth. The mic gets priority so voices survive
+    /// congestion. Encodings only exist after negotiation, so this runs after every description change.
     fn tune_senders(&self) {
         let sharing = self.sharing;
         let camera_60 = crate::camera::fps() > 30;
@@ -394,7 +395,7 @@ impl Session {
             }
             if video {
                 params.set_degradation_preference(if screen {
-                    DegradationPreference::MaintainResolution
+                    DegradationPreference::Balanced
                 } else {
                     DegradationPreference::MaintainFramerate
                 });
