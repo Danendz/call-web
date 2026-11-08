@@ -80,8 +80,15 @@ impl Output {
     }
 
     fn deliver<T: AsRef<dyn VideoBuffer>>(&self, buffer: T) {
+        self.deliver_turned(buffer, VideoRotation::VideoRotation0);
+    }
+
+    /// A frame that shows upright once turned clockwise by `rotation`. WebRTC sends the turn along and the other side
+    /// draws it turned; it turns the pixels itself only for a receiver that can't.
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    fn deliver_turned<T: AsRef<dyn VideoBuffer>>(&self, buffer: T, rotation: VideoRotation) {
         let frame = VideoFrame {
-            rotation: VideoRotation::VideoRotation0,
+            rotation,
             timestamp_us: i64::try_from(self.epoch.elapsed().as_micros()).unwrap_or(i64::MAX),
             frame_metadata: None,
             buffer,

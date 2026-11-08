@@ -42,6 +42,7 @@ export component CallScreen inherits Rectangle {
     in property <int> peer-frame-rotation;
     in property <bool> peer-cam-on;
     in property <image> self-video;
+    in property <int> self-frame-rotation;
     in property <StatsView> stats;
     in property <bool> force-relay;
     in property <[ChatRow]> chat;
@@ -206,6 +207,7 @@ export component CallScreen inherits Rectangle {
             peer-video: root.peer-video;
             screen-video: root.screen-video;
             self-video: root.self-video;
+            self-rotation: root.self-frame-rotation;
             peer-rotation: root.peer-frame-rotation + root.user-rotation;
             has-peer: root.connected;
             has-screen: root.connected && root.remote-screen;
@@ -414,7 +416,9 @@ export component CallScreen inherits Rectangle {
                 root.flash = true;
                 flash-timer.running = true;
                 flash-timer.restart();
-                root.screenshot(feeds.main-feed, feeds.main-feed == "peer" ? root.peer-frame-rotation + root.user-rotation : 0);
+                root.screenshot(feeds.main-feed,
+                    feeds.main-feed == "peer" ? root.peer-frame-rotation + root.user-rotation
+                    : feeds.main-feed == "self" ? root.self-frame-rotation : 0);
             }
             sharing: root.sharing;
             can-share: root.connected;

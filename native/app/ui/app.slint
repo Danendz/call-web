@@ -42,6 +42,8 @@ export component AppWindow inherits Window {
     in property <string> corner-peer: "tr";
     in property <string> corner-screen: "tl";
     in property <int> peer-frame-rotation;
+    // Clockwise degrees that turn our camera's frames upright: a phone's sensor lies sideways
+    in property <int> self-frame-rotation;
     // Android's picture-in-picture window is up
     in property <bool> pip;
     in property <bool> peer-cam-on: true;
@@ -160,6 +162,7 @@ export component AppWindow inherits Window {
             mic-level: root.mic-level;
             mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
             video: root.self-video;
+            video-rotation: root.self-frame-rotation;
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cam-pending: root.cam-access == CamAccess.pending;
@@ -207,6 +210,7 @@ export component AppWindow inherits Window {
             peer-frame-rotation: root.peer-frame-rotation;
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;
+            self-frame-rotation: root.self-frame-rotation;
             stats: root.stats;
             force-relay: root.force-relay;
             chat: root.chat;

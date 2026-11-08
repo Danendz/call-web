@@ -77,39 +77,40 @@ pub(crate) struct Yuv420<'a> {
     pub uv_pixel_stride: usize,
 }
 
-/// The crop of a [`Yuv420`] picture turned clockwise by `rotation` (0, 90, 180 or 270), as an upright I420 frame: a
-/// phone's camera sensor lies sideways in it.
+/// The crop of a [`Yuv420`] picture as an I420 frame, as the sensor sees it. Turning it upright is left to whoever
+/// draws it (the frame says how far): turning here cost a third of a phone's core at 720p.
 #[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
-pub(crate) fn yuv420_to_i420(src: &Yuv420<'_>, crop: Crop, rotation: u32) -> Option<I420Buffer> {
+pub(crate) fn yuv420_to_i420(src: &Yuv420<'_>, crop: Crop) -> Option<I420Buffer> {
     if crop.width == 0 || crop.height == 0 {
         return None;
     }
-    let sideways = rotation % 180 == 90;
-    let (w, h) = if sideways { (crop.height, crop.width) } else { (crop.width, crop.height) };
-    let mut out = I420Buffer::new(w, h);
+    let mut out = I420Buffer::new(crop.width, crop.height);
     let (sy, su, sv) = out.strides();
     let (dy, du, dv) = out.data_mut();
-    // Where the output's pixel (x, y) is in the crop of a plane `cw` x `ch` pixels big
-    let at = |x: usize, y: usize, cw: usize, ch: usize| match rotation {
-        90 => (y, ch - 1 - x),
-        180 => (cw - 1 - x, ch - 1 - y),
-        270 => (cw - 1 - y, x),
-        _ => (x, y),
-    };
-    let (w, h, cw, ch) = (w as usize, h as usize, crop.width as usize, crop.height as usize);
-    let (x0, y0) = (crop.x as usize, crop.y as usize);
-    for row in 0..h {
-        for col in 0..w {
-            let (x, y) = at(col, row, cw, ch);
-            *dy.get_mut(row * sy as usize + col)? = *src.y.get((y0 + y) * src.y_stride + x0 + x)?;
-        }
+    let (w, x0, y0) = (crop.width as usize, crop.x as usize, crop.y as usize);
+    let (sy, su, sv) = (sy as usize, su as usize, sv as usize);
+    for row in 0..crop.height as usize {
+        let from = (y0 + row) * src.y_stride + x0;
+        dy.get_mut(row * sy..row * sy + w)?.copy_from_slice(src.y.get(from..from + w)?);
     }
-    for row in 0..h / 2 {
-        for col in 0..w / 2 {
-            let (x, y) = at(col, row, cw / 2, ch / 2);
-            let from = (y0 / 2 + y) * src.uv_stride + (x0 / 2 + x) * src.uv_pixel_stride;
-            *du.get_mut(row * su as usize + col)? = *src.u.get(from)?;
-            *dv.get_mut(row * sv as usize + col)? = *src.v.get(from)?;
+    let step = src.uv_pixel_stride.max(1);
+    // The last sample of a row, not the stride past it: Android's U plane ends one byte short when it interleaves
+    let len = (w / 2 - 1) * step + 1;
+    for row in 0..crop.height as usize / 2 {
+        let from = (y0 / 2 + row) * src.uv_stride + x0 / 2 * step;
+        let (u, v) = (src.u.get(from..from + len)?, src.v.get(from..from + len)?);
+        let u_out = du.get_mut(row * su..row * su + w / 2)?;
+        let v_out = dv.get_mut(row * sv..row * sv + w / 2)?;
+        if step == 1 {
+            u_out.copy_from_slice(u);
+            v_out.copy_from_slice(v);
+        } else {
+            for (out, sample) in u_out.iter_mut().zip(u.iter().step_by(step)) {
+                *out = *sample;
+            }
+            for (out, sample) in v_out.iter_mut().zip(v.iter().step_by(step)) {
+                *out = *sample;
+            }
         }
     }
     Some(out)
@@ -145,8 +146,6 @@ pub(crate) fn yuyv_to_i420(src: &[u8], stride: u32, crop: Crop) -> Option<I420Bu
 
 #[cfg(test)]
 mod tests {
-    use libwebrtc::prelude::VideoBuffer;
-
     use super::*;
 
     #[test]
@@ -201,35 +200,22 @@ mod tests {
     }
 
     #[test]
-    fn yuv420_turns_a_sideways_sensor_upright() {
-        // 4x2 picture with interleaved chroma (NV21: V first, U one byte on), turned 90° clockwise into 2x4. The U
-        // plane is one byte short of V, as Android hands it
+    fn yuv420_crops_interleaved_chroma() {
+        // 4x2 picture with interleaved chroma (NV21: V first, U one byte on), cropped to the middle 2x2. The U plane
+        // is one byte short of V, as Android hands it
         let y = [1, 2, 3, 4, 5, 6, 7, 8];
         let vu = [20, 10, 21, 11];
         let src = Yuv420 { y: &y, y_stride: 4, u: &vu[1..], v: &vu, uv_stride: 4, uv_pixel_stride: 2 };
-        let out = yuv420_to_i420(&src, Crop::new(4, 2, false), 90).unwrap();
+        let crop = Crop { x: 2, y: 0, width: 2, height: 2 };
+        let out = yuv420_to_i420(&src, crop).unwrap();
         let (oy, u, v) = out.data();
         let (sy, ..) = out.strides();
-        let rows: Vec<&[u8]> = (0..4).map(|r| &oy[r * sy as usize..r * sy as usize + 2]).collect();
-        assert_eq!(rows, [&[5, 1][..], &[6, 2], &[7, 3], &[8, 4]]);
-        assert_eq!((u[0], v[0]), (10, 20));
-        assert_eq!((out.width(), out.height()), (2, 4));
-    }
-
-    #[test]
-    fn yuv420_turned_the_other_ways() {
-        let y = [1, 2, 3, 4, 5, 6, 7, 8];
-        let (u, v) = ([0; 2], [0; 2]);
-        let src = Yuv420 { y: &y, y_stride: 4, u: &u, v: &v, uv_stride: 2, uv_pixel_stride: 1 };
-        let luma = |rotation| {
-            let out = yuv420_to_i420(&src, Crop::new(4, 2, false), rotation).unwrap();
-            let (sy, ..) = out.strides();
-            let (w, h) = (out.width() as usize, out.height() as usize);
-            (0..h).flat_map(|r| out.data().0[r * sy as usize..r * sy as usize + w].to_vec()).collect::<Vec<_>>()
-        };
-        assert_eq!(luma(0), [1, 2, 3, 4, 5, 6, 7, 8]);
-        assert_eq!(luma(180), [8, 7, 6, 5, 4, 3, 2, 1]);
-        assert_eq!(luma(270), [4, 8, 3, 7, 2, 6, 1, 5]);
+        assert_eq!((&oy[..2], &oy[sy as usize..sy as usize + 2]), (&[3, 4][..], &[7, 8][..]));
+        assert_eq!((u[0], v[0]), (11, 21));
+        // The whole picture reaches the U plane's last byte without reading past it
+        let out = yuv420_to_i420(&src, Crop::new(4, 2, false)).unwrap();
+        let (_, u, v) = out.data();
+        assert_eq!((&u[..2], &v[..2]), (&[10, 11][..], &[20, 21][..]));
     }
 
     #[test]
