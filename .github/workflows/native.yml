@@ -2,11 +2,11 @@
 # check in one job, and fmt, clippy and tests on macOS once out of draft. Nothing runs on `main`: builds and releases
 # only run from their own branches, so CI minutes go to them only when asked for (macOS minutes count 10x and Windows
 # 2x against the Actions quota).
-# - `build/**`: every push builds macOS and Windows and uploads installable artifacts. The builds only build (each
-#   extra cargo command is another full compile, ~20 min on a Windows runner).
+# - `build/**`: every push builds macOS, Windows and the signed Android APK and uploads installable artifacts. The
+#   builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner).
 # - `release/<version>`: pushing `main` there (`git push origin main:release/<version>`) builds and publishes that
-#   version with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh), then a
-#   GitHub release `native-v<version>` with that version's native/CHANGELOG.md section and the installers. The commit
+#   version with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh), and the
+#   APK with its android.json (packaging/android/release.sh), then a GitHub release `native-v<version>` with that version's native/CHANGELOG.md section and the installers. The commit
 #   must already be on `main` and the branch name must match app/Cargo.toml's version.
 # Pushes to these branches have no path filter, so a branch with no new commits still builds. Windows is unsigned
 # (SmartScreen needs "Run anyway" on the first install); macOS is signed with our self-signed certificate
@@ -17,7 +17,7 @@ name: native
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml"]
+    paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml", ".github/actions/**"]
   push:
     branches: ["build/**", "release/**"]
   workflow_dispatch:
@@ -60,6 +60,17 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
+  # The Android library on Linux, where the NDK brings its own clang. Linted only: the APK is built for releases
+  check-android:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/android
+        with: { cache-key: check-android }
+      - run: cargo ndk -t arm64-v8a -P 29 clippy -p call-danya --lib -p engine --locked -- -D warnings
+        working-directory: native
+
   build:
     if: startsWith(github.ref, 'refs/heads/build/')
     strategy:
@@ -85,8 +96,27 @@ jobs:
             native/target/release/call-danya.exe
           if-no-files-found: error
 
-  # Only reviewed code is released, under the version the branch names. Is that version missing from either channel of
-  # the published feed? Only then is a release built.
+  build-android:
+    if: startsWith(github.ref, 'refs/heads/build/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/android
+        with: { cache-key: release-android }
+      - run: native/packaging/android/release.sh build
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: call-danya-Android
+          path: native/target/android/*.apk
+          if-no-files-found: error
+
+  # Only reviewed code is released, under the version the branch names. Is that version missing from any channel of
+  # the published feeds (Windows, macOS, Android)? Only then is a release built.
   version:
     if: startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
@@ -108,6 +138,7 @@ jobs:
           for channel in win osx; do
             curl -fsS "https://call.danendz.com/updates/releases.$channel.json" | grep -q "\"Version\": *\"$version\"" || release=true
           done
+          curl -fsS https://call.danendz.com/updates/android.json | grep -q "\"version\": *\"$version\"" || release=true
           echo "$version: release=$release"
           echo "release=$release" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -150,10 +181,35 @@ jobs:
             native/target/velopack/*-Portable.zip
           if-no-files-found: ignore
 
-  # Only once both OSes are published. A private repo's release is a changelog and a backup copy of the installers
+  release-android:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/android
+        with: { cache-key: release-android }
+      - run: native/packaging/android/release.sh
+        env:
+          RELEASES_ENDPOINT: ${{ secrets.RELEASES_ENDPOINT }}
+          RELEASES_BUCKET: ${{ secrets.RELEASES_BUCKET }}
+          RELEASES_KEY_ID: ${{ secrets.RELEASES_KEY_ID }}
+          RELEASES_SECRET: ${{ secrets.RELEASES_SECRET }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      # For the GitHub release; nothing when Android already had the version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-Android
+          path: native/target/android/call-danya-*.apk
+          if-no-files-found: ignore
+
+  # Only once every platform is published. A private repo's release is a changelog and a backup copy of the installers
   # for us; users install and update from call.danendz.com.
   github-release:
-    needs: [version, release]
+    needs: [version, release, release-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -5,25 +5,19 @@
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use protocol::{Lang, MAX_UTTERANCE_S, SpeechClientMessage, SpeechServerMessage, TRANSCRIBE_SAMPLE_RATE};
+use protocol::{MAX_UTTERANCE_S, SpeechClientMessage, SpeechServerMessage, TRANSCRIBE_SAMPLE_RATE};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
+
+use super::{Out, Recognizer, SpeechEvent};
 
 // After a drop, the next utterance reconnects; not sooner than this, so a server that's down isn't hammered
 const RETRY: Duration = Duration::from_secs(2);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 // What may wait for the socket to open: about one long utterance
 const MAX_QUEUED_BYTES: usize = (MAX_UTTERANCE_S * TRANSCRIBE_SAMPLE_RATE * 2) as usize;
-
-#[derive(Debug)]
-pub(crate) enum Out {
-    Start(Lang),
-    Audio(Vec<i16>),
-    End,
-    Cancel,
-}
 
 /// Runs until dropped. Sending never blocks: the socket task does the waiting.
 pub(crate) struct SpeechSocket {
@@ -32,18 +26,20 @@ pub(crate) struct SpeechSocket {
 
 impl SpeechSocket {
     /// `url` is the full `/ws/speech?room=&token=` address; the server's notices come back through `notices`.
-    pub(crate) fn connect(url: Url, notices: mpsc::UnboundedSender<SpeechServerMessage>) -> Self {
+    pub(crate) fn connect(url: Url, notices: mpsc::UnboundedSender<SpeechEvent>) -> Self {
         let (out, rx) = mpsc::unbounded_channel();
         tokio::spawn(run(url, rx, notices));
         Self { out }
     }
+}
 
-    pub(crate) fn send(&self, msg: Out) {
+impl Recognizer for SpeechSocket {
+    fn send(&self, msg: Out) {
         let _ = self.out.send(msg);
     }
 }
 
-async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::UnboundedSender<SpeechServerMessage>) {
+async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::UnboundedSender<SpeechEvent>) {
     let mut retry_at = Instant::now();
     // The first connect goes out at once, like the web's connect(): the first utterance doesn't wait for the
     // handshake, and a server without speech says so before anyone speaks. After a drop, the next utterance
@@ -103,7 +99,7 @@ async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::Unb
                 incoming = ws.next() => match incoming {
                     Some(Ok(Message::Text(text))) => {
                         if let Ok(msg) = serde_json::from_str::<SpeechServerMessage>(&text) {
-                            let _ = notices.send(msg);
+                            let _ = notices.send(SpeechEvent::Server(msg));
                         }
                     }
                     Some(Ok(_)) => {}

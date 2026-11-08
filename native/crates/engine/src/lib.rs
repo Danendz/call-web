@@ -20,7 +20,7 @@ pub use camera::CameraAccess;
 pub use controller::{ChatEvent, Command, Engine, Link, Phase, State};
 pub use media::Device;
 pub use protocol::{ChatMessage, Lang, MAX_CHAT_LENGTH, TranslatedText, Translation};
-pub use speech::SpeechNotice;
+pub use speech::{MODEL_SIZE, ModelStatus, SpeechNotice};
 pub use stats::{CallStats, Path, VideoStats};
 pub use video::{Feed, Frame, VideoSink};
 

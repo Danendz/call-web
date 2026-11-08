@@ -125,6 +125,8 @@ export component Feeds inherits Rectangle {
     in property <image> screen-video;
     // Clockwise degrees: what their frames say plus what the user picked with "Rotate their video"
     in property <int> peer-rotation;
+    // Clockwise degrees that turn our camera's frames upright
+    in property <int> self-rotation;
     in property <bool> has-peer;
     in property <bool> has-self;
     in property <bool> has-screen;
@@ -166,7 +168,7 @@ export component Feeds inherits Rectangle {
     }
     pure function tile-w(a: float) -> length { a >= 1 ? pip-long : pip-long * a }
     pure function tile-h(a: float) -> length { a >= 1 ? pip-long / a : pip-long }
-    property <float> self-aspect: aspect(self-video, false);
+    property <float> self-aspect: aspect(self-video, Math.mod(self-rotation, 180) != 0);
     property <float> peer-aspect: aspect(peer-video, Math.mod(peer-rotation, 180) != 0);
     property <float> screen-aspect: aspect(screen-video, false);
 
@@ -227,6 +229,7 @@ export component Feeds inherits Rectangle {
     }
     you := Feed {
         source: self-video;
+        rotation: self-rotation;
         main: main == "self";
         hidden: !has-self || (only-main && main != "self");
         off: !self-cam-on;

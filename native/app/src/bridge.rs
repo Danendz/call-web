@@ -6,11 +6,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use engine::{CallStats, CameraAccess, ChatEvent, Device, Lang, Link, Path, Phase, SpeechNotice, State, VideoStats};
+use engine::{
+    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, ModelStatus, Path, Phase, SpeechNotice, State, VideoStats,
+};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::chat::{Chat, local_time};
-use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, StatsView};
+use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState, StatsView};
 
 /// What the bridge keeps on the UI thread between states.
 pub struct Bridge {
@@ -95,6 +97,15 @@ impl Bridge {
         ui.set_speech_notice(notice);
         ui.set_speech_paused_until(until.into());
         ui.set_peer_screenshot(state.peer_screenshot);
+        let (model, progress) = match state.model {
+            ModelStatus::Missing => (ModelState::Missing, 0),
+            ModelStatus::Downloading(percent) => (ModelState::Downloading, i32::from(percent)),
+            ModelStatus::Ready => (ModelState::Ready, 100),
+            ModelStatus::Failed => (ModelState::Failed, 0),
+        };
+        ui.set_model_state(model);
+        ui.set_model_progress(progress);
+        ui.set_on_device(state.on_device);
     }
 }
 
@@ -148,6 +159,7 @@ fn stats_view(stats: Option<&CallStats>, trying_direct: bool) -> StatsView {
         video_out: fmt_video(s.video_out.as_ref()).into(),
         limited_by: s.video_out.as_ref().and_then(|v| v.limited_by).unwrap_or_default().into(),
         convert: format!("{:.1} ms", s.convert_ms).into(),
+        camera: format!("{:.1} ms", s.camera_ms).into(),
     }
 }
 
@@ -164,7 +176,8 @@ fn empty_stats() -> StatsView {
         video_in: dash.clone(),
         video_out: dash.clone(),
         limited_by: SharedString::default(),
-        convert: dash,
+        convert: dash.clone(),
+        camera: dash,
     }
 }
 

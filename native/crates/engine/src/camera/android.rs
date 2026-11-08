@@ -3,7 +3,9 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::convert::{Crop, Yuv420, yuv420_to_i420};
+use libwebrtc::video_frame::VideoRotation;
+
+use super::convert::{Crop, Yuv420, timed, yuv420_to_i420};
 use super::{CameraAccess, Output};
 use crate::media::Device;
 
@@ -63,8 +65,14 @@ pub fn frame(planes: &Planes<'_>) {
         uv_stride: planes.uv_stride,
         uv_pixel_stride: planes.uv_pixel_stride,
     };
-    if let Some(buffer) = yuv420_to_i420(&src, crop, planes.rotation) {
-        output.deliver(buffer);
+    let rotation = match planes.rotation {
+        90 => VideoRotation::VideoRotation90,
+        180 => VideoRotation::VideoRotation180,
+        270 => VideoRotation::VideoRotation270,
+        _ => VideoRotation::VideoRotation0,
+    };
+    if let Some(buffer) = timed(|| yuv420_to_i420(&src, crop)) {
+        output.deliver_turned(buffer, rotation);
     }
 }
 

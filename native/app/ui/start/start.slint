@@ -1,12 +1,19 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
+import { SettingsScreen, ModelState } from "settings.slint";
+import { SpeechPrompt } from "speech-prompt.slint";
+
+export { ModelState }
 
 // First screen: a desktop app has no address bar, so the room comes from here.
 export component StartScreen inherits Rectangle {
     in property <string> version;
     in property <string> update-version;
+    // 0–100 while an update downloads, else -1
+    in property <int> update-progress: -1;
     callback update-now();
     callback new-room();
     callback open-link(string) -> bool;
@@ -14,7 +21,20 @@ export component StartScreen inherits Rectangle {
     in property <string> background-guide;
     callback open-background-settings();
     callback dismiss-background-guide();
+    in property <bool> touch;
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    // The first launch's question about downloading the speech model
+    in property <bool> speech-prompt;
+    callback download-model();
+    callback cancel-model-download();
+    callback delete-model();
+    callback set-on-device(bool);
+    callback dismiss-speech-prompt();
     property <bool> asking: false;
+    property <bool> settings-open: false;
     property <bool> shown: false;
     init => { shown = true; }
 
@@ -124,6 +144,18 @@ export component StartScreen inherits Rectangle {
             font-size: Theme.font-size-small;
             vertical-alignment: center;
         }
+        if root.model-state == ModelState.downloading: Text {
+            text: @tr("Downloading speech model… {}%", root.model-progress);
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
+        if root.update-version == "" && root.update-progress >= 0: Text {
+            text: @tr("Downloading update… {}%", root.update-progress);
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
         if root.update-version != "": Button {
             text: @tr("Update to {}", root.update-version);
             icon: Icons.rotate-cw;
@@ -133,8 +165,39 @@ export component StartScreen inherits Rectangle {
         }
     }
 
+    IconButton {
+        x: parent.width - self.width - 12px;
+        y: 12px;
+        icon: Icons.settings;
+        label: @tr("Settings");
+        transparent: true;
+        clicked => { settings-open = true; }
+    }
+
     if asking: JoinDialog {
         submit(link) => { root.open-link(link) }
         close => { asking = false; }
+    }
+
+    if settings-open: SettingsScreen {
+        touch: root.touch;
+        model-state: root.model-state;
+        model-progress: root.model-progress;
+        model-size: root.model-size;
+        on-device: root.on-device;
+        download-model => { root.download-model(); }
+        cancel-download => { root.cancel-model-download(); }
+        delete-model => { root.delete-model(); }
+        set-on-device(on) => { root.set-on-device(on); }
+        close => { settings-open = false; }
+    }
+
+    if root.speech-prompt && !settings-open: SpeechPrompt {
+        model-size: root.model-size;
+        download => {
+            root.download-model();
+            root.dismiss-speech-prompt();
+        }
+        dismiss => { root.dismiss-speech-prompt(); }
     }
 }

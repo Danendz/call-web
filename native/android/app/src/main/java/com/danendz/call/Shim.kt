@@ -156,6 +156,12 @@ object Shim {
     fun cameraStop() = Camera.stop()
 
     @JvmStatic
+    fun startUpdates(context: Context, feed: String) = Updater.start(context, feed)
+
+    @JvmStatic
+    fun installUpdate(context: Context) = Updater.install(context)
+
+    @JvmStatic
     external fun nativeAction(action: Int)
 
     @JvmStatic
