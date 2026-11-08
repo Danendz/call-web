@@ -8,6 +8,9 @@ msgstr ""
 msgid "Back"
 msgstr "返回"
 
+msgid "Bluetooth"
+msgstr "蓝牙"
+
 msgid "Call ended"
 msgstr "通话已结束"
 
@@ -56,11 +59,17 @@ msgstr "已复制"
 msgid "Copy"
 msgstr "复制"
 
+msgid "Done"
+msgstr "完成"
+
 msgid "Hang up"
 msgstr "挂断"
 
 msgid "I speak"
 msgstr "我说"
+
+msgid "In a call"
+msgstr "通话中"
 
 msgid "Join"
 msgstr "加入"
@@ -86,11 +95,20 @@ msgstr "麦克风：未找到"
 msgid "More"
 msgstr "更多"
 
+msgid "Mute"
+msgstr "静音"
+
 msgid "New room"
 msgstr "新房间"
 
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
+
+msgid "Open settings"
+msgstr "打开设置"
+
+msgid "Phone earpiece"
+msgstr "听筒"
 
 msgid "Portrait video"
 msgstr "竖屏视频"
@@ -134,6 +152,15 @@ msgstr "把这个链接发给你要通话的人"
 msgid "Show in folder"
 msgstr "在文件夹中显示"
 
+msgid "So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings."
+msgstr "为了在锁屏后通话不中断，请在应用设置中允许 Call Danya 在后台运行，并取消电池限制。"
+
+msgid "So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches."
+msgstr "为了在锁屏后通话不中断：请在 设置 → 应用 → 应用启动管理 中，将 Call Danya 设为“手动管理”，并打开全部三个开关。"
+
+msgid "Speaker"
+msgstr "扬声器"
+
 msgid "Speech to chat"
 msgstr "语音转文字"
 
@@ -161,6 +188,9 @@ msgstr "切换画面"
 msgid "Switch camera"
 msgstr "切换摄像头"
 
+msgid "Tap to return to the call"
+msgstr "点按返回通话"
+
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
 
@@ -187,6 +217,9 @@ msgstr "打开摄像头"
 
 msgid "Turn on microphone"
 msgstr "打开麦克风"
+
+msgid "Unmute"
+msgstr "取消静音"
 
 msgid "Update to {}"
 msgstr "更新到 {}"

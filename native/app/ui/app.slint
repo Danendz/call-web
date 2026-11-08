@@ -57,6 +57,25 @@ export component AppWindow inherits Window {
     in property <string> version;
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
+    // Set on a phone: a touch screen with an on-screen keyboard
+    in property <bool> touch;
+    // Where the call's sound plays on a phone ("speaker", "earpiece", "bluetooth"), and which of them there are
+    in property <[string]> outputs;
+    in property <string> output;
+    callback pick-output(string);
+    in property <string> background-guide;
+    callback open-background-settings();
+    callback dismiss-background-guide();
+    // The call notification's text, in the app's language: title while waiting, title in a call, text, mute, unmute,
+    // hang up
+    out property <[string]> call-notice: [
+        @tr("Waiting for the other person to join…"),
+        @tr("In a call"),
+        @tr("Tap to return to the call"),
+        @tr("Mute"),
+        @tr("Unmute"),
+        @tr("Hang up"),
+    ];
 
     // The web's deviceStatus: why a device can't be used
     property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
@@ -86,6 +105,7 @@ export component AppWindow inherits Window {
     callback corner-moved(string, string);
     callback show-shot();
     callback update-now();
+    changed phase => { keys.focus(); }
 
     title: "Call Danya";
     icon: Icons.video;
@@ -96,12 +116,23 @@ export component AppWindow inherits Window {
     background: Theme.bg;
     default-font-size: Theme.font-size;
 
-    // Clear of the phone's status and navigation bars, which the window is drawn under; zero on desktop
-    Rectangle {
+    // Clear of the phone's status and navigation bars, which the window is drawn under, and of the on-screen keyboard,
+    // which covers it without resizing it; zero on desktop. Holds focus when nothing else does, so the phone's Back
+    // key lands here; what no screen takes goes back to Android, which puts the app in the background.
+    keys := FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if (event.text == Key.Back && root.phase == AppPhase.setup) {
+                root.home();
+                return accept;
+            }
+            reject
+        }
+
         x: root.safe-area-insets.left;
         y: root.safe-area-insets.top;
         width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
 
         if phase == AppPhase.start: StartScreen {
             version: root.version;
@@ -109,6 +140,9 @@ export component AppWindow inherits Window {
             update-now => { root.update-now(); }
             new-room => { root.new-room(); }
             open-link(link) => { root.open-link(link) }
+            background-guide: root.background-guide;
+            open-background-settings => { root.open-background-settings(); }
+            dismiss-background-guide => { root.dismiss-background-guide(); }
         }
 
         if phase == AppPhase.setup: SetupScreen {
@@ -183,6 +217,13 @@ export component AppWindow inherits Window {
             show-shot => { root.show-shot(); }
             toggle-transcribe => { root.toggle-transcribe(); }
             send-chat(text) => { root.send-chat(text) }
+            // From the whole window, so the on-screen keyboard doesn't flip it
+            stacked: root.width < 900px && root.height > root.width;
+            touch: root.touch;
+            keyboard-shown: root.virtual-keyboard-size.height > 0;
+            outputs: root.outputs;
+            output: root.output;
+            pick-output(id) => { root.pick-output(id); }
             toggle-mic => { root.toggle-mic(); }
             toggle-cam => { root.toggle-cam(); }
             pick-cam(id) => { root.pick-cam(id); }

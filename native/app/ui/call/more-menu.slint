@@ -65,6 +65,10 @@ export component MoreMenu inherits IconButton {
     in property <bool> can-screenshot;
     in property <bool> sharing;
     in property <bool> can-share;
+    // Where the call's sound plays on a phone: "speaker", "earpiece", "bluetooth"; empty on desktop
+    in property <[string]> outputs;
+    in property <string> output;
+    callback pick-output(string);
     callback screenshot();
     callback toggle-share();
     callback pick-cam(string);
@@ -105,6 +109,12 @@ export component MoreMenu inherits IconButton {
 
             VerticalLayout {
                 padding: 6px;
+                for id in root.outputs: MenuItem {
+                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
+                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");
+                    checked: id == root.output;
+                    activated => { menu.close(); root.pick-output(id); }
+                }
                 if cam-granted && cams.length == 2: MenuItem {
                     icon: Icons.switch-camera;
                     text: @tr("Switch camera");

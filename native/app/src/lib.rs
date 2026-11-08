@@ -52,6 +52,10 @@ pub fn run() -> anyhow::Result<()> {
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
     ui.set_version(env!("CARGO_PKG_VERSION").into());
+    ui.set_touch(cfg!(target_os = "android"));
+
+    #[cfg(target_os = "android")]
+    android::attach(&ui, &settings);
 
     let bridge = Bridge::new(&ui, lang);
     let call_started = bridge.call_started.clone();
@@ -105,6 +109,8 @@ pub fn run() -> anyhow::Result<()> {
             if (ui.get_mic_level() - level).abs() > 0.005 {
                 ui.set_mic_level(level);
             }
+            #[cfg(target_os = "android")]
+            android::sync(&ui);
         }
     });
     {

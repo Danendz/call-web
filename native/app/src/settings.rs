@@ -21,6 +21,9 @@ pub struct Settings {
     /// Which corner each video tile sits in: "self", "peer" or "screen" to tl, tr, bl or br
     #[serde(default)]
     pub corners: std::collections::BTreeMap<String, String>,
+    /// The phone's guide to its battery and app launch settings has been read
+    #[serde(default)]
+    pub background_guide_seen: bool,
 }
 
 impl Settings {

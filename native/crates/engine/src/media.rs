@@ -16,6 +16,10 @@ pub struct Device {
 pub struct Media {
     factory: PeerConnectionFactory,
     platform_audio: bool,
+    /// WebRTC shuts the audio device down once the last peer connection is gone, and on Android LiveKit's proxy
+    /// never starts it again: the next call crashed starting audio. A connection that never connects keeps it up.
+    #[cfg(target_os = "android")]
+    _keep_audio: Option<libwebrtc::peer_connection::PeerConnection>,
 }
 
 impl Media {
@@ -28,7 +32,17 @@ impl Media {
         } else {
             tracing::warn!("no platform audio device: the call will be silent");
         }
-        Self { factory, platform_audio }
+        #[cfg(target_os = "android")]
+        let _keep_audio = factory
+            .create_peer_connection(libwebrtc::peer_connection_factory::RtcConfiguration::default())
+            .inspect_err(|e| tracing::warn!("no idle connection to keep audio up: {e:?}"))
+            .ok();
+        Self {
+            factory,
+            platform_audio,
+            #[cfg(target_os = "android")]
+            _keep_audio,
+        }
     }
 
     pub fn factory(&self) -> &PeerConnectionFactory {

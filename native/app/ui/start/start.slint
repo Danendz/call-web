@@ -10,6 +10,10 @@ export component StartScreen inherits Rectangle {
     callback update-now();
     callback new-room();
     callback open-link(string) -> bool;
+    // On a phone, until it's been read: "huawei" for its App launch page, "other" for battery settings elsewhere
+    in property <string> background-guide;
+    callback open-background-settings();
+    callback dismiss-background-guide();
     property <bool> asking: false;
     property <bool> shown: false;
     init => { shown = true; }
@@ -54,6 +58,56 @@ export component StartScreen inherits Rectangle {
                 height-hint: 52px;
                 font-size: 16px;
                 clicked => { asking = true; }
+            }
+        }
+
+        // No API can change these settings, so the guide says where they are
+        if root.background-guide != "": HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: min(440px, root.width - 48px);
+                height: guide.preferred-height;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface;
+                guide := VerticalLayout {
+                    padding: 18px;
+                    spacing: 14px;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Image {
+                            source: Icons.battery-warning;
+                            colorize: Theme.accent;
+                            width: 20px;
+                            height: 20px;
+                        }
+                        Text {
+                            text: root.background-guide == "huawei"
+                                ? @tr("So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches.")
+                                : @tr("So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings.");
+                            color: Theme.text;
+                            font-size: 14px;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 10px;
+                        Button {
+                            text: @tr("Done");
+                            height-hint: 40px;
+                            clicked => { root.dismiss-background-guide(); }
+                        }
+                        Button {
+                            text: @tr("Open settings");
+                            kind: ButtonKind.primary;
+                            height-hint: 40px;
+                            clicked => { root.open-background-settings(); }
+                        }
+                    }
+                }
             }
         }
     }
