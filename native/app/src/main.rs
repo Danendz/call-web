@@ -26,7 +26,9 @@ mod ui {
 use slint::ComponentHandle;
 use ui::{AppPhase, AppWindow};
 
-const DEFAULT_SERVER: &str = "https://call.danendz.com";
+// A debug build talks to the local dev server (`PORT=8090 npm run dev:server`), so its rooms and copied links
+// stay off production
+const DEFAULT_SERVER: &str = if cfg!(debug_assertions) { "http://localhost:8090" } else { "https://call.danendz.com" };
 
 thread_local! {
     // The engine's state callback reaches the UI-thread bridge through this: models aren't `Send`
@@ -273,7 +275,7 @@ fn parse_lang(code: &str) -> Lang {
     if code == "zh" { Lang::Zh } else { Lang::En }
 }
 
-/// `CALL_SERVER` points the app at another server, e.g. `http://localhost:8090` from `PORT=8090 npm run dev:server`.
+/// `CALL_SERVER` points the app at another server, e.g. production from a debug build.
 fn server_url() -> anyhow::Result<Url> {
     let raw = std::env::var("CALL_SERVER").unwrap_or_else(|_| DEFAULT_SERVER.into());
     let url = Url::parse(&raw).with_context(|| format!("CALL_SERVER isn't a URL: {raw}"))?;

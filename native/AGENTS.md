@@ -43,7 +43,7 @@ native/
 
 ## Reachable from China
 
-- The binary must not contact anything but our server (`call.danendz.com`, default; `CALL_SERVER` env overrides it for development) and our coturn. No crash reporters, analytics, update checks or crates that phone home.
+- The binary must not contact anything but our server (`call.danendz.com` in release builds, `http://localhost:8090` in debug builds; `CALL_SERVER` env overrides either) and our coturn. No crash reporters, analytics, update checks or crates that phone home.
 - Build-time downloads (Skia, libwebrtc prebuilt) are fine; nothing is downloaded at runtime.
 
 ## WebRTC
@@ -71,7 +71,7 @@ cargo build --release
 
 CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds (the installable artifacts, and the only check of Windows-only code) take most of an hour, so they run on `main`, on new commits pushed to a `build/**` branch, or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Run one when Windows code changed or someone needs a build to try. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
 
-When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `CALL_SERVER=http://localhost:8090 cargo run` here. Leave real two-person calls to the user.
+When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `cargo run` here (a debug build uses `http://localhost:8090` unless `CALL_SERVER` says otherwise). Leave real two-person calls to the user.
 
 Drive the running app by accessible label, never with synthetic mouse clicks, so the user's mouse and focus are left alone. Both drivers take `tree`, `press <label>`, `set <label> <text>` and `shot <file.png>`; labels are in the app's current language, and an element neither can find needs an `accessible-label`, which it should have anyway.
 

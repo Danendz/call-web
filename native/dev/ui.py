@@ -4,7 +4,7 @@ shows in the current language), presses them, sets text, and screenshots the win
 the screen locked and on Windows, but it needs a build made for it:
 
     SLINT_EMIT_DEBUG_INFO=1 cargo build -p call-danya --features dev-mcp
-    SLINT_MCP_PORT=8765 CALL_SERVER=http://localhost:8090 ./target/debug/call-danya
+    SLINT_MCP_PORT=8765 ./target/debug/call-danya
 
     python3 dev/ui.py tree                   accessible elements: role, label, value
     python3 dev/ui.py press <label>          press a button
