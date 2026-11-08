@@ -727,6 +727,7 @@ dependencies = [
  "chrono",
  "engine",
  "jni 0.21.1",
+ "roxmltree",
  "serde",
  "serde_json",
  "skia-safe",

@@ -3,6 +3,7 @@
 //! What only Java can do (the call's foreground service and notification, audio routing, settings pages) is in
 //! `Shim.kt`, called through [`Java`]; what Android reports back arrives in the `Shim_native*` functions.
 
+mod fonts;
 mod log;
 
 use std::cell::{Cell, RefCell};
@@ -77,6 +78,7 @@ fn remember(env: &mut JNIEnv, context: &JObject) -> jni::errors::Result<Java> {
 
 #[unsafe(no_mangle)]
 fn android_main(app: slint::android::AndroidApp) {
+    fonts::init();
     if let Some(dir) = app.internal_data_path() {
         let _ = crate::settings::ANDROID_DIR.set(dir);
     }
