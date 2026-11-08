@@ -4,12 +4,12 @@ import { Theme } from "theme.slint";
 import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
-import { StartScreen } from "start/start.slint";
+import { StartScreen, ModelState } from "start/start.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, ModelState }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -59,6 +59,17 @@ export component AppWindow inherits Window {
     in property <bool> peer-screenshot;
     in property <string> saved-shot;
     in property <string> version;
+    // The on-device speech model, for settings and the first launch's question
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    in-out property <bool> speech-prompt;
+    callback download-model();
+    callback cancel-model-download();
+    callback delete-model();
+    callback set-on-device(bool);
+    callback dismiss-speech-prompt();
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
     // 0–100 while an update downloads, else -1
@@ -150,6 +161,17 @@ export component AppWindow inherits Window {
             background-guide: root.background-guide;
             open-background-settings => { root.open-background-settings(); }
             dismiss-background-guide => { root.dismiss-background-guide(); }
+            touch: root.touch;
+            model-state: root.model-state;
+            model-progress: root.model-progress;
+            model-size: root.model-size;
+            on-device: root.on-device;
+            speech-prompt: root.speech-prompt;
+            download-model => { root.download-model(); }
+            cancel-model-download => { root.cancel-model-download(); }
+            delete-model => { root.delete-model(); }
+            set-on-device(on) => { root.set-on-device(on); }
+            dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
         }
 
         if phase == AppPhase.setup: SetupScreen {

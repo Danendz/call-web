@@ -6,7 +6,9 @@
 //! With `CALL_FAKE_CAMERA=1` it sends a test pattern as its camera; video it receives is logged every few seconds,
 //! and chat as it arrives. `SAY="hello"` posts that to the chat once the other person is there; `TRANSCRIBE=1` turns
 //! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file). `SHARE=1` shares the screen once in the
-//! call (with `CALL_FAKE_SCREEN=1` a test pattern).
+//! call (with `CALL_FAKE_SCREEN=1` a test pattern). `DATA_DIR=<folder>` recognizes speech on this machine with the
+//! model in `<folder>/models/`, as the app does once it's downloaded; with `DOWNLOAD=1` it downloads the model there
+//! first, from the server.
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -43,6 +45,8 @@ fn main() {
     let engine = Engine::start(
         server,
         Lang::En,
+        std::env::var_os("DATA_DIR").map(Into::into),
+        true,
         Arc::new(LogSink::default()),
         move |state| {
             if state.phase == Phase::InCall
@@ -52,17 +56,21 @@ fn main() {
                 let _ = say_tx.send(text.clone());
             }
             tracing::info!(
-                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={}",
+                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={} model={:?}",
                 state.phase,
                 state.link,
                 state.reconnecting,
                 state.call_started.map(|at| at.elapsed().as_secs()),
-                state.mics.len()
+                state.mics.len(),
+                state.model
             );
         },
         on_chat,
     )
     .unwrap_or_else(|e| panic!("engine: {e}"));
+    if std::env::var_os("DOWNLOAD").is_some() {
+        engine.send(Command::DownloadModel);
+    }
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {
         engine.send(Command::SetTranscribe(true));

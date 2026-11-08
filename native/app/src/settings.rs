@@ -24,6 +24,16 @@ pub struct Settings {
     /// The phone's guide to its battery and app launch settings has been read
     #[serde(default)]
     pub background_guide_seen: bool,
+    /// Speech is recognized on this device once its model is downloaded, instead of on the server
+    #[serde(default = "yes")]
+    pub on_device_speech: bool,
+    /// The first launch's question about downloading the speech model was answered
+    #[serde(default)]
+    pub speech_prompt_seen: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn upright() -> bool {
@@ -40,6 +50,8 @@ impl Default for Settings {
             transcribe: false,
             corners: std::collections::BTreeMap::new(),
             background_guide_seen: false,
+            on_device_speech: true,
+            speech_prompt_seen: false,
         }
     }
 }
@@ -69,13 +81,18 @@ impl Settings {
 #[cfg(target_os = "android")]
 pub static ANDROID_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-#[cfg(target_os = "android")]
 fn path() -> Option<PathBuf> {
-    Some(ANDROID_DIR.get()?.join("settings.json"))
+    Some(data_dir()?.join("settings.json"))
+}
+
+/// The app's own folder, for settings and the speech model.
+#[cfg(target_os = "android")]
+pub fn data_dir() -> Option<PathBuf> {
+    ANDROID_DIR.get().cloned()
 }
 
 #[cfg(not(target_os = "android"))]
-fn path() -> Option<PathBuf> {
+pub fn data_dir() -> Option<PathBuf> {
     let base = if cfg!(target_os = "windows") {
         PathBuf::from(std::env::var_os("APPDATA")?)
     } else if cfg!(target_os = "macos") {
@@ -85,7 +102,7 @@ fn path() -> Option<PathBuf> {
             .map(PathBuf::from)
             .or_else(|| Some(PathBuf::from(std::env::var_os("HOME")?).join(".config")))?
     };
-    Some(base.join("Call Danya").join("settings.json"))
+    Some(base.join("Call Danya"))
 }
 
 /// The OS language, for the first launch: Chinese if it's any Chinese, otherwise English, as the web does.

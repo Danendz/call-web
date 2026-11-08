@@ -82,6 +82,101 @@
   width: min(380px, 100%);
 }
 
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-head h1 {
+  margin: 0;
+}
+
+.download-app {
+  position: relative;
+  flex: none;
+}
+
+button.download-toggle {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.download-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: min(300px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.97);
+  transform-origin: top right;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    visibility 0s linear var(--fast);
+}
+
+.download-menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease-spring);
+}
+
+a.download-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--fast) var(--ease);
+}
+
+a.download-item:hover,
+a.download-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.download-item > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.download-item span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.download-item strong {
+  font-weight: 500;
+}
+
+.download-item small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .share {
   display: flex;
   flex-direction: column;

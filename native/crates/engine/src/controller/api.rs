@@ -1,6 +1,7 @@
 //! What the UI sees of the engine: the handle it sends [`Command`]s through, and the [`State`] and [`ChatEvent`]s it
 //! gets back.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -13,7 +14,7 @@ use super::Controller;
 use crate::camera::CameraAccess;
 use crate::level::Level;
 use crate::media::Device;
-use crate::speech::SpeechNotice;
+use crate::speech::{ModelStatus, SpeechNotice};
 use crate::stats::CallStats;
 use crate::video::VideoSink;
 
@@ -79,6 +80,10 @@ pub struct State {
     /// Speech to chat is on: what you say is posted to the chat while someone's there to read it
     pub transcribe_on: bool,
     pub speech_notice: Option<SpeechNotice>,
+    /// The on-device speech model, where there's a data folder to keep it in
+    pub model: ModelStatus,
+    /// Speech goes to the on-device model once it's ready, instead of the server
+    pub on_device: bool,
     /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
     pub force_relay: bool,
     /// An ICE restart to get off the relay just went out
@@ -110,6 +115,11 @@ pub enum Command {
     /// Tells the other person a picture of the call was saved
     NotifyScreenshot,
     SetTranscribe(bool),
+    /// Downloads the on-device speech model, picking up where an earlier try stopped
+    DownloadModel,
+    CancelModelDownload,
+    DeleteModel,
+    SetOnDevice(bool),
     /// Starts sharing (with the OS's picker, or opening the app's) or stops
     ToggleShare,
     /// A screen or window from the app's picker
@@ -135,9 +145,12 @@ pub struct Engine {
 impl Engine {
     /// `on_state` runs on the engine's thread for every change; the UI hops to its own thread from there.
     /// Video frames go to `sink`, from video threads; see [`VideoSink`].
+    /// `data_dir` is where the on-device speech model is kept; `on_device` whether it's used once it's there.
     pub fn start(
         server: Url,
         lang: Lang,
+        data_dir: Option<PathBuf>,
+        on_device: bool,
         sink: Arc<dyn VideoSink>,
         on_state: impl Fn(State) + Send + 'static,
         on_chat: impl Fn(ChatEvent) + Send + 'static,
@@ -149,9 +162,18 @@ impl Engine {
         thread::Builder::new().name("engine".into()).spawn(move || {
             // Built inside the runtime: WebRTC's video source needs one to exist
             runtime.block_on(async move {
-                Controller::new(server, lang, controller_level, sink, Box::new(on_state), Box::new(on_chat))
-                    .run(rx)
-                    .await;
+                Controller::new(
+                    server,
+                    lang,
+                    data_dir,
+                    on_device,
+                    controller_level,
+                    sink,
+                    Box::new(on_state),
+                    Box::new(on_chat),
+                )
+                .run(rx)
+                .await;
             });
         })?;
         Ok(Self { commands, level })
