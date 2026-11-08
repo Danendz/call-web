@@ -61,7 +61,7 @@ native/
 ## Distribution
 
 - **Velopack** (`velopack` crate, `vpk` CLI, same pinned version in `app/Cargo.toml` and `native.yml`) installs the app per user and updates it (`app/src/update.rs`): it checks `{server}/updates` at launch and every 4 hours, downloads quietly, and installs on quit or from the start screen's "Update to …" button, never during a call. A dev build isn't installed, so it skips all of this.
-- **A release is a version bump** (see Releasing). When it merges to `main`, CI builds both OSes and `packaging/release.sh` packs them and uploads to the Railway `releases` bucket, which the server serves at `/updates/*` (`server/updates.ts`), then makes the GitHub release. Feed `releases.{win,osx}.json`, first installs `CallDanya-win-Setup.exe` and `CallDanya-osx-Setup.pkg` (or `-Portable.zip`).
+- **A release is a version bump** (see Releasing), merged to `main` and then pushed to a `release/<version>` branch. CI builds both OSes and `packaging/release.sh` packs them and uploads to the Railway `releases` bucket, which the server serves at `/updates/*` (`server/updates.ts`), then makes the GitHub release. Feed `releases.{win,osx}.json`, first installs `CallDanya-win-Setup.exe` and `CallDanya-osx-Setup.pkg` (or `-Portable.zip`).
 - **Signing costs nothing:** Windows is unsigned (SmartScreen "Run anyway" once; add the install folder, `%LocalAppData%\CallDanya`, to an antivirus's trust list if it flags an update). macOS is signed with our self-signed "Call Danya" certificate (`MACOS_CERT_P12` secret) and the hardened runtime with `packaging/macos/call-danya.entitlements`, so camera, mic and screen recording permissions survive updates; first install is right-click → Open. Replacing the certificate makes macOS ask for those permissions once more.
 
 ## Releasing
@@ -78,7 +78,7 @@ Do these the same way every time, so releases read alike:
    <One sentence: what this release is about.>
 
    ### New
-   - <What she or you can now do, in a few words>
+   - <What users can now do, in a few words>
 
    ### Fixed
    - <What was broken, said as what works now>
@@ -89,7 +89,7 @@ Do these the same way every time, so releases read alike:
 
    Leave out empty headings. Write for the people using the app, not for developers: no crate names, file paths or commit types. Group the commits since the last tag by feature, one line each; leave out CI, docs and refactors that change nothing for the user.
 4. Commit as `chore(native): release <version>` and open the PR titled the same, with the new changelog section as its body.
-5. After the merge, the `native` workflow on `main` runs `version` → `release` (macOS, Windows) → `github-release`. If one OS fails, rerun the failed jobs: `release.sh` skips a channel that already has the version, and `github-release` only adds what's missing.
+5. After the merge, publish it from an up-to-date `main`: `git push origin main:release/<version>`. The `native` workflow on that branch runs `version` (fails unless the branch matches `app/Cargo.toml`'s version and the commit is on `main`) → `release` (macOS, Windows) → `github-release`. Merging to `main` alone publishes nothing. If one OS fails, rerun the failed jobs: `release.sh` skips a channel that already has the version, and `github-release` only adds what's missing.
 
 ## Before saying it's done
 
@@ -102,7 +102,7 @@ cargo test
 cargo build --release
 ```
 
-CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds only build: they make the installable artifacts and are the only compile of Windows-only code (which no CI lints, so keep it clippy-clean by eye), and still take a while, so they run on new commits pushed to a `build/**` branch, for a release (a version bump merged to `main`, see Distribution), or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Start one (or push to a `build/**` branch) only when the user asks for a build; don't offer to. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
+CI runs fmt, clippy and tests on macOS for every PR once it's out of draft (they don't build on Linux: `webrtc-sys` needs clang 21+ there). The macOS and Windows release builds only build: they make the installable artifacts and are the only compile of Windows-only code (which no CI lints, so keep it clippy-clean by eye), and still take a while, so they run only on a push to a `build/**` branch (or `gh workflow run native.yml --ref build/<name>`) and for a release on a `release/<version>` branch (see Releasing). Nothing runs on `main` except `native-cache.yml`, which saves the Rust caches these jobs start from when `Cargo.lock` changes. Push to a `build/**` branch only when the user asks for a build; don't offer to: Actions minutes are limited and a build costs a lot of them.
 
 When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `cargo run` here (a debug build uses `http://localhost:8090` unless `CALL_SERVER` says otherwise). Leave real two-person calls to the user.
 

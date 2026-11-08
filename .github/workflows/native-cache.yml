@@ -1,0 +1,46 @@
+# Saves the Rust caches on `main` that native.yml's jobs start from. A cache is only visible to the branch that saved
+# it and to branches that restore from `main`, and native.yml never runs on `main`, so without this every new PR,
+# `build/**` and `release/**` branch would compile its dependencies from scratch (over an hour on Windows).
+# rust-cache keeps dependencies, not our own crates, so this only reruns when they change. A cache nothing restores
+# for 7 days is evicted; run this by hand to warm it again.
+name: native-cache
+
+on:
+  push:
+    branches: [main]
+    paths: ["native/Cargo.lock", "native/rust-toolchain.toml", ".github/workflows/native-cache.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: native-cache
+  cancel-in-progress: true
+
+jobs:
+  # Same key, runner and commands as native.yml's `check`
+  check:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native, shared-key: check }
+      - run: cargo clippy --all-targets --locked
+      - run: cargo test --locked --no-run
+
+  # Same key as native.yml's `build` and `release`
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native, shared-key: release }
+      - run: cargo build --release --locked

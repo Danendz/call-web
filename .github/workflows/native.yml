@@ -1,55 +1,53 @@
-# Checks, builds and releases the native app. Pull requests get fmt, clippy and tests on macOS. The macOS and Windows
-# release builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner): test
-# builds run on `build/**` branches (push a branch there to get installable artifacts) and when started by hand from
-# the Actions tab. A merge to `main` that bumps app/Cargo.toml's version (from a `bump/*` branch) builds and publishes
-# a release with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh), then a
-# GitHub release `native-v<version>` with that version's native/CHANGELOG.md section and the installers. Windows
-# is unsigned (SmartScreen needs "Run anyway" on the first install); macOS is signed with our self-signed certificate
-# (right-click → Open on the first install). The first build of a cache downloads prebuilt WebRTC (~200 MB).
+# Checks, builds and releases the native app. Pull requests get the fixtures check, cargo audit and the changelog
+# check in one job, and fmt, clippy and tests on macOS once out of draft. Nothing runs on `main`: builds and releases
+# only run from their own branches, so CI minutes go to them only when asked for (macOS minutes count 10x and Windows
+# 2x against the Actions quota).
+# - `build/**`: every push builds macOS and Windows and uploads installable artifacts. The builds only build (each
+#   extra cargo command is another full compile, ~20 min on a Windows runner).
+# - `release/<version>`: pushing `main` there (`git push origin main:release/<version>`) builds and publishes that
+#   version with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh), then a
+#   GitHub release `native-v<version>` with that version's native/CHANGELOG.md section and the installers. The commit
+#   must already be on `main` and the branch name must match app/Cargo.toml's version.
+# Pushes to these branches have no path filter, so a branch with no new commits still builds. Windows is unsigned
+# (SmartScreen needs "Run anyway" on the first install); macOS is signed with our self-signed certificate
+# (right-click → Open on the first install). Rust caches are shared by key across jobs and start from the ones
+# native-cache.yml saves on `main`; the first build of a cache downloads prebuilt WebRTC (~200 MB).
 name: native
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml"]
   push:
-    branches: [main, "build/**"]
-    paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml"]
+    branches: ["build/**", "release/**"]
   workflow_dispatch:
 
 concurrency:
   group: native-${{ github.ref }}
   # Never cut off a release halfway through its upload
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/release/') }}
 
 jobs:
-  fixtures:
+  # One job, since each job is billed as at least a whole minute
+  checks:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      - uses: taiki-e/install-action@cargo-audit
       - run: npm ci
       - run: npm run fixtures -- --check
-
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@cargo-audit
       - run: cargo audit
         working-directory: native
-
-  # Every version needs its changelog section, checked on the PR so a bump can't merge without one
-  changelog:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      # Every version needs its changelog section, checked on the PR so a bump can't merge without one
       - run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' native/app/Cargo.toml)
           grep -q "^## $version " native/CHANGELOG.md || { echo "::error::native/CHANGELOG.md has no section for $version"; exit 1; }
 
   check:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: macos-latest
     defaults:
       run:
@@ -57,13 +55,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: native }
+        with: { workspaces: native, shared-key: check }
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
   build:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/build/')
+    if: startsWith(github.ref, 'refs/heads/build/')
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: native }
+        with: { workspaces: native, shared-key: release }
       - run: cargo build --release --locked
       - if: runner.os == 'macOS'
         run: packaging/macos/bundle.sh
@@ -87,18 +85,25 @@ jobs:
             native/target/release/call-danya.exe
           if-no-files-found: error
 
-  # Is app/Cargo.toml's version missing from either channel of the published feed? Only then is a release built.
+  # Only reviewed code is released, under the version the branch names. Is that version missing from either channel of
+  # the published feed? Only then is a release built.
   version:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.check.outputs.release }}
       version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - id: check
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' native/app/Cargo.toml)
+          grep -q "^## $version " native/CHANGELOG.md || { echo "::error::native/CHANGELOG.md has no section for $version"; exit 1; }
+          [ "${GITHUB_REF_NAME#release/}" = "$version" ] ||
+            { echo "::error::Branch $GITHUB_REF_NAME doesn't match app/Cargo.toml's version $version"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main ||
+            { echo "::error::$GITHUB_SHA isn't on main; merge the bump first, then push main to $GITHUB_REF_NAME"; exit 1; }
           release=false
           for channel in win osx; do
             curl -fsS "https://call.danendz.com/updates/releases.$channel.json" | grep -q "\"Version\": *\"$version\"" || release=true
@@ -108,7 +113,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   release:
-    needs: [version, changelog]
+    needs: version
     if: needs.version.outputs.release == 'true'
     strategy:
       fail-fast: false
@@ -122,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-        with: { workspaces: native }
+        with: { workspaces: native, shared-key: release }
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 8.0.x }
       # Same version as the velopack crate in app/Cargo.toml
@@ -146,7 +151,7 @@ jobs:
           if-no-files-found: ignore
 
   # Only once both OSes are published. A private repo's release is a changelog and a backup copy of the installers
-  # for us; she installs and updates from call.danendz.com.
+  # for us; users install and update from call.danendz.com.
   github-release:
     needs: [version, release]
     runs-on: ubuntu-latest

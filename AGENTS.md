@@ -19,7 +19,7 @@ One npm package (a Node server and a React client built with Vite), plus the nat
 
 ## Reachable from China
 
-The call is between mainland China and Uzbekistan, so everything has to work in China without a VPN.
+One side of the call is in mainland China, so everything has to work in China without a VPN.
 
 - **Never add Google or other services blocked in China:** STUN servers, fonts, CDNs, analytics, error trackers, or any script or asset loaded from a third-party host. Ship it in the bundle or serve it from our own server.
 - STUN and TURN come only from our coturn (`turn-hk.danendz.com`). Don't add public STUN servers as a fallback.
@@ -34,6 +34,13 @@ The service is public: anyone can open the site and connect to `/ws` or `/api`. 
 - **Keep the CSP strict.** Don't add `'unsafe-inline'`, `'unsafe-eval'` or third-party hosts to `setSecurityHeaders`, and don't render user text as HTML (`dangerouslySetInnerHTML`, `innerHTML`).
 - **Secrets stay in Railway variables**, never in source, logs, client code, or messages sent to the browser.
 - **Keep dependencies patched.** Run `npm audit --omit=dev` when adding or upgrading a package, and don't add a dependency for something a few lines of code can do.
+
+## Public repo
+
+The repo is public, so everything committed (code, comments, docs, commit messages, PR descriptions) can be read by anyone and stays in history.
+
+- **Keep personal details out.** Don't write who uses the app or where they live: no names, genders (write "the other person" or "users", never "she" or "he"), relationships, countries or cities beyond "mainland China", or anything said about the people in a conversation. Describe what the code does and why, not whom it's for.
+- **No private infrastructure values.** IPs, account IDs, emails and anything from `.env` or Railway variables stay out; use placeholders like `CHANGE_ME_PUBLIC_IP` in configs and docs.
 
 ## Before saying it's done
 

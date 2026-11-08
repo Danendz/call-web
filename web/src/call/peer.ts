@@ -2,7 +2,7 @@ import type { SignalPayload } from "../../../shared/protocol";
 
 const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
-// Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss.
+// Enough for clean 720p; a direct call into mainland China carried ~2 Mbps with negligible loss.
 const VIDEO_MAX_BITRATE = 2_000_000;
 // While sharing, the same ~2 Mbps is split: most for the screen (text must stay sharp), a small face for the camera.
 const SHARE_SCREEN_BITRATE = 1_600_000;
