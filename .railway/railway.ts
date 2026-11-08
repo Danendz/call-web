@@ -15,10 +15,11 @@ export default defineRailway(() => {
     },
     start: "npm start",
     healthcheck: "/healthz",
-    // Singapore: best routes to mainland China, and next to the TURN relay on Vultr SG.
+    // Singapore: closest Railway region to mainland China. Only signaling runs here; media goes direct or via the TURN relay.
     replicas: { "asia-southeast1-eqsg3a": 1 },
     env: {
-      TURN_HOST: "turn.danendz.com",
+      // coturn on Alibaba Cloud Hong Kong (China-optimized BGP). Vultr SG lost 10-30% of packets on the Singtel link.
+      TURN_HOST: "turn-hk.danendz.com",
       TURN_SECRET: preserve(), // must equal coturn's static-auth-secret; set with `railway variable set`
       // Speech-to-chat and translation keys, set with `railway variable set`
       GROQ_API_KEY: preserve(),

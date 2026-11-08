@@ -11,7 +11,7 @@ use crate::peer::{Peer, PeerConfig, PeerEvent};
 use crate::stats::{CallStats, Path};
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
-// through Singapore, and a P2P attempt that failed at call start often works a few minutes later.
+// through the relay, and a P2P attempt that failed at call start often works a few minutes later.
 const DIRECT_RETRY_DELAYS: [Duration; 4] =
     [Duration::from_secs(15), Duration::from_secs(30), Duration::from_secs(60), Duration::from_secs(120)];
 const TRYING_DIRECT_SHOWN: Duration = Duration::from_secs(5);

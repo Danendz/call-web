@@ -22,7 +22,7 @@ One npm package (a Node server and a React client built with Vite), plus the nat
 The call is between mainland China and Uzbekistan, so everything has to work in China without a VPN.
 
 - **Never add Google or other services blocked in China:** STUN servers, fonts, CDNs, analytics, error trackers, or any script or asset loaded from a third-party host. Ship it in the bundle or serve it from our own server.
-- STUN and TURN come only from our coturn (`turn.danendz.com`). Don't add public STUN servers as a fallback.
+- STUN and TURN come only from our coturn (`turn-hk.danendz.com`). Don't add public STUN servers as a fallback.
 
 ## Security
 
