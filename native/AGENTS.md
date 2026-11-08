@@ -44,7 +44,7 @@ native/
 ## Reachable from China
 
 - The binary must not contact anything but our server (`call.danendz.com` in release builds, `http://localhost:8090` in debug builds; `CALL_SERVER` env overrides either) and our coturn. Updates come from our server too (`/updates`, see Distribution). No crash reporters, analytics or crates that phone home.
-- Build-time downloads (Skia, libwebrtc prebuilt) are fine; nothing is downloaded at runtime.
+- Build-time downloads (Skia, libwebrtc prebuilt) are fine. At runtime the app downloads only from our own server (app updates, speech models), never from Hugging Face, GitHub or other third-party hosts, and checks each downloaded file against a SHA-256 built into the binary before using it.
 
 ## WebRTC
 
