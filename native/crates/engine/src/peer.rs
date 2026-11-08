@@ -26,7 +26,7 @@ use crate::stats::{self, CallStats, Counters};
 const DISCONNECTED_GRACE: Duration = Duration::from_secs(4);
 const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
-// Enough for clean 720p at 30 fps; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss
+// Enough for clean 720p at 30 fps; a direct call into mainland China carried ~2 Mbps with negligible loss
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 // A camera that gives 60 fps gets half again, so its frames aren't blurrier than at 30
 const VIDEO_60FPS_MAX_BITRATE: u64 = 3_000_000;

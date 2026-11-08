@@ -7,7 +7,7 @@ Two pieces:
 | App (static frontend + WebSocket signaling/chat) | Railway, **Southeast Asia (Singapore)** region | `call.danendz.com` |
 | STUN + fallback TURN relay (coturn) | Alibaba Cloud Simple Application Server, **Hong Kong** | `turn-hk.danendz.com` |
 
-The relay is in Hong Kong because Alibaba's China-optimized BGP plan has clean routes to all three mainland carriers, and from Tashkent the traffic rides China Mobile International straight to Hong Kong (~110 ms, no loss). The old Vultr Singapore VPS (`turn.danendz.com`) lost 10-30% of packets on the Singtel link into Vultr.
+The relay is in Hong Kong because Alibaba's China-optimized BGP plan has clean routes to all three mainland carriers, and from outside China the traffic reaches Hong Kong over China Mobile International (~110 ms, no loss). The old Vultr Singapore VPS (`turn.danendz.com`) lost 10-30% of packets on the Singtel link into Vultr.
 
 Pick the **General-purpose** plan (ISP `BGP`), not **International** (`BGP_NCO`, not optimized for mainland China). Use the Ubuntu OS image.
 
@@ -86,7 +86,7 @@ The service is connected to GitHub `Danendz/call-web` (branch `main`): every pus
 ## 4. Verify
 
 1. **TURN works.** Open a room with `?relay=1` on two devices, e.g. `https://call.danendz.com/r/test123?relay=1`. That forces relay-only ICE and opens the stats overlay. The call must connect and show `TURN relay`. If it hangs on "Connecting…", check the coturn log and both firewalls.
-2. **Reachable from China.** Before anything else, have her open `https://call.danendz.com` without a VPN. If the page or the WebSocket won't load, Railway's edge is the problem, not WebRTC.
+2. **Reachable from China.** Before anything else, have someone in mainland China open `https://call.danendz.com` without a VPN. If the page or the WebSocket won't load, Railway's edge is the problem, not WebRTC.
 3. **Real call.** Open Stats during the call:
    - `Direct P2P` means the call is peer-to-peer. `TURN relay (udp|tcp|tls)` means it goes through Hong Kong.
    - RTT under 300 ms is fine for talking. Loss over ~3% means video will stutter.
