@@ -44,6 +44,16 @@ impl Settings {
     }
 }
 
+/// The app's private data folder on Android, which only the activity knows; set once at startup.
+#[cfg(target_os = "android")]
+pub static ANDROID_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+fn path() -> Option<PathBuf> {
+    Some(ANDROID_DIR.get()?.join("settings.json"))
+}
+
+#[cfg(not(target_os = "android"))]
 fn path() -> Option<PathBuf> {
     let base = if cfg!(target_os = "windows") {
         PathBuf::from(std::env::var_os("APPDATA")?)

@@ -26,6 +26,7 @@ impl Crop {
 /// Two-plane 4:2:0 (Y, then interleaved UV), as macOS and most Windows cameras deliver it. Done here rather than by
 /// libyuv, whose wrapper wants `stride * height` bytes after the crop's first pixel and panics on a portrait slice of
 /// a plane that holds exactly the picture.
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android camera comes in A2"))]
 pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, crop: Crop) -> Option<I420Buffer> {
     if crop.width == 0 || crop.height == 0 {
         return None;

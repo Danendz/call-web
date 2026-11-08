@@ -12,6 +12,8 @@ export component DeviceRow inherits Rectangle {
     in property <string> selected;
     // Slint expressions can't search a model, so the bridge passes the picked device's label too
     in property <string> selected-label;
+    // Android's one mic has no name
+    private property <string> shown-label: selected-label != "" ? selected-label : name;
     // "Microphone: Not found" and the like; empty when the device works
     in property <string> status;
     // Waiting for permission rather than refused: muted, not red
@@ -28,7 +30,7 @@ export component DeviceRow inherits Rectangle {
     background: Theme.surface-2;
     accessible-role: combobox;
     accessible-label: name;
-    accessible-value: selected-label;
+    accessible-value: shown-label;
     accessible-action-default => { if (can-pick) { popup.show(); } }
     animate border-color { duration: Theme.fast; easing: Theme.ease; }
 
@@ -44,7 +46,7 @@ export component DeviceRow inherits Rectangle {
             }
         }
         Text {
-            text: status != "" ? status : selected-label;
+            text: status != "" ? status : shown-label;
             color: missing ? Theme.danger-text : status != "" ? Theme.muted : Theme.text;
             font-size: Theme.font-size-small;
             vertical-alignment: center;
@@ -93,7 +95,7 @@ export component DeviceRow inherits Rectangle {
                     border-radius: 8px;
                     background: item.has-hover ? Theme.surface-3 : transparent;
                     accessible-role: list-item;
-                    accessible-label: d.label;
+                    accessible-label: d.label != "" ? d.label : name;
                     accessible-action-default => {
                         popup.close();
                         root.picked(d.id);
@@ -104,7 +106,7 @@ export component DeviceRow inherits Rectangle {
                         padding-right: 10px;
                         spacing: 8px;
                         Text {
-                            text: d.label;
+                            text: d.label != "" ? d.label : name;
                             color: Theme.text;
                             font-size: Theme.font-size-small;
                             vertical-alignment: center;

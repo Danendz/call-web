@@ -28,6 +28,7 @@ pub(crate) use fake::pattern as test_pattern;
 /// web asks for 30)
 pub(crate) const WIDTH: u32 = 1280;
 pub(crate) const HEIGHT: u32 = 720;
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android camera comes in A2"))]
 pub(crate) const MAX_FPS: u32 = 60;
 
 /// The running camera's frame rate, which sets how much bitrate it gets

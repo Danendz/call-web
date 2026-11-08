@@ -1,6 +1,6 @@
 # Native app (Rust + Slint)
 
-Desktop client for macOS and Windows. It talks to the same server over the same `/ws` protocol as the web app, so a native user can call a browser user. The root `AGENTS.md` still applies (git workflow, China, security, roadmap); this file adds what's specific to Rust and Slint.
+Desktop client for macOS and Windows, and the Android app (Phase 4 in the roadmap) built from the same crates. It talks to the same server over the same `/ws` protocol as the web app, so a native user can call a browser user. The root `AGENTS.md` still applies (git workflow, China, security, roadmap); this file adds what's specific to Rust and Slint.
 
 Current goal: **parity with the web app**. Native-only features (overlay, tray, hotkeys) come after, see `docs/ROADMAP.md`.
 
@@ -12,8 +12,9 @@ native/
   crates/engine/     everything that isn't UI: controller, signaling, peer, media, speech, stats
   app/               the Slint UI and the bridge from engine state to it
     ui/              *.slint: theme.slint (tokens), one folder per screen, components/ for shared ones
-    src/             main.rs and the bridge
+    src/             lib.rs (the app's run()), main.rs (desktop entry), android/ (Android entry), the bridge
     translations/    zh .po, bundled into the binary
+  android/           Gradle project: the APK, MainActivity and what only Java can do
 ```
 
 - **`protocol` mirrors `shared/protocol.ts` by hand.** The TS file is the source of truth. When it changes: update `shared/protocol.fixtures.ts` with an example of the new shape, run `npm run fixtures`, then update `crates/protocol` until `cargo test -p protocol` passes. Never add a message only on the Rust side.
@@ -54,9 +55,26 @@ native/
 - **Video frames reach the screen through `VideoSink`** (`engine/src/video.rs`, the app's `video.rs`): each feed keeps only its newest frame, converted straight into a fresh Slint buffer, and at most one UI hop per feed is pending, so a busy UI skips frames instead of falling behind. Conversion time shows in the stats overlay.
 - **Cameras** (`engine/src/camera/`): AVFoundation on macOS, handing the camera's `CVPixelBuffer` to WebRTC without a copy (portrait crops go through I420); Media Foundation on Windows through `nokhwa`, raw NV12/YUY2 only, since its MJPEG decoding would add a third libjpeg. 720p at 60 fps where the camera has it, else 30; the bitrate cap follows (`peer.rs` `tune_senders`). One video track lives for the app's whole life, so switching or turning the camera on never renegotiates. `CALL_FAKE_CAMERA=1` swaps every camera for a moving test pattern, for testing video where no camera can be used.
 - **Speech to chat** (`engine/src/speech/`) opens the mic apart from the call, like the level meter, and runs it through WebRTC's `AudioProcessingModule` with the other person's decoded voice as the echo reference, so their voice from the speakers isn't transcribed as yours. Utterances are cut like the web's recorder and streamed to `/ws/speech`. `CALL_FAKE_MIC=<file.wav>` loops a 16-bit mono WAV in place of the mic (`say -o hi.wav --data-format=LEI16@16000 "…"` makes one).
-- **Screen sharing** (`engine/src/screen.rs`) goes out in its own stream next to the camera, announced in `media` messages like the web's; their video is routed to the camera or screen feed by stream id (`remote.rs`). macOS uses the ScreenCaptureKit picker; Windows lists screens and windows in the app and captures them with Windows Graphics Capture. Up to 60 fps, scaled to fit 1080p. Its sound (`screen_audio/`) is everything the computer plays except this app, which plays the other person: ScreenCaptureKit on macOS 13+ (asks for Screen Recording permission if the picker didn't), process loopback on Windows; it goes out in the screen's stream. `CALL_FAKE_SCREEN=1` shares a test pattern (the sound is still real).
+- **Screen sharing** (`engine/src/screen/`) goes out in its own stream next to the camera, announced in `media` messages like the web's; their video is routed to the camera or screen feed by stream id (`remote.rs`). macOS uses the ScreenCaptureKit picker; Windows lists screens and windows in the app and captures them with Windows Graphics Capture. Up to 60 fps, scaled to fit 1080p. Its sound (`screen_audio/`) is everything the computer plays except this app, which plays the other person: ScreenCaptureKit on macOS 13+ (asks for Screen Recording permission if the picker didn't), process loopback on Windows; it goes out in the screen's stream. `CALL_FAKE_SCREEN=1` shares a test pattern (the sound is still real).
 - **Screenshots** are drawn with Skia (`skia-safe`, pinned to the version Slint's renderer uses, so nothing extra is built) from the frames on screen.
 - **macOS needs the app bundle** (`packaging/macos/`) for mic and camera permission prompts; a bare binary borrows the terminal's permissions, which in dev is often "denied", so a dev build sends silence.
+
+## Android
+
+- **The app is the same Rust library**, built as `libcall_danya.so` by `cargo-ndk` from the Gradle project in `android/` (arm64 only, minSdk 29). `MainActivity` extends `NativeActivity`: it hands WebRTC the app context (`nativeInit`, on the Java main thread where WebRTC's classes can be found), then `android_main` (`app/src/android/`) starts Slint's `android-activity` backend and the same `run()` as desktop. Logs go to logcat (`adb logcat -s call-danya`).
+- **Platform code** goes in `cfg(target_os = "android")` modules next to the macOS and Windows ones; anything only Java can do (foreground service, permissions, MediaProjection, installing an update) goes in Kotlin in `android/`, kept small. Velopack and the winit window hook are desktop only.
+- **WebRTC on Android needs its Java half:** `app/build.rs` exports the prebuilt's `Java_livekit_org_webrtc_*` JNI symbols from our library and copies its `libwebrtc.jar` next to it, where Gradle picks it up.
+- **The window is drawn under the status and navigation bars**, so `app.slint` keeps every screen inside `safe-area-insets` (zero on desktop).
+- **Build and run** (needs the SDK with NDK 28.2 and platform 35, `cargo install cargo-ndk`, `rustup target add aarch64-linux-android`, and a JDK, e.g. Android Studio's: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`):
+
+  ```
+  cd android && ./gradlew assembleDebug
+  adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+  adb reverse tcp:8090 tcp:8090   # a debug build talks to the dev server at localhost:8090
+  ```
+
+  Where github.com can't be reached, the WebRTC prebuilt download fails: fetch `webrtc-android-arm64-release.zip` from LiveKit's `rust-sdks` release named in `webrtc-sys-build`'s `WEBRTC_TAG` (`gh release download` works when the site doesn't), unzip it and point `LK_CUSTOM_WEBRTC` at the folder for Android builds only.
+- **An emulator** (an arm64 API 31 image is closest to HarmonyOS 4.x) checks that the app starts, draws and joins; sound, echo cancellation and background behavior need a real phone.
 
 ## Distribution
 

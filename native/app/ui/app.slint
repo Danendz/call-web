@@ -96,120 +96,128 @@ export component AppWindow inherits Window {
     background: Theme.bg;
     default-font-size: Theme.font-size;
 
-    if phase == AppPhase.start: StartScreen {
-        version: root.version;
-        update-version: root.update-version;
-        update-now => { root.update-now(); }
-        new-room => { root.new-room(); }
-        open-link(link) => { root.open-link(link) }
-    }
+    // Clear of the phone's status and navigation bars, which the window is drawn under; zero on desktop
+    Rectangle {
+        x: root.safe-area-insets.left;
+        y: root.safe-area-insets.top;
+        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
 
-    if phase == AppPhase.setup: SetupScreen {
-        room-url: root.room-url;
-        lang: root.lang;
-        mics: root.mics;
-        mic-id: root.mic-id;
-        mic-label: root.mic-label;
-        mic-on: root.mic-on;
-        mic-level: root.mic-level;
-        mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
-        video: root.self-video;
-        cam-on: root.cam-on;
-        cam-granted: root.cam-access == CamAccess.granted;
-        cam-pending: root.cam-access == CamAccess.pending;
-        cams: root.cams;
-        cam-id: root.cam-id;
-        cam-label: root.cam-label;
-        cam-status: root.cam-status;
-        portrait: root.portrait;
-        toggle-mic => { root.toggle-mic(); }
-        toggle-cam => { root.toggle-cam(); }
-        set-portrait(p) => { root.set-portrait(p); }
-        set-lang(lang) => { root.set-lang(lang); }
-        pick-mic(id) => { root.pick-mic(id); }
-        pick-cam(id) => { root.pick-cam(id); }
-        join => { root.join(); }
-        back => { root.home(); }
-    }
-
-    if phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call: CallScreen {
-        room-url: root.room-url;
-        starting: phase == AppPhase.starting;
-        connected: phase == AppPhase.in-call;
-        reconnecting: root.reconnecting;
-        link: root.link;
-        elapsed: root.elapsed;
-        mic-on: root.mic-on;
-        has-mic: root.mics.length > 0;
-        cam-on: root.cam-on;
-        cam-granted: root.cam-access == CamAccess.granted;
-        cams: root.cams;
-        cam-id: root.cam-id;
-        portrait: root.portrait;
-        peer-video: root.peer-video;
-        screen-video: root.screen-video;
-        remote-screen: root.remote-screen;
-        sharing: root.sharing;
-        screen-sources: root.screen-sources;
-        corner-self: root.corner-self;
-        corner-peer: root.corner-peer;
-        corner-screen: root.corner-screen;
-        toggle-share => { root.toggle-share(); }
-        share-source(id) => { root.share-source(id); }
-        close-screen-picker => { root.close-screen-picker(); }
-        corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
-        peer-frame-rotation: root.peer-frame-rotation;
-        peer-cam-on: root.peer-cam-on;
-        self-video: root.self-video;
-        stats: root.stats;
-        force-relay: root.force-relay;
-        chat: root.chat;
-        others-count: root.others-count;
-        subtitle: root.subtitle;
-        subtitle-serial: root.subtitle-serial;
-        transcribe-on: root.transcribe-on;
-        speech-notice: root.speech-notice;
-        speech-paused-until: root.speech-paused-until;
-        peer-screenshot: root.peer-screenshot;
-        saved-shot: root.saved-shot;
-        screenshot(feed, rotation) => { root.screenshot(feed, rotation); }
-        show-shot => { root.show-shot(); }
-        toggle-transcribe => { root.toggle-transcribe(); }
-        send-chat(text) => { root.send-chat(text) }
-        toggle-mic => { root.toggle-mic(); }
-        toggle-cam => { root.toggle-cam(); }
-        pick-cam(id) => { root.pick-cam(id); }
-        next-cam => { root.next-cam(); }
-        set-portrait(p) => { root.set-portrait(p); }
-        set-force-relay(r) => { root.set-force-relay(r); }
-        hang-up => { root.hang-up(); }
-    }
-
-    if phase == AppPhase.full: Centered {
-        icon: Icons.users;
-        title: @tr("Room is full");
-        body: @tr("This room already has two people in it.");
-        Button {
-            text: @tr("Start a new room");
-            icon: Icons.plus;
-            kind: ButtonKind.primary;
-            clicked => { root.new-room(); }
+        if phase == AppPhase.start: StartScreen {
+            version: root.version;
+            update-version: root.update-version;
+            update-now => { root.update-now(); }
+            new-room => { root.new-room(); }
+            open-link(link) => { root.open-link(link) }
         }
-    }
 
-    if phase == AppPhase.ended: Centered {
-        icon: Icons.phone-off;
-        title: @tr("Call ended");
-        Button {
-            text: @tr("Rejoin");
-            icon: Icons.rotate-ccw;
-            kind: ButtonKind.primary;
-            clicked => { root.join(); }
+        if phase == AppPhase.setup: SetupScreen {
+            room-url: root.room-url;
+            lang: root.lang;
+            mics: root.mics;
+            mic-id: root.mic-id;
+            mic-label: root.mic-label;
+            mic-on: root.mic-on;
+            mic-level: root.mic-level;
+            mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
+            video: root.self-video;
+            cam-on: root.cam-on;
+            cam-granted: root.cam-access == CamAccess.granted;
+            cam-pending: root.cam-access == CamAccess.pending;
+            cams: root.cams;
+            cam-id: root.cam-id;
+            cam-label: root.cam-label;
+            cam-status: root.cam-status;
+            portrait: root.portrait;
+            toggle-mic => { root.toggle-mic(); }
+            toggle-cam => { root.toggle-cam(); }
+            set-portrait(p) => { root.set-portrait(p); }
+            set-lang(lang) => { root.set-lang(lang); }
+            pick-mic(id) => { root.pick-mic(id); }
+            pick-cam(id) => { root.pick-cam(id); }
+            join => { root.join(); }
+            back => { root.home(); }
         }
-        Button {
-            text: @tr("New room");
-            icon: Icons.plus;
-            clicked => { root.new-room(); }
+
+        if phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call: CallScreen {
+            room-url: root.room-url;
+            starting: phase == AppPhase.starting;
+            connected: phase == AppPhase.in-call;
+            reconnecting: root.reconnecting;
+            link: root.link;
+            elapsed: root.elapsed;
+            mic-on: root.mic-on;
+            has-mic: root.mics.length > 0;
+            cam-on: root.cam-on;
+            cam-granted: root.cam-access == CamAccess.granted;
+            cams: root.cams;
+            cam-id: root.cam-id;
+            portrait: root.portrait;
+            peer-video: root.peer-video;
+            screen-video: root.screen-video;
+            remote-screen: root.remote-screen;
+            sharing: root.sharing;
+            screen-sources: root.screen-sources;
+            corner-self: root.corner-self;
+            corner-peer: root.corner-peer;
+            corner-screen: root.corner-screen;
+            toggle-share => { root.toggle-share(); }
+            share-source(id) => { root.share-source(id); }
+            close-screen-picker => { root.close-screen-picker(); }
+            corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
+            peer-frame-rotation: root.peer-frame-rotation;
+            peer-cam-on: root.peer-cam-on;
+            self-video: root.self-video;
+            stats: root.stats;
+            force-relay: root.force-relay;
+            chat: root.chat;
+            others-count: root.others-count;
+            subtitle: root.subtitle;
+            subtitle-serial: root.subtitle-serial;
+            transcribe-on: root.transcribe-on;
+            speech-notice: root.speech-notice;
+            speech-paused-until: root.speech-paused-until;
+            peer-screenshot: root.peer-screenshot;
+            saved-shot: root.saved-shot;
+            screenshot(feed, rotation) => { root.screenshot(feed, rotation); }
+            show-shot => { root.show-shot(); }
+            toggle-transcribe => { root.toggle-transcribe(); }
+            send-chat(text) => { root.send-chat(text) }
+            toggle-mic => { root.toggle-mic(); }
+            toggle-cam => { root.toggle-cam(); }
+            pick-cam(id) => { root.pick-cam(id); }
+            next-cam => { root.next-cam(); }
+            set-portrait(p) => { root.set-portrait(p); }
+            set-force-relay(r) => { root.set-force-relay(r); }
+            hang-up => { root.hang-up(); }
+        }
+
+        if phase == AppPhase.full: Centered {
+            icon: Icons.users;
+            title: @tr("Room is full");
+            body: @tr("This room already has two people in it.");
+            Button {
+                text: @tr("Start a new room");
+                icon: Icons.plus;
+                kind: ButtonKind.primary;
+                clicked => { root.new-room(); }
+            }
+        }
+
+        if phase == AppPhase.ended: Centered {
+            icon: Icons.phone-off;
+            title: @tr("Call ended");
+            Button {
+                text: @tr("Rejoin");
+                icon: Icons.rotate-ccw;
+                kind: ButtonKind.primary;
+                clicked => { root.join(); }
+            }
+            Button {
+                text: @tr("New room");
+                icon: Icons.plus;
+                clicked => { root.new-room(); }
+            }
         }
     }
 }

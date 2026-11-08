@@ -23,3 +23,8 @@ pub use protocol::{ChatMessage, Lang, MAX_CHAT_LENGTH, TranslatedText, Translati
 pub use speech::SpeechNotice;
 pub use stats::{CallStats, Path, VideoStats};
 pub use video::{Feed, Frame, VideoSink};
+
+/// Hands WebRTC the JavaVM and app context on Android. Call it on a Java thread, before the engine starts: WebRTC
+/// finds its Java classes through that thread's class loader.
+#[cfg(target_os = "android")]
+pub use libwebrtc::android::initialize_android_context;
