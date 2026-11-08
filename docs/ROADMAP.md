@@ -40,7 +40,7 @@ Target Windows and macOS first. Lives in `native/` as a Cargo workspace in this 
 - [x] **M3 — Chat, speech-to-text, translation and subtitles**, using the server's existing endpoints and the member `token`. Speech goes through `/ws/speech` behind a `Recognizer` trait. Screenshot with date stamp. Built: chat panel with translations and unread badge, speech to chat over `/ws/speech` with echo cancellation against the other person's voice, subtitles, paused/unavailable notices, screenshot with date stamp and the other side's notice.
 - [~] **M4 — Screen share.** Windows Graphics Capture and ScreenCaptureKit, up to 60 fps, alongside the camera. Draggable tiles, auto-hiding controls and a final animation pass: parity with the web app. Built: sharing alongside the camera both ways (ScreenCaptureKit picker on macOS, an in-app picker on Windows), the web's bitrate split, tiles you drag to a corner (remembered) or tap onto the stage, auto-hiding controls, popup and menu animations. Up to 60 fps (WebRTC's capturers: ScreenCaptureKit, and Windows Graphics Capture), scaled to fit 1080p, 3 Mbps cap; the encoder drops frames, not detail, when bandwidth runs short. The computer's sound goes with the share, without the call's own (ScreenCaptureKit on macOS 13+, process loopback on Windows). Left: the user trying 60 fps shares and their sound on both OSes.
 - [ ] **M5 — Overlay, notifications and desktop features.** See Phase 3.
-- [ ] **M6 — Distribution.** Installers, code signing (Windows certificate, Apple notarization), updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary.
+- [~] **M6 — Distribution.** Installers, signing, updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary. Built: Velopack per-user installers and delta updates, from the Railway `releases` bucket through `call.danendz.com/updates`; a version bump merged to `main` publishes a release; updates download quietly and install on quit or from an "Update" button on the start screen. Signing at no cost: Windows unsigned, macOS with a self-signed certificate so permissions survive updates (paid signing only if the app ever goes beyond the two of us). No Google service hosts in the release binary (checked with `strings`). Left: the first real release on both OSes.
 
 ## Phase 3 — Native only
 
@@ -66,6 +66,23 @@ During screen sharing she's in a game and can't see the chat, so new messages ha
 | [ ] Native super-resolution | VideoToolbox super-resolution scaler on macOS, NVIDIA RTX Video Super Resolution on Windows. Stronger than the web shader. |
 | [ ] Custom FEC, retransmission and congestion control | libwebrtc field trials (FlexFEC, more RED redundancy) or changes to the source, tuned for the China link. |
 | [ ] Fine-grained encoder tuning | Per-encoder options (x264, libvpx, NVENC), region-of-interest encoding (more bits on the face), keyframe and rate-control control. |
+
+## Phase 4 — Android (Native only)
+
+After M6. Only worth building if a phone is really used for calls or mobile games: first open a call link on her phone in its default browser and from WeChat, and lock the screen for a minute. If the web app holds up there, this phase can wait.
+
+Why an app and not the mobile web: Chrome on Android can't share the screen; a browser tab doesn't keep a call alive in the background, and Chinese phones (Xiaomi, Huawei, Oppo, Vivo) kill background work aggressively; Chinese phones rarely have Chrome, and links opened in WeChat land in its built-in browser, with weak WebRTC, while an APK ships its own libwebrtc.
+
+Same `native/` workspace: `protocol` and the engine's core (controller, signaling, peer, speech) build for Android as they are, LiveKit's `libwebrtc` supports Android (`initialize_android_context` with the JavaVM and app context), `cpal` has AAudio, and Slint has an `android-activity` backend. Android code goes in `cfg(target_os = "android")` modules next to the macOS and Windows ones; what only Java can do (foreground service, permissions, MediaProjection) goes in a small Kotlin shim.
+
+- [ ] **A0 — Spike.** The engine builds for `aarch64-linux-android` (`cargo-ndk` or `xbuild`), a bare Slint app joins a room and holds an audio call with a browser peer, with WebRTC's platform audio and hardware echo cancellation.
+- [ ] **A1 — Audio call that survives the background.** Foreground service (types microphone and camera) with a call notification carrying mute and hang up, runtime permissions, earpiece / speaker / Bluetooth routing with the proximity sensor, pause for a phone call.
+- [ ] **A2 — Camera and phone layouts.** Camera through the NDK Camera2 API into WebRTC (front/back, rotation), hardware encoding through MediaCodec. Portrait layouts for every screen, touch-sized controls, chat above the on-screen keyboard, picture-in-picture while in another app.
+- [ ] **A3 — Don't miss messages.** Local notification and sound on new messages (no push: FCM is blocked in China and missing on many Chinese phones), read aloud with the system's text-to-speech, chat and subtitles in a bubble over other apps ("display over other apps" permission) for mobile games.
+- [ ] **A4 — Screen share.** MediaProjection with its own foreground service type, and only the game's sound through audio playback capture (Android 10+).
+- [ ] **A5 — Distribution.** Signed APK served from our own server with in-app updates, like M6. No Google Play, no Chinese app stores (they need ICP filing and software copyright registration), no Google Play services in the APK. CI builds the APK on Linux.
+
+Phase 3's on-device speech recognition (`sherpa-onnx`) and FEC / encoder tuning carry over to Android; super-resolution doesn't (no system API, small screen).
 
 ## Not planned
 

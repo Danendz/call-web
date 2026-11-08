@@ -5,6 +5,9 @@ import { JoinDialog } from "join-dialog.slint";
 
 // First screen: a desktop app has no address bar, so the room comes from here.
 export component StartScreen inherits Rectangle {
+    in property <string> version;
+    in property <string> update-version;
+    callback update-now();
     callback new-room();
     callback open-link(string) -> bool;
     property <bool> asking: false;
@@ -52,6 +55,27 @@ export component StartScreen inherits Rectangle {
                 font-size: 16px;
                 clicked => { asking = true; }
             }
+        }
+    }
+
+    // Only here, never in a call: updating restarts the app
+    HorizontalLayout {
+        y: parent.height - self.height - 16px;
+        height: 36px;
+        alignment: center;
+        spacing: 12px;
+        Text {
+            text: "v" + root.version;
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
+        if root.update-version != "": Button {
+            text: @tr("Update to {}", root.update-version);
+            icon: Icons.rotate-cw;
+            kind: ButtonKind.primary;
+            height-hint: 36px;
+            clicked => { root.update-now(); }
         }
     }
 

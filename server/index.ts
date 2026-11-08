@@ -6,6 +6,7 @@ import { MAX_CHAT_LENGTH, MAX_STREAM_ID_LENGTH, ROOM_ID_RE, type ClientMessage }
 import { clientIp, concurrencyLimit, ownHost, rateLimit, setSecurityHeaders } from "./limits.js";
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
 import { onSpeechConnection } from "./transcribe.js";
+import { serveUpdates } from "./updates.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR ?? "dist/web");
@@ -39,6 +40,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
+  if (serveUpdates(req, res, url.pathname)) return;
 
   let filePath = path.join(STATIC_DIR, path.normalize(decodeURIComponent(url.pathname)));
   if (!filePath.startsWith(STATIC_DIR)) {
