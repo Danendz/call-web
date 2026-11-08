@@ -1,6 +1,5 @@
 //! Camera pixels to the I420 frames WebRTC encodes, cropped to the picked shape on the way.
 
-use libwebrtc::native::yuv_helper;
 use libwebrtc::prelude::I420Buffer;
 
 /// The centered part of a `width` x `height` picture that has the wanted shape: all of it for landscape (cameras
@@ -24,32 +23,32 @@ impl Crop {
     }
 }
 
-/// Two-plane 4:2:0 (Y, then interleaved UV), as macOS and most Windows cameras deliver it.
+/// Two-plane 4:2:0 (Y, then interleaved UV), as macOS and most Windows cameras deliver it. Done here rather than by
+/// libyuv, whose wrapper wants `stride * height` bytes after the crop's first pixel and panics on a portrait slice of
+/// a plane that holds exactly the picture.
 pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, crop: Crop) -> Option<I420Buffer> {
-    let y_start = (crop.y * y_stride + crop.x) as usize;
-    let uv_start = (crop.y / 2 * uv_stride + crop.x) as usize;
-    let y_needed = y_start + ((crop.height - 1) * y_stride + crop.width) as usize;
-    let uv_needed = uv_start + ((crop.height / 2 - 1) * uv_stride + crop.width) as usize;
-    if crop.width == 0 || crop.height == 0 || y.len() < y_needed || uv.len() < uv_needed {
+    if crop.width == 0 || crop.height == 0 {
         return None;
     }
     let mut out = I420Buffer::new(crop.width, crop.height);
     let (sy, su, sv) = out.strides();
     let (dy, du, dv) = out.data_mut();
-    yuv_helper::nv12_to_i420(
-        y.get(y_start..)?,
-        y_stride,
-        uv.get(uv_start..)?,
-        uv_stride,
-        dy,
-        sy,
-        du,
-        su,
-        dv,
-        sv,
-        crop.width as i32,
-        crop.height as i32,
-    );
+    let (w, x) = (crop.width as usize, crop.x as usize);
+    let (y_stride, uv_stride, sy, su, sv) =
+        (y_stride as usize, uv_stride as usize, sy as usize, su as usize, sv as usize);
+    for row in 0..crop.height as usize {
+        let from = (crop.y as usize + row) * y_stride + x;
+        dy.get_mut(row * sy..row * sy + w)?.copy_from_slice(y.get(from..from + w)?);
+    }
+    for row in 0..crop.height as usize / 2 {
+        let from = (crop.y as usize / 2 + row) * uv_stride + x;
+        let src = uv.get(from..from + w)?;
+        let u = du.get_mut(row * su..row * su + w / 2)?;
+        let v = dv.get_mut(row * sv..row * sv + w / 2)?;
+        for (([cb, cr], u), v) in src.as_chunks::<2>().0.iter().zip(u).zip(v) {
+            (*u, *v) = (*cb, *cr);
+        }
+    }
     Some(out)
 }
 
@@ -117,6 +116,23 @@ mod tests {
         assert_eq!(&y[sy as usize..sy as usize + 4], &[20, 21, 22, 23]);
         assert_eq!(&u[..2], &[105, 60]);
         assert_eq!(&v[..2], &[205, 70]);
+    }
+
+    #[test]
+    fn nv12_portrait_slice_of_an_exactly_sized_plane() {
+        // 32x8 picture whose planes end right after the last row, as a camera's do; the 9:16 slice is 4 wide at
+        // x 14. libyuv's wrapper panicked here, taking the camera's thread and the app with it
+        let y: Vec<u8> = (0..=255).collect();
+        let uv: Vec<u8> = (0..128).collect();
+        let crop = Crop::new(32, 8, true);
+        assert_eq!(crop, Crop { x: 14, y: 0, width: 4, height: 8 });
+        let out = nv12_to_i420(&y, 32, &uv, 32, crop).unwrap();
+        let (oy, u, v) = out.data();
+        let (sy, su, _) = out.strides();
+        assert_eq!(&oy[..4], &[14, 15, 16, 17]);
+        assert_eq!(&oy[7 * sy as usize..7 * sy as usize + 4], &[238, 239, 240, 241]);
+        assert_eq!((&u[..2], &v[..2]), (&[14, 16][..], &[15, 17][..]));
+        assert_eq!(u[3 * su as usize], 3 * 32 + 14);
     }
 
     #[test]

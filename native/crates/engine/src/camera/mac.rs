@@ -153,8 +153,9 @@ fn frame(output: &Output, sample: &CMSampleBuffer) {
     // SAFETY: the sample buffer is valid for the length of the delegate call
     let Some(image) = (unsafe { sample.image_buffer() }) else { return };
     if !output.portrait() {
-        // SAFETY: a valid CVPixelBuffer; WebRTC's wrapper retains it for as long as the frame is in use
-        let native = unsafe { NativeBuffer::from_cv_pixel_buffer(CFRetained::as_ptr(&image).as_ptr().cast()) };
+        // SAFETY: a valid CVPixelBuffer. The wrapper releases the reference it's given (despite its docs saying it
+        // leaves the count alone), so it gets ours; passing a borrowed one over-released every frame and crashed
+        let native = unsafe { NativeBuffer::from_cv_pixel_buffer(CFRetained::into_raw(image).as_ptr().cast()) };
         output.deliver(native);
         return;
     }
