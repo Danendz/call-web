@@ -69,7 +69,7 @@ cargo test
 cargo build --release
 ```
 
-CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds (the installable artifacts, and the only check of Windows-only code) take most of an hour, so they run on `main`, on new commits pushed to a `build/**` branch, or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Run one when Windows code changed or someone needs a build to try. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
+CI runs fmt, clippy and tests on macOS for every PR. The macOS and Windows release builds (the installable artifacts, and the only check of Windows-only code) take most of an hour, so they run on `main`, on new commits pushed to a `build/**` branch, or on demand with `gh workflow run native.yml --ref <branch>` (any branch). Start one (or push to a `build/**` branch) only when the user asks for a build; don't offer to. A branch pushed with no new commits doesn't start a build, since the path filter then sees no changes.
 
 When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `cargo run` here (a debug build uses `http://localhost:8090` unless `CALL_SERVER` says otherwise). Leave real two-person calls to the user.
 
