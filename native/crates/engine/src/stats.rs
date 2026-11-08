@@ -46,6 +46,8 @@ pub struct CallStats {
     pub send_budget_kbps: Option<f64>,
     /// Converting a frame for the screen, smoothed: the CPU render path's cost
     pub convert_ms: f64,
+    /// Turning a camera frame into what WebRTC encodes, smoothed
+    pub camera_ms: f64,
 }
 
 /// Running totals, kept between samples to turn them into rates.
@@ -190,6 +192,7 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
         video_out,
         send_budget_kbps: pair.map(|p| p.available_outgoing_bitrate / 1000.0).filter(|b| *b > 0.0),
         convert_ms: f64::from(crate::video::CONVERT_US.get()) / 1000.0,
+        camera_ms: f64::from(crate::video::CAMERA_US.get()) / 1000.0,
     };
     (stats, counters)
 }

@@ -8,8 +8,10 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { clientIp, concurrencyLimit, rateLimit } from "./limits.js";
 
-// Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe. Nothing with a
-// slash, so a request can only name a file at the bucket's root.
+// Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe; Android's
+// (packaging/android/release.sh): android.json, call-danya-1.2.3.apk, call-danya.apk; the on-device speech model's
+// files (uploaded by hand): sensevoice-small-int8-2024-07-17.onnx. Nothing with a slash, so a request can only name a
+// file at the bucket's root.
 const FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 // An update check is one request, an update a few; a package is ~20 MB, so a few at a time per IP is plenty.
@@ -22,6 +24,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".zip": "application/zip",
   ".exe": "application/vnd.microsoft.portable-executable",
   ".pkg": "application/octet-stream",
+  ".apk": "application/vnd.android.package-archive",
 };
 
 type Bucket = { endpoint: URL; name: string; region: string; keyId: string; secret: string };
@@ -76,15 +79,21 @@ async function proxy(
   signal: AbortSignal,
 ): Promise<void> {
   const url = new URL(`/${file}`, `${bucket.endpoint.protocol}//${bucket.name}.${bucket.endpoint.host}`);
+  // A byte range lets the app resume the ~240 MB speech model after a dropped connection; it isn't signed, which S3
+  // allows for headers left out of SignedHeaders
+  const range = req.headers.range;
   const upstream = await fetch(url, {
     method: req.method,
-    headers: signedHeaders(bucket, req.method ?? "GET", url),
+    headers: {
+      ...signedHeaders(bucket, req.method ?? "GET", url),
+      ...(typeof range === "string" && /^bytes=\d+-\d*$/.test(range) && { range }),
+    },
     signal,
   });
   // A 403 is our credentials, not a missing file, so it's thrown and logged
-  if (upstream.status === 404) {
+  if (upstream.status === 404 || upstream.status === 416) {
     await upstream.body?.cancel();
-    res.writeHead(404).end();
+    res.writeHead(upstream.status).end();
     return;
   }
   if (!upstream.ok) {
@@ -95,12 +104,15 @@ async function proxy(
   const ext = file.slice(file.lastIndexOf("."));
   const headers: Record<string, string> = {
     "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream",
-    // Package names carry their version and never change; the feed and the installers keep one name across releases
-    "cache-control": ext === ".nupkg" ? "public, max-age=31536000, immutable" : "no-cache",
+    // A name with a version in it never changes; the feeds and the installers keep one name across releases
+    "cache-control": /\d+\.\d+\.\d+/.test(file) ? "public, max-age=31536000, immutable" : "no-cache",
   };
   const length = upstream.headers.get("content-length");
   if (length) headers["content-length"] = length;
-  res.writeHead(200, headers);
+  const contentRange = upstream.headers.get("content-range");
+  if (upstream.status === 206 && contentRange) headers["content-range"] = contentRange;
+  headers["accept-ranges"] = "bytes";
+  res.writeHead(upstream.status === 206 ? 206 : 200, headers);
   if (!upstream.body || req.method === "HEAD") {
     res.end();
     return;

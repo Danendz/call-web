@@ -54,7 +54,10 @@ impl SlintSink {
                 None => (Image::default(), 0),
             };
             match feed {
-                Feed::Camera => ui.set_self_video(image),
+                Feed::Camera => {
+                    ui.set_self_video(image);
+                    ui.set_self_frame_rotation(rotation);
+                }
                 Feed::Peer => {
                     ui.set_peer_video(image);
                     ui.set_peer_frame_rotation(rotation);
@@ -71,10 +74,16 @@ impl VideoSink for SlintSink {
         let mut buffer = SharedPixelBuffer::<Rgba8Pixel>::new(frame.width(), frame.height());
         frame.write_rgba(buffer.make_mut_bytes());
         if feed == Feed::Camera {
-            // Your own picture is shown like a mirror, as on the web
-            let width = frame.width() as usize;
-            for row in buffer.make_mut_slice().chunks_exact_mut(width.max(1)) {
-                row.reverse();
+            // Your own picture is shown like a mirror, as on the web. A sideways frame is drawn turned, so its left
+            // and right are the rows: flipping it upside down mirrors it once turned
+            let width = (frame.width() as usize).max(1);
+            let mut rows = buffer.make_mut_slice().chunks_exact_mut(width);
+            if frame.rotation() % 180 == 90 {
+                while let (Some(top), Some(bottom)) = (rows.next(), rows.next_back()) {
+                    top.swap_with_slice(bottom);
+                }
+            } else {
+                rows.for_each(<[_]>::reverse);
             }
         }
         if let Ok(mut latest) = self.slot(feed).latest.lock() {

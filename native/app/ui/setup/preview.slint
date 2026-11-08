@@ -9,6 +9,8 @@ export component Preview inherits Rectangle {
     // 0..=1, drawn as a ring around the mic button so you can see the right mic is picked up before joining
     in property <float> mic-level;
     in property <image> video;
+    // Clockwise degrees that turn the frames upright
+    in property <int> video-rotation;
     in property <bool> cam-on;
     in property <bool> cam-granted;
     // Why there's no picture when the camera can't be used, e.g. "Camera: Not found"
@@ -18,7 +20,11 @@ export component Preview inherits Rectangle {
     callback toggle-cam();
     callback toggle-portrait();
 
+    // A portrait preview on a phone is narrower than the three buttons at their usual size
+    property <length> button: root.width < 190px ? 38px : 46px;
+
     property <bool> showing: cam-granted && cam-on && video.width > 0;
+    property <bool> turned: Math.mod(video-rotation, 180) != 0;
 
     border-radius: Theme.radius-lg;
     background: Theme.surface;
@@ -28,10 +34,11 @@ export component Preview inherits Rectangle {
     clip: true;
 
     Image {
-        width: 100%;
-        height: 100%;
+        width: root.turned ? root.height : root.width;
+        height: root.turned ? root.width : root.height;
         source: video;
         image-fit: cover;
+        transform-rotation: root.video-rotation * 1deg;
         opacity: showing ? 1 : 0;
         animate opacity { duration: Theme.med; easing: Theme.ease; }
     }
@@ -71,7 +78,7 @@ export component Preview inherits Rectangle {
 
         controls := HorizontalLayout {
             padding: 6px;
-            spacing: 10px;
+            spacing: root.width < 190px ? 4px : 10px;
 
             Rectangle {
                 width: mic.width;
@@ -87,7 +94,7 @@ export component Preview inherits Rectangle {
                     border-color: Theme.level;
                 }
                 mic := IconButton {
-                    size: 46px;
+                    size: root.button;
                     icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
                     label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
                     kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
@@ -96,7 +103,7 @@ export component Preview inherits Rectangle {
                 }
             }
             IconButton {
-                size: 46px;
+                size: root.button;
                 icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
                 label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
                 kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
@@ -104,7 +111,7 @@ export component Preview inherits Rectangle {
                 clicked => { root.toggle-cam(); }
             }
             IconButton {
-                size: 46px;
+                size: root.button;
                 icon: portrait ? Icons.rectangle-vertical : Icons.rectangle-horizontal;
                 label: portrait ? @tr("Send landscape video") : @tr("Send portrait video");
                 enabled: cam-granted;

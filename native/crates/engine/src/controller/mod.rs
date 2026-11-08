@@ -4,14 +4,17 @@
 mod api;
 mod call;
 mod devices;
+mod speech;
 
 pub use api::{ChatEvent, Command, Engine, Link, Phase, State};
 
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use libwebrtc::media_stream_track::MediaStreamTrack;
-use protocol::{ClientMessage, IceServerConfig, Lang, MAX_CHAT_LENGTH, SpeechServerMessage};
+use protocol::{ClientMessage, IceServerConfig, Lang, MAX_CHAT_LENGTH};
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -24,7 +27,7 @@ use crate::remote::RemoteVideos;
 use crate::room;
 use crate::screen::{self, LocalScreen};
 use crate::signaling::{SignalEvent, Signaling, SocketStatus};
-use crate::speech::{SpeechNotice, Transcriber};
+use crate::speech::{ModelStatus, SpeechEvent, SpeechNotice, Transcriber};
 use crate::video::VideoSink;
 
 /// What the engine tells itself from other threads and timers.
@@ -35,6 +38,10 @@ enum Internal {
     SpeechResumed,
     /// The share stopped by itself: picker cancelled, window closed, the OS's "stop sharing"
     ScreenEnded,
+    /// The on-device speech model's download, in percent; each download is known by its cancel flag
+    ModelProgress(Arc<AtomicBool>, u8),
+    /// The download ended: Ok(true) when the model is all there, Ok(false) when cancelled
+    ModelDownloaded(Arc<AtomicBool>, Result<bool, String>),
 }
 
 /// What the server told us when we joined, needed again for every new peer connection.
@@ -63,7 +70,11 @@ struct Controller {
     internal_tx: mpsc::UnboundedSender<Internal>,
     internal_rx: mpsc::UnboundedReceiver<Internal>,
     transcriber: Transcriber,
-    speech_rx: mpsc::UnboundedReceiver<SpeechServerMessage>,
+    speech_rx: mpsc::UnboundedReceiver<SpeechEvent>,
+    /// The on-device speech model's folder; None where there's no data folder
+    model_dir: Option<PathBuf>,
+    /// Set to stop the download that's running
+    model_cancel: Option<Arc<AtomicBool>>,
     direct_retries: usize,
     next_direct_retry: Option<Instant>,
     last_direct_retry: Option<Instant>,
@@ -78,9 +89,12 @@ struct Controller {
 }
 
 impl Controller {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         server: Url,
         lang: Lang,
+        data_dir: Option<PathBuf>,
+        on_device: bool,
         level: Level,
         sink: Arc<dyn VideoSink>,
         on_state: Box<dyn Fn(State) + Send>,
@@ -93,6 +107,9 @@ impl Controller {
         let media = Media::new();
         let camera = LocalCamera::new(media.factory(), sink.clone());
         let screen = LocalScreen::new(media.factory());
+        let model_dir = data_dir.map(|d| crate::speech::model_dir(&d));
+        let ready = model_dir.as_deref().is_some_and(crate::speech::model_ready);
+        let model = if ready { ModelStatus::Ready } else { ModelStatus::Missing };
         let state = State {
             phase: Phase::Start,
             lang,
@@ -120,6 +137,8 @@ impl Controller {
             peer_screenshot: false,
             transcribe_on: false,
             speech_notice: None,
+            model,
+            on_device,
         };
         Self {
             server,
@@ -137,6 +156,8 @@ impl Controller {
             internal_rx,
             transcriber: Transcriber::new(speech_tx),
             speech_rx,
+            model_dir,
+            model_cancel: None,
             direct_retries: 0,
             next_direct_retry: None,
             last_direct_retry: None,
@@ -170,8 +191,14 @@ impl Controller {
                             self.state.speech_notice = None;
                         }
                     }
+                    Internal::ModelProgress(download, percent) => {
+                        if self.is_current_download(&download) {
+                            self.state.model = ModelStatus::Downloading(percent);
+                        }
+                    }
+                    Internal::ModelDownloaded(download, result) => self.model_downloaded(&download, result),
                 },
-                Some(msg) = self.speech_rx.recv() => self.speech_notice(msg),
+                Some(event) = self.speech_rx.recv() => self.speech_event(event),
             }
             self.sync_devices();
             self.publish();
@@ -233,6 +260,20 @@ impl Controller {
                 }
             }
             Command::SetTranscribe(on) => self.state.transcribe_on = on,
+            Command::DownloadModel => self.download_model(),
+            Command::CancelModelDownload => {
+                if let Some(cancel) = self.model_cancel.take() {
+                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                self.state.model = ModelStatus::Missing;
+            }
+            Command::DeleteModel => self.delete_model(),
+            Command::SetOnDevice(on) => {
+                self.state.on_device = on;
+                if !on {
+                    self.transcriber.release();
+                }
+            }
             Command::ToggleShare if self.screen.sharing() => self.stop_share(),
             // Only in a call, like the web's menu item
             Command::ToggleShare if self.peer.is_some() => {
@@ -293,6 +334,7 @@ impl Controller {
         // Events from the old socket still queued must not touch the next call
         while self.signal_rx.try_recv().is_ok() {}
         self.mic = None;
+        self.transcriber.release();
         self.seat = Seat::default();
         self.state.reconnecting = false;
         self.state.remote_cam_on = true;

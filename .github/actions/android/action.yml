@@ -1,0 +1,23 @@
+# What an Android build needs on an Ubuntu runner, which already has the SDK: a JDK, the NDK and platform that
+# native/android/app/build.gradle.kts names, cargo-ndk and the Rust target, and the Rust cache for them.
+name: android
+description: Set up the Android build of the native app
+inputs:
+  cache-key:
+    description: The Rust cache's shared key; one per kind of build, as for desktop
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: 17, cache: gradle, cache-dependency-path: "native/android/**/*.gradle.kts" }
+    - uses: taiki-e/install-action@v2
+      with: { tool: cargo-ndk }
+    - shell: bash
+      run: |
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" "platforms;android-35" > /dev/null
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+        echo "ANDROID_JAR=$ANDROID_HOME/platforms/android-35/android.jar" >> "$GITHUB_ENV"
+        cd native && rustup target add aarch64-linux-android
+    - uses: Swatinem/rust-cache@v2
+      with: { workspaces: native, shared-key: "${{ inputs.cache-key }}" }

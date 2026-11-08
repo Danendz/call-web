@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { DeviceItem } from "../setup/device-row.slint";
+import { DeviceItem, DeviceName } from "../setup/device-row.slint";
 
 component MenuItem inherits Rectangle {
     in property <image> icon;
@@ -123,7 +123,7 @@ export component MoreMenu inherits IconButton {
                 if cam-granted && cams.length > 2: VerticalLayout {
                     for cam in cams: MenuItem {
                         icon: Icons.video;
-                        text: cam.label;
+                        text: DeviceName.of(cam.label, @tr("Camera"));
                         checked: cam.id == root.cam-id;
                         activated => { menu.close(); root.pick-cam(cam.id); }
                     }

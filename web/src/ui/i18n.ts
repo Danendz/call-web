@@ -17,6 +17,10 @@ const en = {
   copied: "Copied",
 
   readyToJoin: "Ready to join?",
+  download: "Download",
+  noteWindows: "If SmartScreen warns, choose More info → Run anyway",
+  noteMac: "The first time, right-click it and choose Open",
+  noteAndroid: "Allow installing apps from your browser when asked",
   shareLink: "Share this link with the person you want to call",
   microphone: "Microphone",
   camera: "Camera",
@@ -89,6 +93,10 @@ const zh: Strings = {
   copied: "已复制",
 
   readyToJoin: "准备好加入了吗？",
+  download: "下载",
+  noteWindows: "如果 SmartScreen 提示，选择“更多信息”→“仍要运行”",
+  noteMac: "第一次打开时，右键点击它并选择“打开”",
+  noteAndroid: "提示时，允许从浏览器安装应用",
   shareLink: "把这个链接发给你要通话的人",
   microphone: "麦克风",
   camera: "摄像头",

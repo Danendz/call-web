@@ -120,6 +120,7 @@ export component SetupScreen inherits Rectangle {
     in property <float> mic-level;
     in property <string> mic-status;
     in property <image> video;
+    in property <int> video-rotation;
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <bool> cam-pending;
@@ -161,6 +162,7 @@ export component SetupScreen inherits Rectangle {
                 has-mic: root.mics.length > 0;
                 mic-level: root.mic-level;
                 video: root.video;
+                video-rotation: root.video-rotation;
                 cam-on: root.cam-on;
                 cam-granted: root.cam-granted;
                 cam-status: root.cam-status;
@@ -213,6 +215,7 @@ export component SetupScreen inherits Rectangle {
                 has-mic: root.mics.length > 0;
                 mic-level: root.mic-level;
                 video: root.video;
+                video-rotation: root.video-rotation;
                 cam-on: root.cam-on;
                 cam-granted: root.cam-granted;
                 cam-status: root.cam-status;
