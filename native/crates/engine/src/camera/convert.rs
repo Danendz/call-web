@@ -1,6 +1,18 @@
 //! Camera pixels to the I420 frames WebRTC encodes, cropped to the picked shape on the way.
 
+use std::time::Instant;
+
 use libwebrtc::prelude::I420Buffer;
+
+use crate::video::CAMERA_US;
+
+/// Runs a conversion and records how long it took, for the stats overlay.
+pub(crate) fn timed<T>(convert: impl FnOnce() -> T) -> T {
+    let started = Instant::now();
+    let out = convert();
+    CAMERA_US.record(started.elapsed().as_micros());
+    out
+}
 
 /// The centered part of a `width` x `height` picture that has the wanted shape: all of it for landscape (cameras
 /// already send 16:9), a 9:16 slice for portrait. Even, because chroma covers 2x2 pixels.

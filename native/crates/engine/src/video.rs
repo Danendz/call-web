@@ -91,11 +91,13 @@ pub trait VideoSink: Send + Sync + 'static {
 
 /// How long converting a frame for the screen takes, smoothed, for the stats overlay.
 pub(crate) static CONVERT_US: Smoothed = Smoothed(AtomicU32::new(0));
+/// How long turning a camera frame into the I420 frame WebRTC encodes takes, smoothed, for the stats overlay.
+pub(crate) static CAMERA_US: Smoothed = Smoothed(AtomicU32::new(0));
 
 pub(crate) struct Smoothed(AtomicU32);
 
 impl Smoothed {
-    fn record(&self, sample: u128) {
+    pub(crate) fn record(&self, sample: u128) {
         let sample = u32::try_from(sample).unwrap_or(u32::MAX);
         let old = self.0.load(Ordering::Relaxed);
         let new = if old == 0 { sample } else { (old * 7 + sample) / 8 };

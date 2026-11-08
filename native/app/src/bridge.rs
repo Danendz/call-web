@@ -148,6 +148,7 @@ fn stats_view(stats: Option<&CallStats>, trying_direct: bool) -> StatsView {
         video_out: fmt_video(s.video_out.as_ref()).into(),
         limited_by: s.video_out.as_ref().and_then(|v| v.limited_by).unwrap_or_default().into(),
         convert: format!("{:.1} ms", s.convert_ms).into(),
+        camera: format!("{:.1} ms", s.camera_ms).into(),
     }
 }
 
@@ -164,7 +165,8 @@ fn empty_stats() -> StatsView {
         video_in: dash.clone(),
         video_out: dash.clone(),
         limited_by: SharedString::default(),
-        convert: dash,
+        convert: dash.clone(),
+        camera: dash,
     }
 }
 
