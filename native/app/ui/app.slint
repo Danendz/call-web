@@ -4,12 +4,12 @@ import { Theme } from "theme.slint";
 import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
-import { StartScreen } from "start/start.slint";
+import { StartScreen, ModelState } from "start/start.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, ModelState }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -42,6 +42,10 @@ export component AppWindow inherits Window {
     in property <string> corner-peer: "tr";
     in property <string> corner-screen: "tl";
     in property <int> peer-frame-rotation;
+    // Clockwise degrees that turn our camera's frames upright: a phone's sensor lies sideways
+    in property <int> self-frame-rotation;
+    // Android's picture-in-picture window is up
+    in property <bool> pip;
     in property <bool> peer-cam-on: true;
     in property <StatsView> stats;
     in property <bool> force-relay;
@@ -55,8 +59,40 @@ export component AppWindow inherits Window {
     in property <bool> peer-screenshot;
     in property <string> saved-shot;
     in property <string> version;
+    // The on-device speech model, for settings and the first launch's question
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    in-out property <bool> speech-prompt;
+    callback download-model();
+    callback cancel-model-download();
+    callback delete-model();
+    callback set-on-device(bool);
+    callback dismiss-speech-prompt();
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
+    // 0–100 while an update downloads, else -1
+    in property <int> update-progress: -1;
+    // Set on a phone: a touch screen with an on-screen keyboard
+    in property <bool> touch;
+    // Where the call's sound plays on a phone ("speaker", "earpiece", "bluetooth"), and which of them there are
+    in property <[string]> outputs;
+    in property <string> output;
+    callback pick-output(string);
+    in property <string> background-guide;
+    callback open-background-settings();
+    callback dismiss-background-guide();
+    // The call notification's text, in the app's language: title while waiting, title in a call, text, mute, unmute,
+    // hang up
+    out property <[string]> call-notice: [
+        @tr("Waiting for the other person to join…"),
+        @tr("In a call"),
+        @tr("Tap to return to the call"),
+        @tr("Mute"),
+        @tr("Unmute"),
+        @tr("Hang up"),
+    ];
 
     // The web's deviceStatus: why a device can't be used
     property <string> cam-status: cam-access == CamAccess.pending ? @tr("Camera: Asking for permission…")
@@ -86,6 +122,7 @@ export component AppWindow inherits Window {
     callback corner-moved(string, string);
     callback show-shot();
     callback update-now();
+    changed phase => { keys.focus(); }
 
     title: "Call Danya";
     icon: Icons.video;
@@ -96,19 +133,45 @@ export component AppWindow inherits Window {
     background: Theme.bg;
     default-font-size: Theme.font-size;
 
-    // Clear of the phone's status and navigation bars, which the window is drawn under; zero on desktop
-    Rectangle {
+    // Clear of the phone's status and navigation bars, which the window is drawn under, and of the on-screen keyboard,
+    // which covers it without resizing it; zero on desktop. Holds focus when nothing else does, so the phone's Back
+    // key lands here; what no screen takes goes back to Android, which puts the app in the background.
+    keys := FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if (event.text == Key.Back && root.phase == AppPhase.setup) {
+                root.home();
+                return accept;
+            }
+            reject
+        }
+
         x: root.safe-area-insets.left;
         y: root.safe-area-insets.top;
         width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
 
         if phase == AppPhase.start: StartScreen {
             version: root.version;
             update-version: root.update-version;
+            update-progress: root.update-progress;
             update-now => { root.update-now(); }
             new-room => { root.new-room(); }
             open-link(link) => { root.open-link(link) }
+            background-guide: root.background-guide;
+            open-background-settings => { root.open-background-settings(); }
+            dismiss-background-guide => { root.dismiss-background-guide(); }
+            touch: root.touch;
+            model-state: root.model-state;
+            model-progress: root.model-progress;
+            model-size: root.model-size;
+            on-device: root.on-device;
+            speech-prompt: root.speech-prompt;
+            download-model => { root.download-model(); }
+            cancel-model-download => { root.cancel-model-download(); }
+            delete-model => { root.delete-model(); }
+            set-on-device(on) => { root.set-on-device(on); }
+            dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
         }
 
         if phase == AppPhase.setup: SetupScreen {
@@ -121,6 +184,7 @@ export component AppWindow inherits Window {
             mic-level: root.mic-level;
             mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
             video: root.self-video;
+            video-rotation: root.self-frame-rotation;
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cam-pending: root.cam-access == CamAccess.pending;
@@ -168,6 +232,7 @@ export component AppWindow inherits Window {
             peer-frame-rotation: root.peer-frame-rotation;
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;
+            self-frame-rotation: root.self-frame-rotation;
             stats: root.stats;
             force-relay: root.force-relay;
             chat: root.chat;
@@ -183,6 +248,14 @@ export component AppWindow inherits Window {
             show-shot => { root.show-shot(); }
             toggle-transcribe => { root.toggle-transcribe(); }
             send-chat(text) => { root.send-chat(text) }
+            // From the whole window, so the on-screen keyboard doesn't flip it
+            stacked: root.width < 900px && root.height > root.width;
+            touch: root.touch;
+            keyboard-shown: root.virtual-keyboard-size.height > 0;
+            pip: root.pip;
+            outputs: root.outputs;
+            output: root.output;
+            pick-output(id) => { root.pick-output(id); }
             toggle-mic => { root.toggle-mic(); }
             toggle-cam => { root.toggle-cam(); }
             pick-cam(id) => { root.pick-cam(id); }

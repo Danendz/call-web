@@ -42,6 +42,7 @@ export component CallScreen inherits Rectangle {
     in property <int> peer-frame-rotation;
     in property <bool> peer-cam-on;
     in property <image> self-video;
+    in property <int> self-frame-rotation;
     in property <StatsView> stats;
     in property <bool> force-relay;
     in property <[ChatRow]> chat;
@@ -57,6 +58,16 @@ export component CallScreen inherits Rectangle {
     in property <bool> peer-screenshot;
     // Where the last screenshot was saved; a new one shows the toast for a while
     in property <string> saved-shot;
+    // A phone held upright: the chat opens under the video instead of beside it, like the web's STACKED_QUERY
+    in property <bool> stacked;
+    // A touch screen, where the chat doesn't focus its box on opening
+    in property <bool> touch;
+    in property <bool> keyboard-shown;
+    // Android's picture-in-picture window, too small for anything but the video
+    in property <bool> pip;
+    in property <[string]> outputs;
+    in property <string> output;
+    callback pick-output(string);
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
@@ -86,6 +97,7 @@ export component CallScreen inherits Rectangle {
     changed others-count => { if (chat-open) { seen-count = others-count; } }
     changed chat-open => { if (chat-open) { seen-count = others-count; } subtitle-shown = false; }
     property <length> chat-width: min(360px, root.width * 0.42);
+    property <length> chat-height: root.height * 0.58;
 
     // The controls fade off the video after a few seconds without input, like the web's useAutoHide; never while
     // waiting, with the pointer on the pill, or with the menu just opened
@@ -156,35 +168,46 @@ export component CallScreen inherits Rectangle {
     opacity: shown ? 1 : 0;
     animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
-    ChatPanel {
-        x: root.width - self.width;
-        width: root.chat-open ? root.chat-width : 0;
-        animate width { duration: Theme.slow; easing: Theme.ease; }
+    chat := ChatPanel {
+        x: root.stacked ? 0 : root.width - self.width;
+        y: root.stacked ? root.height - self.height : 0;
+        width: root.stacked ? root.width : root.chat-open ? root.chat-width : 0;
+        height: !root.stacked ? root.height : root.chat-open ? root.chat-height : 0;
+        animate width, height { duration: Theme.slow; easing: Theme.ease; }
         messages: root.chat;
         open: root.chat-open;
+        stacked: root.stacked;
+        visible: !root.pip;
+        focus-on-open: !root.touch;
+        keyboard-shown: root.keyboard-shown;
         can-send: !root.reconnecting && !root.starting;
         send(text) => { root.send-chat(text) }
         close => { root.chat-open = false; }
     }
 
-    // Everything but the chat; it narrows as the chat opens
+    // Everything but the chat; it narrows, or shortens when stacked, as the chat opens
     stage := Rectangle {
         x: 0;
-        width: root.width - (root.chat-open ? root.chat-width : 0);
-        animate width { duration: Theme.slow; easing: Theme.ease; }
+        y: 0;
+        width: root.width - (root.chat-open && !root.pip && !root.stacked ? root.chat-width : 0);
+        height: root.height - (root.chat-open && !root.pip && root.stacked ? root.chat-height : 0);
+        animate width, height { duration: Theme.slow; easing: Theme.ease; }
         clip: true;
 
-        // Wakes the controls on any movement over the stage; under everything, so tiles get their own presses
+        // Wakes the controls on any movement over the stage; under everything, so tiles get their own presses. A tap
+        // also puts the on-screen keyboard away.
         TouchArea {
             mouse-cursor: root.idle ? none : default;
             moved => { root.wake(); }
             pointer-event(event) => { root.wake(); }
+            clicked => { chat.blur(); }
         }
 
         feeds := Feeds {
             peer-video: root.peer-video;
             screen-video: root.screen-video;
             self-video: root.self-video;
+            self-rotation: root.self-frame-rotation;
             peer-rotation: root.peer-frame-rotation + root.user-rotation;
             has-peer: root.connected;
             has-screen: root.connected && root.remote-screen;
@@ -192,14 +215,18 @@ export component CallScreen inherits Rectangle {
             peer-cam-on: root.peer-cam-on;
             self-cam-on: root.cam-on && root.self-video.width > 0;
             pill-space: root.idle ? 20px : 96px;
+            only-main: root.pip;
             corner-self: root.corner-self;
             corner-peer: root.corner-peer;
             corner-screen: root.corner-screen;
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
-            touched => { root.wake(); }
+            touched => {
+                root.wake();
+                chat.blur();
+            }
         }
 
-        if !connected: Rectangle {
+        if !connected && !root.pip: Rectangle {
             background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
             property <bool> card-shown: false;
             init => { card-shown = true; }
@@ -240,6 +267,7 @@ export component CallScreen inherits Rectangle {
         VerticalLayout {
             y: 40px;
             height: self.preferred-height;
+            visible: !root.pip;
             alignment: start;
             spacing: 6px;
 
@@ -337,7 +365,7 @@ export component CallScreen inherits Rectangle {
             height: line.preferred-height + 16px;
             border-radius: Theme.radius;
             background: #000000b8;
-            opacity: subtitle-shown && !chat-open && connected ? 1 : 0;
+            opacity: subtitle-shown && !chat-open && connected && !root.pip ? 1 : 0;
             visible: self.opacity > 0;
             animate opacity { duration: Theme.med; easing: Theme.ease; }
             line := Text {
@@ -353,7 +381,10 @@ export component CallScreen inherits Rectangle {
         StatsOverlay {
             x: 14px;
             y: 40px;
-            open: root.stats-open && root.connected;
+            // Clear of the pill below it
+            limit-width: parent.width - 28px;
+            limit-height: parent.height - self.y - 100px;
+            open: root.stats-open && root.connected && !root.pip;
             stats: root.stats;
             force-relay: root.force-relay;
             set-force-relay(relay) => { root.set-force-relay(relay); }
@@ -361,9 +392,12 @@ export component CallScreen inherits Rectangle {
 
         ControlPill {
             x: (parent.width - self.width) / 2;
-            // Off the video while idle, like the web's .call.idle .pill
-            y: parent.height - self.height - 20px + (root.idle ? 24px : 0);
+            // Off the video while idle, like the web's .call.idle .pill; tucked lower and smaller over the stacked chat
+            y: parent.height - self.height - (root.stacked && root.chat-open ? 10px : 20px) + (root.idle ? 24px : 0);
+            button-size: root.stacked && root.chat-open ? 42px : root.width < 900px ? 46px : 48px;
+            gap: root.width < 900px ? 6px : 10px;
             opacity: root.idle ? 0 : 1;
+            visible: !root.pip;
             animate y, opacity { duration: Theme.med; easing: Theme.ease; }
             hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;
@@ -382,10 +416,15 @@ export component CallScreen inherits Rectangle {
                 root.flash = true;
                 flash-timer.running = true;
                 flash-timer.restart();
-                root.screenshot(feeds.main-feed, feeds.main-feed == "peer" ? root.peer-frame-rotation + root.user-rotation : 0);
+                root.screenshot(feeds.main-feed,
+                    feeds.main-feed == "peer" ? root.peer-frame-rotation + root.user-rotation
+                    : feeds.main-feed == "self" ? root.self-frame-rotation : 0);
             }
             sharing: root.sharing;
             can-share: root.connected;
+            outputs: root.outputs;
+            output: root.output;
+            pick-output(id) => { root.pick-output(id); }
             toggle-share => { root.toggle-share(); }
             transcribe-on: root.transcribe-on;
             chat-open: root.chat-open;

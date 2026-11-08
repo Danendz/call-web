@@ -13,11 +13,20 @@ getrandom = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# rustls's crypto for wss://. Nothing else picks one on Android (velopack's ureq does on desktop), and without it the
+# first connection to an https server panics
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tracing = "0.1"
 url = "2"
 libwebrtc = "0.4"
 # The setup screen's mic level; WebRTC captures nothing until a call
 cpal = "0.18.2"
+# On-device speech recognition (SenseVoice). Static on desktop; Android only has its shared build, whose .so files
+# Gradle packs into the APK
+sherpa-onnx = { version = "2.0.1", default-features = false }
+# Downloading that model, and checking it
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha2 = "0.11"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }

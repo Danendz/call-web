@@ -17,9 +17,14 @@ pub struct Updater {
 }
 
 impl Updater {
-    /// Checks now and every few hours, downloading anything new; `on_ready` gets the version once it's on disk.
-    /// None when the app isn't installed by Velopack (a dev build or a bare binary).
-    pub fn start(server: &Url, on_ready: impl Fn(String) + Send + 'static) -> Option<Self> {
+    /// Checks now and every few hours, downloading anything new; `on_progress` gets the percent while it downloads
+    /// and `on_ready` the version once it's on disk. None when the app isn't installed by Velopack (a dev build or a
+    /// bare binary).
+    pub fn start(
+        server: &Url,
+        on_progress: impl Fn(i16) + Send + Sync + 'static,
+        on_ready: impl Fn(String) + Send + 'static,
+    ) -> Option<Self> {
         let feed = server.join("updates").ok()?;
         let manager = match UpdateManager::new(HttpSource::new(feed.as_str()), None, None) {
             Ok(manager) => manager,
@@ -34,7 +39,7 @@ impl Updater {
             let updater = updater.clone();
             move || {
                 loop {
-                    match updater.fetch() {
+                    match updater.fetch(&on_progress) {
                         Ok(Some(version)) => {
                             on_ready(version);
                             // Nothing newer will be installed before this one, so stop checking
@@ -51,11 +56,16 @@ impl Updater {
     }
 
     /// Downloads an update if there is one, returning its version.
-    fn fetch(&self) -> Result<Option<String>, velopack::Error> {
+    fn fetch(&self, on_progress: &(impl Fn(i16) + Sync)) -> Result<Option<String>, velopack::Error> {
         let UpdateCheck::UpdateAvailable(info) = self.manager.check_for_updates()? else { return Ok(None) };
         let version = info.TargetFullRelease.Version.clone();
         tracing::info!("downloading update {version}");
-        self.manager.download_updates(&info, None)?;
+        let (progress, percents) = std::sync::mpsc::channel();
+        // The sender is dropped when the download ends, which ends the loop
+        std::thread::scope(|scope| {
+            scope.spawn(move || percents.iter().for_each(on_progress));
+            self.manager.download_updates(&info, Some(progress))
+        })?;
         if let Ok(mut ready) = self.ready.lock() {
             *ready = Some(*info);
         }

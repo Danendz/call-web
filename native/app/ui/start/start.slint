@@ -1,16 +1,40 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
+import { SettingsScreen, ModelState } from "settings.slint";
+import { SpeechPrompt } from "speech-prompt.slint";
+
+export { ModelState }
 
 // First screen: a desktop app has no address bar, so the room comes from here.
 export component StartScreen inherits Rectangle {
     in property <string> version;
     in property <string> update-version;
+    // 0–100 while an update downloads, else -1
+    in property <int> update-progress: -1;
     callback update-now();
     callback new-room();
     callback open-link(string) -> bool;
+    // On a phone, until it's been read: "huawei" for its App launch page, "other" for battery settings elsewhere
+    in property <string> background-guide;
+    callback open-background-settings();
+    callback dismiss-background-guide();
+    in property <bool> touch;
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    // The first launch's question about downloading the speech model
+    in property <bool> speech-prompt;
+    callback download-model();
+    callback cancel-model-download();
+    callback delete-model();
+    callback set-on-device(bool);
+    callback dismiss-speech-prompt();
     property <bool> asking: false;
+    property <bool> settings-open: false;
     property <bool> shown: false;
     init => { shown = true; }
 
@@ -56,6 +80,56 @@ export component StartScreen inherits Rectangle {
                 clicked => { asking = true; }
             }
         }
+
+        // No API can change these settings, so the guide says where they are
+        if root.background-guide != "": HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: min(440px, root.width - 48px);
+                height: guide.preferred-height;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface;
+                guide := VerticalLayout {
+                    padding: 18px;
+                    spacing: 14px;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Image {
+                            source: Icons.battery-warning;
+                            colorize: Theme.accent;
+                            width: 20px;
+                            height: 20px;
+                        }
+                        Text {
+                            text: root.background-guide == "huawei"
+                                ? @tr("So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches.")
+                                : @tr("So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings.");
+                            color: Theme.text;
+                            font-size: 14px;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 10px;
+                        Button {
+                            text: @tr("Done");
+                            height-hint: 40px;
+                            clicked => { root.dismiss-background-guide(); }
+                        }
+                        Button {
+                            text: @tr("Open settings");
+                            kind: ButtonKind.primary;
+                            height-hint: 40px;
+                            clicked => { root.open-background-settings(); }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Only here, never in a call: updating restarts the app
@@ -70,6 +144,18 @@ export component StartScreen inherits Rectangle {
             font-size: Theme.font-size-small;
             vertical-alignment: center;
         }
+        if root.model-state == ModelState.downloading: Text {
+            text: @tr("Downloading speech model… {}%", root.model-progress);
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
+        if root.update-version == "" && root.update-progress >= 0: Text {
+            text: @tr("Downloading update… {}%", root.update-progress);
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
         if root.update-version != "": Button {
             text: @tr("Update to {}", root.update-version);
             icon: Icons.rotate-cw;
@@ -79,8 +165,39 @@ export component StartScreen inherits Rectangle {
         }
     }
 
+    IconButton {
+        x: parent.width - self.width - 12px;
+        y: 12px;
+        icon: Icons.settings;
+        label: @tr("Settings");
+        transparent: true;
+        clicked => { settings-open = true; }
+    }
+
     if asking: JoinDialog {
         submit(link) => { root.open-link(link) }
         close => { asking = false; }
+    }
+
+    if settings-open: SettingsScreen {
+        touch: root.touch;
+        model-state: root.model-state;
+        model-progress: root.model-progress;
+        model-size: root.model-size;
+        on-device: root.on-device;
+        download-model => { root.download-model(); }
+        cancel-download => { root.cancel-model-download(); }
+        delete-model => { root.delete-model(); }
+        set-on-device(on) => { root.set-on-device(on); }
+        close => { settings-open = false; }
+    }
+
+    if root.speech-prompt && !settings-open: SpeechPrompt {
+        model-size: root.model-size;
+        download => {
+            root.download-model();
+            root.dismiss-speech-prompt();
+        }
+        dismiss => { root.dismiss-speech-prompt(); }
     }
 }

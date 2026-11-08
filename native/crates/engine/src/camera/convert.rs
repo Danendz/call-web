@@ -1,6 +1,18 @@
 //! Camera pixels to the I420 frames WebRTC encodes, cropped to the picked shape on the way.
 
+use std::time::Instant;
+
 use libwebrtc::prelude::I420Buffer;
+
+use crate::video::CAMERA_US;
+
+/// Runs a conversion and records how long it took, for the stats overlay.
+pub(crate) fn timed<T>(convert: impl FnOnce() -> T) -> T {
+    let started = Instant::now();
+    let out = convert();
+    CAMERA_US.record(started.elapsed().as_micros());
+    out
+}
 
 /// The centered part of a `width` x `height` picture that has the wanted shape: all of it for landscape (cameras
 /// already send 16:9), a 9:16 slice for portrait. Even, because chroma covers 2x2 pixels.
@@ -26,7 +38,7 @@ impl Crop {
 /// Two-plane 4:2:0 (Y, then interleaved UV), as macOS and most Windows cameras deliver it. Done here rather than by
 /// libyuv, whose wrapper wants `stride * height` bytes after the crop's first pixel and panics on a portrait slice of
 /// a plane that holds exactly the picture.
-#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android camera comes in A2"))]
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "Android's cameras deliver YUV_420_888"))]
 pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, crop: Crop) -> Option<I420Buffer> {
     if crop.width == 0 || crop.height == 0 {
         return None;
@@ -48,6 +60,57 @@ pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, c
         let v = dv.get_mut(row * sv..row * sv + w / 2)?;
         for (([cb, cr], u), v) in src.as_chunks::<2>().0.iter().zip(u).zip(v) {
             (*u, *v) = (*cb, *cr);
+        }
+    }
+    Some(out)
+}
+
+/// Android's YUV_420_888: a Y plane, then U and V planes whose samples are `uv_pixel_stride` apart (1 when planar,
+/// 2 when they interleave like NV12 or NV21).
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+pub(crate) struct Yuv420<'a> {
+    pub y: &'a [u8],
+    pub y_stride: usize,
+    pub u: &'a [u8],
+    pub v: &'a [u8],
+    pub uv_stride: usize,
+    pub uv_pixel_stride: usize,
+}
+
+/// The crop of a [`Yuv420`] picture as an I420 frame, as the sensor sees it. Turning it upright is left to whoever
+/// draws it (the frame says how far): turning here cost a third of a phone's core at 720p.
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+pub(crate) fn yuv420_to_i420(src: &Yuv420<'_>, crop: Crop) -> Option<I420Buffer> {
+    if crop.width == 0 || crop.height == 0 {
+        return None;
+    }
+    let mut out = I420Buffer::new(crop.width, crop.height);
+    let (sy, su, sv) = out.strides();
+    let (dy, du, dv) = out.data_mut();
+    let (w, x0, y0) = (crop.width as usize, crop.x as usize, crop.y as usize);
+    let (sy, su, sv) = (sy as usize, su as usize, sv as usize);
+    for row in 0..crop.height as usize {
+        let from = (y0 + row) * src.y_stride + x0;
+        dy.get_mut(row * sy..row * sy + w)?.copy_from_slice(src.y.get(from..from + w)?);
+    }
+    let step = src.uv_pixel_stride.max(1);
+    // The last sample of a row, not the stride past it: Android's U plane ends one byte short when it interleaves
+    let len = (w / 2 - 1) * step + 1;
+    for row in 0..crop.height as usize / 2 {
+        let from = (y0 / 2 + row) * src.uv_stride + x0 / 2 * step;
+        let (u, v) = (src.u.get(from..from + len)?, src.v.get(from..from + len)?);
+        let u_out = du.get_mut(row * su..row * su + w / 2)?;
+        let v_out = dv.get_mut(row * sv..row * sv + w / 2)?;
+        if step == 1 {
+            u_out.copy_from_slice(u);
+            v_out.copy_from_slice(v);
+        } else {
+            for (out, sample) in u_out.iter_mut().zip(u.iter().step_by(step)) {
+                *out = *sample;
+            }
+            for (out, sample) in v_out.iter_mut().zip(v.iter().step_by(step)) {
+                *out = *sample;
+            }
         }
     }
     Some(out)
@@ -134,6 +197,25 @@ mod tests {
         assert_eq!(&oy[7 * sy as usize..7 * sy as usize + 4], &[238, 239, 240, 241]);
         assert_eq!((&u[..2], &v[..2]), (&[14, 16][..], &[15, 17][..]));
         assert_eq!(u[3 * su as usize], 3 * 32 + 14);
+    }
+
+    #[test]
+    fn yuv420_crops_interleaved_chroma() {
+        // 4x2 picture with interleaved chroma (NV21: V first, U one byte on), cropped to the middle 2x2. The U plane
+        // is one byte short of V, as Android hands it
+        let y = [1, 2, 3, 4, 5, 6, 7, 8];
+        let vu = [20, 10, 21, 11];
+        let src = Yuv420 { y: &y, y_stride: 4, u: &vu[1..], v: &vu, uv_stride: 4, uv_pixel_stride: 2 };
+        let crop = Crop { x: 2, y: 0, width: 2, height: 2 };
+        let out = yuv420_to_i420(&src, crop).unwrap();
+        let (oy, u, v) = out.data();
+        let (sy, ..) = out.strides();
+        assert_eq!((&oy[..2], &oy[sy as usize..sy as usize + 2]), (&[3, 4][..], &[7, 8][..]));
+        assert_eq!((u[0], v[0]), (11, 21));
+        // The whole picture reaches the U plane's last byte without reading past it
+        let out = yuv420_to_i420(&src, Crop::new(4, 2, false)).unwrap();
+        let (_, u, v) = out.data();
+        assert_eq!((&u[..2], &v[..2]), (&[10, 11][..], &[20, 21][..]));
     }
 
     #[test]

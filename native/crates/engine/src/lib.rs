@@ -20,7 +20,7 @@ pub use camera::CameraAccess;
 pub use controller::{ChatEvent, Command, Engine, Link, Phase, State};
 pub use media::Device;
 pub use protocol::{ChatMessage, Lang, MAX_CHAT_LENGTH, TranslatedText, Translation};
-pub use speech::SpeechNotice;
+pub use speech::{MODEL_SIZE, ModelStatus, SpeechNotice};
 pub use stats::{CallStats, Path, VideoStats};
 pub use video::{Feed, Frame, VideoSink};
 
@@ -28,3 +28,7 @@ pub use video::{Feed, Frame, VideoSink};
 /// finds its Java classes through that thread's class loader.
 #[cfg(target_os = "android")]
 pub use libwebrtc::android::initialize_android_context;
+
+/// The camera, which only the app's Java side can open
+#[cfg(target_os = "android")]
+pub use camera::android as android_camera;
