@@ -1,0 +1,27 @@
+import { Theme } from "../theme.slint";
+
+// A status line at the top of the stage that fades in and out, like the web's Fade notices. It keeps its last text
+// while fading out, so the words don't vanish before the pill does.
+export component Notice inherits Rectangle {
+    in property <string> text;
+    in property <bool> muted;
+    property <string> shown-text;
+    property <bool> shown: text != "";
+    changed text => { if (text != "") { shown-text = text; } }
+    init => { shown-text = text; }
+
+    width: label.preferred-width + 28px;
+    height: shown ? label.preferred-height + 14px : 0;
+    border-radius: self.height / 2;
+    background: Theme.glass;
+    opacity: shown ? 1 : 0;
+    visible: self.opacity > 0;
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
+
+    label := Text {
+        text: shown-text;
+        color: muted ? Theme.muted : Theme.text;
+        font-size: 13px;
+        horizontal-alignment: center;
+    }
+}

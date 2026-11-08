@@ -1,0 +1,195 @@
+# Chinese for the native app. Wording follows web/src/ui/i18n.ts so both clients say the same thing.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_CN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Back"
+msgstr "返回"
+
+msgid "Call ended"
+msgstr "通话已结束"
+
+msgid "Call link"
+msgstr "通话链接"
+
+msgid "Camera"
+msgstr "摄像头"
+
+msgid "Camera is off"
+msgstr "摄像头已关闭"
+
+msgid "Camera: Asking for permission…"
+msgstr "摄像头：正在请求授权…"
+
+msgid "Camera: Blocked in System Settings"
+msgstr "摄像头：被系统设置阻止"
+
+msgid "Camera: Not found"
+msgstr "摄像头：未找到"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Chat"
+msgstr "聊天"
+
+msgid "Close chat"
+msgstr "关闭聊天"
+
+msgid "Connecting…"
+msgstr "正在连接…"
+
+msgid "Connection failed, retrying…"
+msgstr "连接失败，正在重试…"
+
+msgid "Connection stats"
+msgstr "连接统计"
+
+msgid "Connection unstable, reconnecting…"
+msgstr "连接不稳定，正在重连…"
+
+msgid "Copied"
+msgstr "已复制"
+
+msgid "Copy"
+msgstr "复制"
+
+msgid "Hang up"
+msgstr "挂断"
+
+msgid "I speak"
+msgstr "我说"
+
+msgid "Join"
+msgstr "加入"
+
+msgid "Join by link"
+msgstr "通过链接加入"
+
+msgid "Join call"
+msgstr "加入通话"
+
+msgid "Lost connection to server, reconnecting…"
+msgstr "与服务器断开连接，正在重连…"
+
+msgid "Message"
+msgstr "消息"
+
+msgid "Microphone"
+msgstr "麦克风"
+
+msgid "Microphone: Not found"
+msgstr "麦克风：未找到"
+
+msgid "More"
+msgstr "更多"
+
+msgid "New room"
+msgstr "新房间"
+
+msgid "No messages yet. They disappear when the room closes."
+msgstr "还没有消息。房间关闭后消息会消失。"
+
+msgid "Portrait video"
+msgstr "竖屏视频"
+
+msgid "Ready to join?"
+msgstr "准备好加入了吗？"
+
+msgid "Rejoin"
+msgstr "重新加入"
+
+msgid "Room is full"
+msgstr "房间已满"
+
+msgid "Room link"
+msgstr "房间链接"
+
+msgid "Rotate their video"
+msgstr "旋转对方画面"
+
+msgid "Screenshot"
+msgstr "截图"
+
+msgid "Screenshot saved"
+msgstr "截图已保存"
+
+msgid "Send"
+msgstr "发送"
+
+msgid "Send landscape video"
+msgstr "发送横屏视频"
+
+msgid "Send portrait video"
+msgstr "发送竖屏视频"
+
+msgid "Share screen"
+msgstr "共享屏幕"
+
+msgid "Share this link with the person you want to call"
+msgstr "把这个链接发给你要通话的人"
+
+msgid "Show in folder"
+msgstr "在文件夹中显示"
+
+msgid "Speech to chat"
+msgstr "语音转文字"
+
+msgid "Speech-to-chat isn't available right now"
+msgstr "语音转文字暂不可用"
+
+msgid "Speech-to-chat paused until {}: free limit reached"
+msgstr "语音转文字已暂停至 {}：已达到免费额度"
+
+msgid "Spoken"
+msgstr "语音"
+
+msgid "Start a new room"
+msgstr "创建新房间"
+
+msgid "Starting…"
+msgstr "正在启动…"
+
+msgid "Stop sharing"
+msgstr "停止共享"
+
+msgid "Swap videos"
+msgstr "切换画面"
+
+msgid "Switch camera"
+msgstr "切换摄像头"
+
+msgid "That isn't a call link"
+msgstr "这不是通话链接"
+
+msgid "The other person took a screenshot"
+msgstr "对方截了一张图"
+
+msgid "Their camera"
+msgstr "对方的摄像头"
+
+msgid "Their screen"
+msgstr "对方的屏幕"
+
+msgid "This room already has two people in it."
+msgstr "这个房间已经有两个人了。"
+
+msgid "Turn off camera"
+msgstr "关闭摄像头"
+
+msgid "Turn off microphone"
+msgstr "关闭麦克风"
+
+msgid "Turn on camera"
+msgstr "打开摄像头"
+
+msgid "Turn on microphone"
+msgstr "打开麦克风"
+
+msgid "Waiting for the other person to join…"
+msgstr "等待对方加入…"
+
+msgid "You"
+msgstr "你"

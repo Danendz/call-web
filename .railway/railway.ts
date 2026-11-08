@@ -2,7 +2,11 @@ import { defineRailway, preserve, project, service } from "railway/iac";
 
 export default defineRailway(() => {
   const web = service("web", {
-    build: "npm run build",
+    build: {
+      buildCommand: "npm run build",
+      // Only what the server and web client are built from: merges that touch only native/ or docs don't redeploy
+      watchPatterns: ["server/**", "web/**", "shared/**", "package.json", "package-lock.json", "tsconfig*.json", "vite.config.ts"],
+    },
     start: "npm start",
     healthcheck: "/healthz",
     // Singapore: best routes to mainland China, and next to the TURN relay on Vultr SG.

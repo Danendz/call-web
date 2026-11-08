@@ -1,0 +1,75 @@
+# Checks and builds the native app. Pull requests get fmt, clippy and tests on macOS; the macOS and Windows release
+# builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner) and run on `main`, on `build/**` branches (push a branch there to get
+# installable artifacts) and when started by hand from the Actions tab. Builds are unsigned until M6: macOS needs
+# right-click → Open the first time, Windows SmartScreen needs "Run anyway". The first build of a cache downloads
+# prebuilt WebRTC (~200 MB).
+name: native
+
+on:
+  pull_request:
+    paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml"]
+  push:
+    branches: [main, "build/**"]
+    paths: ["native/**", "shared/**", "scripts/fixtures.ts", ".github/workflows/native.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run fixtures -- --check
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
+        working-directory: native
+
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native }
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  build:
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native }
+      - run: cargo build --release --locked
+      - if: runner.os == 'macOS'
+        run: packaging/macos/bundle.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: call-danya-${{ runner.os }}
+          path: |
+            native/target/release/call-danya-macos.zip
+            native/target/release/call-danya.exe
+          if-no-files-found: error

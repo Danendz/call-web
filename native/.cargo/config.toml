@@ -1,0 +1,15 @@
+# WebRTC's macOS code is Objective-C categories in a static library: without -ObjC the linker drops them and the
+# app crashes creating the peer connection factory ("unrecognized selector stringForStdString:").
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+# LiveKit's prebuilt WebRTC is built against the static C runtime (/MT); linking it with Rust's default dynamic one
+# fails with LNK2038. Skia then uses its static prebuilt too.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

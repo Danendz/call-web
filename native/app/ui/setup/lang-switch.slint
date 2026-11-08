@@ -1,0 +1,42 @@
+import { Theme } from "../theme.slint";
+
+// "I speak": two options side by side, the picked one on a sliding highlight.
+export component LangSwitch inherits Rectangle {
+    in property <string> lang;
+    callback picked(string);
+
+    height: 36px;
+    width: 180px;
+    border-radius: self.height / 2;
+    background: Theme.surface-3;
+
+    Rectangle {
+        y: 3px;
+        x: lang == "zh" ? 3px : parent.width / 2;
+        width: parent.width / 2 - 3px;
+        height: parent.height - 6px;
+        border-radius: self.height / 2;
+        background: Theme.accent;
+        animate x { duration: Theme.med; easing: Theme.ease-spring; }
+    }
+
+    HorizontalLayout {
+        for option in [{ id: "zh", name: "中文" }, { id: "en", name: "English" }]: TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(option.id); }
+            accessible-role: button;
+            accessible-label: option.name;
+            accessible-checked: root.lang == option.id;
+            accessible-action-default => { root.picked(option.id); }
+            Text {
+                text: option.name;
+                color: root.lang == option.id ? #fff : Theme.muted;
+                font-size: Theme.font-size-small;
+                font-weight: 550;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                animate color { duration: Theme.fast; easing: Theme.ease; }
+            }
+        }
+    }
+}

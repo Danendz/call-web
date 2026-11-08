@@ -1,0 +1,56 @@
+// Design tokens, ported from web/src/ui/tokens.css. Nothing else in ui/ uses raw colors or durations.
+
+export global Theme {
+    out property <color> bg: #0a0b0e;
+    out property <color> surface: #131419;
+    out property <color> surface-2: #1b1d23;
+    out property <color> surface-3: #262932;
+    out property <color> surface-3-hover: #30343e;
+    out property <color> border: #ffffff14;
+    out property <color> border-strong: #ffffff24;
+    out property <color> text: #f3f4f6;
+    out property <color> muted: #9ba1ad;
+    out property <color> accent: #4c7dff;
+    out property <color> accent-hover: #6690ff;
+    out property <color> accent-soft: #4c7dff2e;
+    out property <color> danger: #ef4444;
+    out property <color> danger-hover: #f25c5c;
+    out property <color> danger-soft: #ef444433;
+    out property <color> danger-soft-hover: #ef44444d;
+    out property <color> danger-text: #ff8a85;
+    out property <color> good: #34c759;
+    out property <color> good-soft: #34c7592e;
+    out property <color> bad: #ff5a52;
+
+    // Slint has no backdrop blur: glass is the web's stronger glass plus a shadow
+    out property <color> glass: #14151ad1;
+    out property <color> glass-border: #ffffff1a;
+    out property <color> shadow: #00000059;
+
+    // Round buttons on the call's glass pill
+    out property <color> icon-btn: #ffffff1a;
+    out property <color> icon-btn-hover: #ffffff2e;
+    out property <color> menu-hover: #ffffff14;
+    // The stats overlay's RTT colors: under 150 ms, under 300 ms, worse
+    out property <color> ok: #ffb020;
+    // The call timer stays on the video, so it's darker than glass
+    out property <color> timer: #00000073;
+    // The mic level ring on the setup screen
+    out property <color> level: #34c7598c;
+
+    out property <length> radius-sm: 10px;
+    out property <length> radius: 14px;
+    out property <length> radius-lg: 20px;
+
+    out property <length> font-size: 15px;
+    out property <length> font-size-small: 14px;
+    out property <length> font-size-h1: 26px;
+
+    // Durations scale to near zero when the OS asks for reduced motion
+    in property <bool> reduced-motion: false;
+    out property <duration> fast: reduced-motion ? 1ms : 150ms;
+    out property <duration> med: reduced-motion ? 1ms : 260ms;
+    out property <duration> slow: reduced-motion ? 1ms : 420ms;
+    out property <easing> ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    out property <easing> ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}

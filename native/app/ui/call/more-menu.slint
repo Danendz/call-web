@@ -1,0 +1,155 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { DeviceItem } from "../setup/device-row.slint";
+
+component MenuItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback activated();
+
+    height: 44px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover && enabled ? Theme.menu-hover : transparent;
+    opacity: enabled ? 1 : 0.38;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-checked: checked;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (enabled) { activated(); } }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        Image {
+            source: icon;
+            colorize: Theme.text;
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.text;
+            color: Theme.text;
+            font-weight: 500;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Image {
+            source: Icons.check;
+            colorize: Theme.accent-hover;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            opacity: checked ? 1 : 0;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
+
+// The pill's ⋯ button and its menu, like the web's MoreMenu. Two cameras are a flip, more are listed to pick from.
+export component MoreMenu inherits IconButton {
+    in property <[DeviceItem]> cams;
+    in property <string> cam-id;
+    in property <bool> cam-granted;
+    in property <bool> portrait;
+    in property <bool> can-rotate;
+    in property <bool> stats-open;
+    in property <bool> can-screenshot;
+    in property <bool> sharing;
+    in property <bool> can-share;
+    callback screenshot();
+    callback toggle-share();
+    callback pick-cam(string);
+    callback next-cam();
+    callback toggle-portrait();
+    callback rotate();
+    callback toggle-stats();
+
+    icon: Icons.ellipsis;
+    label: @tr("More");
+    // Slint can't tell when a popup closes, so unlike the web the button doesn't stay lit while the menu is open
+    clicked => { menu.show(); }
+
+    menu := PopupWindow {
+        width: 236px;
+        // Above the button, its right edge 8px past the button's, like the web
+        x: root.width + 8px - self.width;
+        y: -self.height - 16px;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            // Springs open from the button, like the web's .menu.open; the popup's content is new on every show.
+            // Scale, not position: moving it would lose the popup its size
+            property <bool> shown;
+            init => { shown = true; }
+            opacity: shown ? 1 : 0;
+            transform-scale: shown ? 1 : 0.94;
+            transform-origin: { x: self.width, y: self.height };
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+            animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
+            border-radius: Theme.radius;
+            border-width: 1px;
+            border-color: Theme.glass-border;
+            background: Theme.glass;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+
+            VerticalLayout {
+                padding: 6px;
+                if cam-granted && cams.length == 2: MenuItem {
+                    icon: Icons.switch-camera;
+                    text: @tr("Switch camera");
+                    activated => { menu.close(); root.next-cam(); }
+                }
+                if cam-granted && cams.length > 2: VerticalLayout {
+                    for cam in cams: MenuItem {
+                        icon: Icons.video;
+                        text: cam.label;
+                        checked: cam.id == root.cam-id;
+                        activated => { menu.close(); root.pick-cam(cam.id); }
+                    }
+                }
+                MenuItem {
+                    icon: root.sharing ? Icons.screen-share-off : Icons.screen-share;
+                    text: root.sharing ? @tr("Stop sharing") : @tr("Share screen");
+                    enabled: root.can-share;
+                    activated => { menu.close(); root.toggle-share(); }
+                }
+                MenuItem {
+                    icon: Icons.rectangle-vertical;
+                    text: @tr("Portrait video");
+                    checked: root.portrait;
+                    enabled: root.cam-granted;
+                    activated => { menu.close(); root.toggle-portrait(); }
+                }
+                MenuItem {
+                    icon: Icons.rotate-cw;
+                    text: @tr("Rotate their video");
+                    enabled: root.can-rotate;
+                    activated => { menu.close(); root.rotate(); }
+                }
+                MenuItem {
+                    icon: Icons.camera;
+                    text: @tr("Screenshot");
+                    enabled: root.can-screenshot;
+                    activated => { menu.close(); root.screenshot(); }
+                }
+                MenuItem {
+                    icon: Icons.activity;
+                    text: @tr("Connection stats");
+                    checked: root.stats-open;
+                    activated => { menu.close(); root.toggle-stats(); }
+                }
+            }
+        }
+    }
+}

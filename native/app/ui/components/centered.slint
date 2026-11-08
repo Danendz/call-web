@@ -1,0 +1,54 @@
+import { Theme } from "../theme.slint";
+
+// A message screen with an icon, rising in like the web's `.centered`.
+export component Centered inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> body;
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 14px;
+        padding: 24px;
+        opacity: shown ? 1 : 0;
+        y: shown ? 0 : 10px;
+        animate opacity, y { duration: Theme.slow; easing: Theme.ease; }
+
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 72px;
+                height: 72px;
+                border-radius: self.width / 2;
+                background: Theme.surface-3;
+                Image {
+                    source: root.icon;
+                    colorize: Theme.muted;
+                    width: 30px;
+                    height: 30px;
+                }
+            }
+        }
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.font-size-h1;
+            font-weight: 650;
+            horizontal-alignment: center;
+        }
+        if root.body != "": Text {
+            text: root.body;
+            color: Theme.muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 10px;
+            padding-top: 8px;
+            @children
+        }
+    }
+}

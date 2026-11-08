@@ -1,0 +1,134 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+
+export struct DeviceItem { id: string, label: string }
+
+// Device picker like the web's DeviceRow: the picked device in a bordered row, the others in a list that drops
+// down under it. When the device can't be used, `status` says why instead.
+export component DeviceRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> name;
+    in property <[DeviceItem]> devices;
+    in property <string> selected;
+    // Slint expressions can't search a model, so the bridge passes the picked device's label too
+    in property <string> selected-label;
+    // "Microphone: Not found" and the like; empty when the device works
+    in property <string> status;
+    // Waiting for permission rather than refused: muted, not red
+    in property <bool> pending;
+    callback picked(string);
+
+    property <bool> can-pick: status == "" && devices.length > 1;
+    property <bool> missing: status != "" && !pending;
+
+    height: 46px;
+    border-radius: Theme.radius-sm;
+    border-width: 1px;
+    border-color: missing ? #ef444459 : touch.has-hover && can-pick ? Theme.border-strong : Theme.border;
+    background: Theme.surface-2;
+    accessible-role: combobox;
+    accessible-label: name;
+    accessible-value: selected-label;
+    accessible-action-default => { if (can-pick) { popup.show(); } }
+    animate border-color { duration: Theme.fast; easing: Theme.ease; }
+
+    HorizontalLayout {
+        padding-right: 14px;
+        Rectangle {
+            width: 42px;
+            Image {
+                source: icon;
+                colorize: missing ? Theme.danger-text : Theme.muted;
+                width: 18px;
+                height: 18px;
+            }
+        }
+        Text {
+            text: status != "" ? status : selected-label;
+            color: missing ? Theme.danger-text : status != "" ? Theme.muted : Theme.text;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        if can-pick: Image {
+            source: Icons.chevron-down;
+            colorize: Theme.muted;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: can-pick;
+        mouse-cursor: can-pick ? pointer : default;
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 6px;
+        width: root.width;
+
+        Rectangle {
+            property <bool> shown;
+            init => { shown = true; }
+            opacity: shown ? 1 : 0;
+            transform-scale: shown ? 1 : 0.97;
+            transform-origin: { x: self.width / 2, y: 0 };
+            animate opacity, transform-scale { duration: Theme.fast; easing: Theme.ease; }
+            border-radius: Theme.radius-sm;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            background: Theme.surface-2;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+
+            VerticalLayout {
+                padding: 6px;
+                for d in devices: Rectangle {
+                    height: 38px;
+                    border-radius: 8px;
+                    background: item.has-hover ? Theme.surface-3 : transparent;
+                    accessible-role: list-item;
+                    accessible-label: d.label;
+                    accessible-action-default => {
+                        popup.close();
+                        root.picked(d.id);
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        Text {
+                            text: d.label;
+                            color: Theme.text;
+                            font-size: Theme.font-size-small;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+                        Image {
+                            source: Icons.check;
+                            colorize: Theme.accent;
+                            width: 16px;
+                            height: 16px;
+                            y: (parent.height - self.height) / 2;
+                            opacity: d.id == selected ? 1 : 0;
+                        }
+                    }
+                    item := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            popup.close();
+                            root.picked(d.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
