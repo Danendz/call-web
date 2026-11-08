@@ -1,12 +1,16 @@
 //! Sharing your screen, sent alongside the camera like the web's. macOS shows its own picker (ScreenCaptureKit);
-//! Windows has none, so the app lists screens and windows itself. Frames are captured at the web's 15 fps and sent
-//! through a screencast video source, which tells the encoder to keep text sharp rather than motion smooth.
+//! Windows has none, so the app lists screens and windows itself (captured with Windows Graphics Capture). Frames are
+//! captured at up to 60 fps, scaled to fit 1080p, and sent through a screencast video source, which tells the encoder
+//! to keep text sharp: when bandwidth runs short it drops frames, not detail. The sound goes with it
+//! ([`crate::screen_audio`]).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use libwebrtc::audio_source::native::NativeAudioSource;
+use libwebrtc::audio_track::RtcAudioTrack;
 use libwebrtc::desktop_capturer::{
     CaptureError, CaptureSource, DesktopCaptureSourceType, DesktopCapturer, DesktopCapturerOptions, DesktopFrame,
 };
@@ -21,8 +25,14 @@ use libwebrtc::video_source::native::NativeVideoSource;
 use libwebrtc::video_track::RtcVideoTrack;
 
 use crate::media::Device;
+use crate::screen_audio;
 
-const FRAME_EVERY: Duration = Duration::from_millis(66);
+/// 60 fps. A screen that doesn't change sends nearly nothing, and a game gets its motion
+const FRAME_EVERY: Duration = Duration::from_micros(16_667);
+/// Bigger screens are scaled to fit, which is about their size in points on a Retina Mac: text stays readable, and
+/// the encoder isn't handed four times the pixels at 60 fps
+const MAX_WIDTH: u32 = 1920;
+const MAX_HEIGHT: u32 = 1080;
 
 /// Whether the OS offers its own picker, so the app doesn't list sources.
 pub(crate) const SYSTEM_PICKER: bool = cfg!(target_os = "macos");
@@ -52,6 +62,7 @@ pub(crate) fn sources() -> Vec<Device> {
 /// A running share. Dropping it stops capture.
 pub(crate) struct Share {
     stop: Arc<AtomicBool>,
+    _audio: Option<screen_audio::Capture>,
 }
 
 impl Drop for Share {
@@ -62,8 +73,14 @@ impl Drop for Share {
 
 /// Starts sharing `source` (an id from [`sources`]), or what the user picks in the system picker. `ended` runs once
 /// if the share stops by itself: the picker was cancelled, the window closed, or the OS's "stop sharing" pressed.
-pub(crate) fn start(source: Option<String>, out: NativeVideoSource, ended: impl FnOnce() + Send + 'static) -> Share {
+pub(crate) fn start(
+    source: Option<String>,
+    out: NativeVideoSource,
+    audio: &NativeAudioSource,
+    ended: impl FnOnce() + Send + 'static,
+) -> Share {
     let stop = Arc::new(AtomicBool::new(false));
+    let audio = screen_audio::start(audio);
     let stopped = stop.clone();
     // `CALL_FAKE_SCREEN=1` shares a test pattern, for testing sharing where nothing can be captured (a locked
     // screen, CI, no Screen Recording permission)
@@ -86,7 +103,7 @@ pub(crate) fn start(source: Option<String>, out: NativeVideoSource, ended: impl 
         if let Err(e) = spawned {
             tracing::warn!("couldn't start the fake screen: {e}");
         }
-        return Share { stop };
+        return Share { stop, _audio: audio };
     }
     let spawned = thread::Builder::new().name("screen".into()).spawn(move || {
         let failed = Arc::new(AtomicBool::new(false));
@@ -105,7 +122,7 @@ pub(crate) fn start(source: Option<String>, out: NativeVideoSource, ended: impl 
     if let Err(e) = spawned {
         tracing::warn!("couldn't start screen sharing: {e}");
     }
-    Share { stop }
+    Share { stop, _audio: audio }
 }
 
 fn open(source: Option<&str>, out: NativeVideoSource, failed: Arc<AtomicBool>) -> Option<DesktopCapturer> {
@@ -149,7 +166,7 @@ fn picker_kind() -> DesktopCaptureSourceType {
     DesktopCaptureSourceType::Screen
 }
 
-/// Screen pixels (BGRA, libyuv's "ARGB") to I420, at an even size.
+/// Screen pixels (BGRA, libyuv's "ARGB") to I420, at an even size that fits [`MAX_WIDTH`] x [`MAX_HEIGHT`].
 fn to_i420(frame: &DesktopFrame) -> Option<I420Buffer> {
     let (width, height) = (frame.width() & !1, frame.height() & !1);
     let (w, h) = (u32::try_from(width).ok()?, u32::try_from(height).ok()?);
@@ -161,13 +178,35 @@ fn to_i420(frame: &DesktopFrame) -> Option<I420Buffer> {
     let (sy, su, sv) = buf.strides();
     let (y, u, v) = buf.data_mut();
     yuv_helper::argb_to_i420(data, frame.stride(), y, sy, u, su, v, sv, width, height);
-    Some(buf)
+    let (fit_w, fit_h) = fit(w, h);
+    if (fit_w, fit_h) == (w, h) {
+        return Some(buf);
+    }
+    Some(buf.scale(fit_w as i32, fit_h as i32))
+}
+
+/// The even size that keeps the picture's shape and fits [`MAX_WIDTH`] x [`MAX_HEIGHT`].
+fn fit(width: u32, height: u32) -> (u32, u32) {
+    if width <= MAX_WIDTH && height <= MAX_HEIGHT {
+        return (width, height);
+    }
+    let scale = f64::min(f64::from(MAX_WIDTH) / f64::from(width), f64::from(MAX_HEIGHT) / f64::from(height));
+    let even = |n: u32| ((f64::from(n) * scale) as u32).max(2) & !1;
+    (even(width), even(height))
+}
+
+/// What a share sends, in the screen's own stream.
+pub(crate) struct ScreenTracks {
+    pub(crate) video: MediaStreamTrack,
+    pub(crate) audio: MediaStreamTrack,
 }
 
 /// Our screen across calls: one screencast source and track for the app's life, and the share that feeds it.
 pub(crate) struct LocalScreen {
     source: NativeVideoSource,
     track: RtcVideoTrack,
+    audio_source: NativeAudioSource,
+    audio_track: RtcAudioTrack,
     share: Option<Share>,
     /// The stream it's sent in, announced in `media` messages
     pub(crate) stream_id: String,
@@ -178,11 +217,16 @@ impl LocalScreen {
         // Screencast: the encoder keeps detail and drops frames rather than blurring text
         let source = NativeVideoSource::new(VideoResolution { width: 1920, height: 1080 }, true);
         let track = factory.create_video_track(crate::peer::SCREEN_TRACK, source.clone());
-        Self { source, track, share: None, stream_id: crate::room::random_id() }
+        let audio_source = screen_audio::source();
+        let audio_track = factory.create_audio_track(crate::peer::SCREEN_AUDIO_TRACK, audio_source.clone());
+        Self { source, track, audio_source, audio_track, share: None, stream_id: crate::room::random_id() }
     }
 
-    pub(crate) fn track(&self) -> MediaStreamTrack {
-        MediaStreamTrack::Video(self.track.clone())
+    pub(crate) fn tracks(&self) -> ScreenTracks {
+        ScreenTracks {
+            video: MediaStreamTrack::Video(self.track.clone()),
+            audio: MediaStreamTrack::Audio(self.audio_track.clone()),
+        }
     }
 
     pub(crate) fn sharing(&self) -> bool {
@@ -190,10 +234,23 @@ impl LocalScreen {
     }
 
     pub(crate) fn start(&mut self, source: Option<String>, ended: impl FnOnce() + Send + 'static) {
-        self.share = Some(start(source, self.source.clone(), ended));
+        self.share = Some(start(source, self.source.clone(), &self.audio_source, ended));
     }
 
     pub(crate) fn stop(&mut self) {
         self.share = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fit;
+
+    #[test]
+    fn a_retina_screen_is_scaled_to_fit_1080p_at_an_even_size() {
+        assert_eq!(fit(3024, 1964), (1662, 1080));
+        assert_eq!(fit(5120, 1440), (1920, 540));
+        assert_eq!(fit(1920, 1080), (1920, 1080));
+        assert_eq!(fit(1280, 800), (1280, 800));
     }
 }

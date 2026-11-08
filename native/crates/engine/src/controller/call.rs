@@ -121,7 +121,7 @@ impl Controller {
                 if self.screen.sharing()
                     && let Some(peer) = &self.peer
                 {
-                    peer.set_screen(Some(self.screen.track()));
+                    peer.set_screen(Some(self.screen.tracks()));
                 }
             }
             Err(e) => {
@@ -172,7 +172,7 @@ impl Controller {
         // Announced first, so the other side knows the screen's stream before its track arrives
         self.send_media();
         if let Some(peer) = &self.peer {
-            peer.set_screen(Some(self.screen.track()));
+            peer.set_screen(Some(self.screen.tracks()));
         }
     }
 

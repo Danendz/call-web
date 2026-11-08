@@ -12,7 +12,7 @@ use nokhwa::utils::{
 };
 
 use super::convert::{Crop, nv12_to_i420, yuyv_to_i420};
-use super::{HEIGHT, Output, WIDTH};
+use super::{HEIGHT, MAX_FPS, Output, WIDTH};
 use crate::media::Device;
 
 const FORMATS: &[FrameFormat] = &[FrameFormat::NV12, FrameFormat::YUYV];
@@ -94,11 +94,13 @@ pub(super) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Running, St
 }
 
 fn open(index: CameraIndex) -> Result<Camera, String> {
-    let wanted = CameraFormat::new(Resolution::new(WIDTH, HEIGHT), FrameFormat::NV12, 30);
+    // The closest to 720p, then to 60 fps: a camera without 60 gives its 30
+    let wanted = CameraFormat::new(Resolution::new(WIDTH, HEIGHT), FrameFormat::NV12, MAX_FPS);
     let request = RequestedFormat::with_formats(RequestedFormatType::Closest(wanted), FORMATS);
     let mut camera = Camera::with_backend(index, request, ApiBackend::MediaFoundation)
         .or_else(|_| Camera::with_backend(CameraIndex::Index(0), request, ApiBackend::MediaFoundation))
         .map_err(|e| e.to_string())?;
     camera.open_stream().map_err(|e| e.to_string())?;
+    super::set_fps(camera.frame_rate());
     Ok(camera)
 }

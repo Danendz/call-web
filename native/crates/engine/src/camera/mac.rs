@@ -15,7 +15,7 @@ use objc2_av_foundation::{
     AVCaptureVideoDataOutputSampleBufferDelegate, AVMediaTypeVideo,
 };
 use objc2_core_foundation::CFRetained;
-use objc2_core_media::CMSampleBuffer;
+use objc2_core_media::{CMSampleBuffer, CMTime, CMTimeFlags, CMVideoFormatDescriptionGetDimensions};
 use objc2_core_video::{
     CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeight,
     CVPixelBufferGetWidth, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
@@ -24,7 +24,7 @@ use objc2_core_video::{
 use objc2_foundation::{NSDictionary, NSNumber, NSString};
 
 use super::convert::{Crop, nv12_to_i420};
-use super::{CameraAccess, Output};
+use super::{CameraAccess, HEIGHT, MAX_FPS, Output, WIDTH};
 use crate::media::Device;
 
 pub(super) fn request_access(done: impl FnOnce(CameraAccess) + Send + 'static) {
@@ -99,6 +99,8 @@ pub(super) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Running, St
             return Err("the camera can't be added to a capture session".into());
         }
         session.addInput(&input);
+        // After the input is added: picking a format overrides the session's preset
+        super::set_fps(prefer_high_fps(&device));
 
         let video_output = AVCaptureVideoDataOutput::new();
         // NV12, what WebRTC's encoders take without converting; the value of kCVPixelBufferPixelFormatTypeKey
@@ -122,6 +124,45 @@ pub(super) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Running, St
         session.startRunning();
         Ok(Running { session, _delegate: delegate, _queue: queue })
     }
+}
+
+/// Switches to the camera's 720p format with the highest frame rate up to [`MAX_FPS`], if it beats the preset's 30;
+/// returns the frame rate it runs at. Built-in cameras stop at 30; an iPhone as Continuity Camera gives 60.
+///
+/// SAFETY: the device is in a session being configured, which is when its format may change
+unsafe fn prefer_high_fps(device: &AVCaptureDevice) -> u32 {
+    // SAFETY: plain getters on a device AVFoundation handed us
+    let best = unsafe {
+        device
+            .formats()
+            .iter()
+            .filter(|f| {
+                let size = CMVideoFormatDescriptionGetDimensions(&f.formatDescription());
+                (size.width, size.height) == (WIDTH as i32, HEIGHT as i32)
+            })
+            .map(|f| {
+                let top = f.videoSupportedFrameRateRanges().iter().map(|r| r.maxFrameRate()).fold(0.0, f64::max);
+                (top.min(f64::from(MAX_FPS)) as u32, f)
+            })
+            .max_by_key(|(fps, _)| *fps)
+    };
+    let Some((fps, format)) = best.filter(|(fps, _)| *fps > 30) else { return 30 };
+    // SAFETY: the format is one of this device's; the frame duration is within its range, and is set after the
+    // format because changing the format resets it
+    unsafe {
+        if device.lockForConfiguration().is_err() {
+            return 30;
+        }
+        device.setActiveFormat(&format);
+        device.setActiveVideoMinFrameDuration(CMTime {
+            value: 1,
+            timescale: fps as i32,
+            flags: CMTimeFlags::Valid,
+            epoch: 0,
+        });
+        device.unlockForConfiguration();
+    }
+    fps
 }
 
 define_class!(

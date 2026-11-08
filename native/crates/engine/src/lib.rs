@@ -10,6 +10,7 @@ mod peer;
 mod remote;
 pub mod room;
 mod screen;
+mod screen_audio;
 mod signaling;
 mod speech;
 mod stats;

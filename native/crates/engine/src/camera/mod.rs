@@ -12,7 +12,7 @@ mod mac;
 mod windows;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
@@ -22,11 +22,25 @@ use libwebrtc::video_source::native::NativeVideoSource;
 use crate::media::Device;
 use crate::video::{Feed, Frame, VideoSink};
 
-/// The web's camera request: 720p at up to 30 fps, or 720x1280 when portrait is picked.
 pub(crate) use fake::pattern as test_pattern;
 
+/// 720p like the web's camera request, or 720x1280 when portrait is picked; at 60 fps where the camera has it (the
+/// web asks for 30)
 pub(crate) const WIDTH: u32 = 1280;
 pub(crate) const HEIGHT: u32 = 720;
+pub(crate) const MAX_FPS: u32 = 60;
+
+/// The running camera's frame rate, which sets how much bitrate it gets
+static FPS: AtomicU32 = AtomicU32::new(30);
+
+pub(crate) fn fps() -> u32 {
+    FPS.load(Ordering::Relaxed)
+}
+
+fn set_fps(fps: u32) {
+    tracing::info!("camera at {fps} fps");
+    FPS.store(fps, Ordering::Relaxed);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CameraAccess {
@@ -112,6 +126,7 @@ pub(crate) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Capture, St
     static STARTING: Mutex<()> = Mutex::new(());
     let _one = STARTING.lock().map_err(|_| "camera lock poisoned")?;
     if fake() {
+        set_fps(15);
         return Ok(Capture { _inner: Box::new(fake::start(output)) });
     }
     #[cfg(target_os = "macos")]

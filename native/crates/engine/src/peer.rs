@@ -12,7 +12,6 @@ use libwebrtc::media_stream_track::MediaStreamTrack;
 use libwebrtc::peer_connection::{IceConnectionState, OfferOptions, PeerConnection, SignalingState, TrackEvent};
 use libwebrtc::peer_connection_factory::{IceServer, IceTransportsType, PeerConnectionFactory, RtcConfiguration};
 use libwebrtc::rtp_parameters::{DegradationPreference, Priority};
-use libwebrtc::rtp_sender::RtpSender;
 use libwebrtc::rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit};
 use libwebrtc::session_description::{SdpType, SessionDescription};
 use libwebrtc::video_track::RtcVideoTrack;
@@ -21,20 +20,27 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Instant, interval, sleep_until};
 
+use crate::screen::ScreenTracks;
 use crate::stats::{self, CallStats, Counters};
 
 const DISCONNECTED_GRACE: Duration = Duration::from_secs(4);
 const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
-// Enough for clean 720p; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss
+// Enough for clean 720p at 30 fps; a direct China <-> Uzbekistan call carried ~2 Mbps with negligible loss
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
-// While sharing, the same ~2 Mbps is split: most for the screen (text must stay sharp), a small face for the camera
-const SHARE_SCREEN_BITRATE: u64 = 1_600_000;
+// A camera that gives 60 fps gets half again, so its frames aren't blurrier than at 30
+const VIDEO_60FPS_MAX_BITRATE: u64 = 3_000_000;
+// While sharing: most for the screen at up to 60 fps (short of bandwidth, the encoder drops frames, not detail), and
+// a small face for the camera at 30
+const SHARE_SCREEN_BITRATE: u64 = 3_000_000;
+const SHARE_SCREEN_FPS: f64 = 60.0;
 const SHARE_CAMERA_BITRATE: u64 = 400_000;
+const SHARE_CAMERA_FPS: f64 = 30.0;
 // The camera's 720p down to the web's 360p short side while sharing
 const SHARE_CAMERA_SCALE: f64 = 2.0;
-/// The id of our screen's track, to tell its sender from the camera's.
+/// The ids of our screen's tracks, to tell their senders from the camera's and the mic's.
 pub const SCREEN_TRACK: &str = "screen";
+pub const SCREEN_AUDIO_TRACK: &str = "screen-audio";
 
 pub enum PeerEvent {
     Signal(SignalPayload),
@@ -60,7 +66,7 @@ enum Input {
     Track(TrackEvent),
     RestartIce,
     ForceRelay(bool),
-    Screen(Option<MediaStreamTrack>),
+    Screen(Option<ScreenTracks>),
 }
 
 pub struct PeerConfig {
@@ -128,8 +134,9 @@ impl Peer {
             polite: config.polite,
             ice_servers: config.ice_servers,
             screen_stream_id: config.screen_stream_id,
-            screen_sender: None,
+            screen_added: false,
             sharing: false,
+            voice_seen: false,
             counters: None,
             ignore_offer: false,
             last_restart: None,
@@ -155,8 +162,8 @@ impl Peer {
     }
 
     /// Sends the shared screen alongside the camera, or stops; see [`Session::set_screen`].
-    pub fn set_screen(&self, track: Option<MediaStreamTrack>) {
-        let _ = self.input.send(Input::Screen(track));
+    pub fn set_screen(&self, tracks: Option<ScreenTracks>) {
+        let _ = self.input.send(Input::Screen(tracks));
     }
 }
 
@@ -183,9 +190,11 @@ struct Session {
     polite: bool,
     ice_servers: Vec<IceServerConfig>,
     screen_stream_id: String,
-    screen_sender: Option<RtpSender>,
-    /// The sender keeps the screen track after a share stops, so this says whether one is on
+    /// The screen's transceivers are in this connection; they keep their tracks after a share stops
+    screen_added: bool,
     sharing: bool,
+    /// Their voice's track has arrived
+    voice_seen: bool,
     counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
@@ -243,7 +252,12 @@ impl Session {
                     let stream_id = event.streams.first().map(|s| s.id()).unwrap_or_default();
                     self.emit(PeerEvent::RemoteVideo { stream_id, track });
                 }
-                MediaStreamTrack::Audio(track) => self.emit(PeerEvent::RemoteAudio { track }),
+                // Their voice comes first (its transceiver is the first one); a later one is their screen's sound
+                MediaStreamTrack::Audio(track) if !self.voice_seen => {
+                    self.voice_seen = true;
+                    self.emit(PeerEvent::RemoteAudio { track });
+                }
+                MediaStreamTrack::Audio(_) => {}
             },
             Input::RestartIce => self.restart_ice(),
             Input::Screen(track) => self.set_screen(track),
@@ -322,25 +336,22 @@ impl Session {
         }));
     }
 
-    /// The first share adds its transceiver (one renegotiation); after that, starting again only swaps the track in
-    /// it, like the web's setScreen. Stopping leaves the track in place: capture has stopped, so it sends nothing, and
-    /// LiveKit's `set_track(None)` dereferences the null track and crashes.
-    fn set_screen(&mut self, track: Option<MediaStreamTrack>) {
-        self.sharing = track.is_some();
-        match (&self.screen_sender, track) {
-            (Some(sender), Some(track)) => {
-                if let Err(e) = sender.set_track(Some(track)) {
-                    tracing::warn!("couldn't swap the screen track: {}", e.message);
-                }
-            }
-            (None, Some(track)) => {
+    /// The first share adds the screen's video and sound transceivers (one renegotiation), like the web's setScreen.
+    /// They keep their tracks for the connection's life: a stopped share sends nothing because its capture has
+    /// stopped, so sharing again needs no change. (Taking a track out would crash: LiveKit's `set_track(None)`
+    /// dereferences the missing track.)
+    fn set_screen(&mut self, tracks: Option<ScreenTracks>) {
+        self.sharing = tracks.is_some();
+        if let Some(ScreenTracks { video, audio }) = tracks
+            && !self.screen_added
+        {
+            self.screen_added = true;
+            for track in [video, audio] {
                 let init = init(RtpTransceiverDirection::SendOnly, std::slice::from_ref(&self.screen_stream_id));
-                match self.pc.add_transceiver(track, init) {
-                    Ok(transceiver) => self.screen_sender = Some(transceiver.sender()),
-                    Err(e) => tracing::warn!("couldn't add the screen: {}", e.message),
+                if let Err(e) = self.pc.add_transceiver(track, init) {
+                    tracing::warn!("couldn't add the screen: {}", e.message);
                 }
             }
-            (_, None) => {}
         }
         self.tune_senders();
     }
@@ -352,10 +363,13 @@ impl Session {
     /// every description change.
     fn tune_senders(&self) {
         let sharing = self.sharing;
+        let camera_60 = crate::camera::fps() > 30;
         for transceiver in self.pc.transceivers() {
             let sender = transceiver.sender();
             let (video, screen) = match sender.track() {
                 Some(MediaStreamTrack::Video(track)) => (true, track.id() == SCREEN_TRACK),
+                // The screen's sound keeps the default priority, below the voice
+                Some(MediaStreamTrack::Audio(track)) if track.id() == SCREEN_AUDIO_TRACK => continue,
                 Some(MediaStreamTrack::Audio(_)) => (false, false),
                 None => continue,
             };
@@ -363,14 +377,16 @@ impl Session {
             if params.encodings.is_empty() {
                 continue;
             }
-            let max_bitrate = match (screen, sharing) {
-                (true, _) => SHARE_SCREEN_BITRATE,
-                (false, true) => SHARE_CAMERA_BITRATE,
-                (false, false) => VIDEO_MAX_BITRATE,
+            let (max_bitrate, max_framerate) = match (screen, sharing) {
+                (true, _) => (SHARE_SCREEN_BITRATE, Some(SHARE_SCREEN_FPS)),
+                (false, true) => (SHARE_CAMERA_BITRATE, Some(SHARE_CAMERA_FPS)),
+                (false, false) if camera_60 => (VIDEO_60FPS_MAX_BITRATE, None),
+                (false, false) => (VIDEO_MAX_BITRATE, None),
             };
             for enc in &mut params.encodings {
                 if video {
                     enc.max_bitrate = Some(max_bitrate);
+                    enc.max_framerate = max_framerate;
                     enc.scale_resolution_down_by = Some(if sharing && !screen { SHARE_CAMERA_SCALE } else { 1.0 });
                 } else {
                     enc.priority = Priority::High;
