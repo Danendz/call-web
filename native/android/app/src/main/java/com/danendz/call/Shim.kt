@@ -1,8 +1,12 @@
 package com.danendz.call
 
+import android.Manifest
+import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -14,6 +18,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Rational
+import java.lang.ref.WeakReference
 
 /**
  * What the Rust app asks of Android, and what Android tells it back. Rust calls these from its own thread; the work
@@ -31,18 +37,28 @@ object Shim {
     private const val ROUTE_BLUETOOTH = 2
 
     private val main = Handler(Looper.getMainLooper())
-    private var inCall = false
+    var inCall = false
+        private set
+    // The main video's shape, which the picture-in-picture window takes
+    private var aspect = Rational(16, 9)
     private var route = ROUTE_SPEAKER
     // The person picked the route; a headset coming or going no longer moves it
     private var picked = false
     private var focus: AudioFocusRequest? = null
     private var proximity: PowerManager.WakeLock? = null
+    // For permission prompts, which only an activity can show; set by MainActivity
+    var activity = WeakReference<Activity>(null)
+    // The activity's prompt is up; its answer goes to Rust when it comes
+    var asking = false
 
     /** The call started or ended, or the mic or the notification's text changed. */
     @JvmStatic
-    fun callState(context: Context, inCall: Boolean, micOn: Boolean, labels: Array<String>) {
+    fun callState(
+        context: Context, inCall: Boolean, micOn: Boolean, labels: Array<String>, width: Int, height: Int,
+    ) {
         val app = context.applicationContext
         main.post {
+            if (width > 0 && height > 0) aspect = Rational(width, height)
             if (inCall) {
                 if (!this.inCall) startAudio(app)
                 CallService.show(app, micOn, labels)
@@ -51,7 +67,24 @@ object Shim {
                 CallService.hide(app)
             }
             this.inCall = inCall
+            activity.get()?.let { pipParams(it) }
         }
+    }
+
+    /** What picture-in-picture shows like; on Android 12+ it also comes up by itself on leaving during a call. */
+    fun pipParams(activity: Activity): PictureInPictureParams {
+        // Android refuses shapes beyond 2.39:1 either way
+        val ratio = aspect.toFloat().coerceIn(1 / 2.39f, 2.39f)
+        val shape = if (ratio == aspect.toFloat()) aspect else Rational((ratio * 1000).toInt(), 1000)
+        val params = PictureInPictureParams.Builder().setAspectRatio(shape).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(inCall)
+        }.build()
+        try {
+            activity.setPictureInPictureParams(params)
+        } catch (_: IllegalStateException) {
+            // No picture-in-picture on this device
+        }
+        return params
     }
 
     @JvmStatic
@@ -90,8 +123,46 @@ object Shim {
         }
     }
 
+    /** Asks for the camera unless it's allowed; the answer goes to [nativeCameraAccess]. */
+    @JvmStatic
+    fun requestCamera(context: Context) {
+        val app = context.applicationContext
+        main.post {
+            if (app.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                nativeCameraAccess(true)
+            } else if (!asking) {
+                val shown = activity.get() ?: return@post nativeCameraAccess(false)
+                asking = true
+                shown.requestPermissions(arrayOf(Manifest.permission.CAMERA), 0)
+            }
+        }
+    }
+
+    /** MainActivity's prompt was answered. */
+    fun permissionsAnswered(context: Context, asked: Array<out String>) {
+        asking = false
+        if (Manifest.permission.CAMERA in asked) {
+            nativeCameraAccess(context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+        }
+    }
+
+    @JvmStatic
+    fun cameraList(context: Context): Array<String> = Camera.list(context)
+
+    @JvmStatic
+    fun cameraStart(context: Context, id: String?) = Camera.start(context, id)
+
+    @JvmStatic
+    fun cameraStop() = Camera.stop()
+
     @JvmStatic
     external fun nativeAction(action: Int)
+
+    @JvmStatic
+    external fun nativeCameraAccess(granted: Boolean)
+
+    @JvmStatic
+    external fun nativePip(pip: Boolean)
 
     /** Which routes there are, as bits of 1 << route, and the one in use. */
     @JvmStatic

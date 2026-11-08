@@ -28,3 +28,7 @@ pub use video::{Feed, Frame, VideoSink};
 /// finds its Java classes through that thread's class loader.
 #[cfg(target_os = "android")]
 pub use libwebrtc::android::initialize_android_context;
+
+/// The camera, which only the app's Java side can open
+#[cfg(target_os = "android")]
+pub use camera::android as android_camera;

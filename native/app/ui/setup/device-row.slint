@@ -3,6 +3,17 @@ import { Icons } from "../components/icons.slint";
 
 export struct DeviceItem { id: string, label: string }
 
+// Android's cameras come as @front, @back and @external, named here in the app's language; Android's one mic has no
+// name, so it takes the row's
+export global DeviceName {
+    pure public function of(label: string, fallback: string) -> string {
+        label == "@front" ? @tr("Front camera")
+            : label == "@back" ? @tr("Back camera")
+            : label == "@external" ? @tr("External camera")
+            : label != "" ? label : fallback
+    }
+}
+
 // Device picker like the web's DeviceRow: the picked device in a bordered row, the others in a list that drops
 // down under it. When the device can't be used, `status` says why instead.
 export component DeviceRow inherits Rectangle {
@@ -12,8 +23,7 @@ export component DeviceRow inherits Rectangle {
     in property <string> selected;
     // Slint expressions can't search a model, so the bridge passes the picked device's label too
     in property <string> selected-label;
-    // Android's one mic has no name
-    private property <string> shown-label: selected-label != "" ? selected-label : name;
+    private property <string> shown-label: DeviceName.of(selected-label, name);
     // "Microphone: Not found" and the like; empty when the device works
     in property <string> status;
     // Waiting for permission rather than refused: muted, not red
@@ -95,7 +105,7 @@ export component DeviceRow inherits Rectangle {
                     border-radius: 8px;
                     background: item.has-hover ? Theme.surface-3 : transparent;
                     accessible-role: list-item;
-                    accessible-label: d.label != "" ? d.label : name;
+                    accessible-label: DeviceName.of(d.label, name);
                     accessible-action-default => {
                         popup.close();
                         root.picked(d.id);
@@ -106,7 +116,7 @@ export component DeviceRow inherits Rectangle {
                         padding-right: 10px;
                         spacing: 8px;
                         Text {
-                            text: d.label != "" ? d.label : name;
+                            text: DeviceName.of(d.label, name);
                             color: Theme.text;
                             font-size: Theme.font-size-small;
                             vertical-alignment: center;

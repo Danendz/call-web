@@ -42,6 +42,8 @@ export component AppWindow inherits Window {
     in property <string> corner-peer: "tr";
     in property <string> corner-screen: "tl";
     in property <int> peer-frame-rotation;
+    // Android's picture-in-picture window is up
+    in property <bool> pip;
     in property <bool> peer-cam-on: true;
     in property <StatsView> stats;
     in property <bool> force-relay;
@@ -221,6 +223,7 @@ export component AppWindow inherits Window {
             stacked: root.width < 900px && root.height > root.width;
             touch: root.touch;
             keyboard-shown: root.virtual-keyboard-size.height > 0;
+            pip: root.pip;
             outputs: root.outputs;
             output: root.output;
             pick-output(id) => { root.pick-output(id); }

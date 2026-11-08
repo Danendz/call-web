@@ -132,6 +132,8 @@ export component Feeds inherits Rectangle {
     in property <bool> self-cam-on;
     // Room the control pill takes at the bottom of the stage; less while the controls are hidden
     in property <length> pill-space: 96px;
+    // Picture-in-picture: the stage's video alone
+    in property <bool> only-main;
     // tl, tr, bl or br for each tile, remembered across calls
     in property <string> corner-self: "br";
     in property <string> corner-peer: "tr";
@@ -195,7 +197,7 @@ export component Feeds inherits Rectangle {
         source: peer-video;
         rotation: peer-rotation;
         main: main == "peer";
-        hidden: !has-peer || peer-hidden;
+        hidden: !has-peer || peer-hidden || (only-main && main != "peer");
         off: !peer-cam-on || peer-video.width == 0;
         label: @tr("Their camera");
         home-x: self.main ? 0 : tile-x(corner-peer, tile-w(peer-aspect));
@@ -211,7 +213,7 @@ export component Feeds inherits Rectangle {
     screen := Feed {
         source: screen-video;
         main: main == "screen";
-        hidden: !has-screen;
+        hidden: !has-screen || (only-main && main != "screen");
         label: @tr("Their screen");
         home-x: self.main ? 0 : tile-x(corner-screen, tile-w(screen-aspect));
         home-y: self.main ? 0 : tile-y(corner-screen, tile-h(screen-aspect), screen-stack);
@@ -226,7 +228,7 @@ export component Feeds inherits Rectangle {
     you := Feed {
         source: self-video;
         main: main == "self";
-        hidden: !has-self;
+        hidden: !has-self || (only-main && main != "self");
         off: !self-cam-on;
         label: @tr("You");
         home-x: self.main ? 0 : tile-x(corner-self, tile-w(self-aspect));

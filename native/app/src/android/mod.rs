@@ -9,8 +9,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
-use jni::sys::jint;
+use jni::objects::{GlobalRef, JByteBuffer, JClass, JObject, JObjectArray, JString, JValue};
+use jni::sys::{jboolean, jint};
 use jni::{JNIEnv, JavaVM};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -41,9 +41,9 @@ thread_local! {
     // The mic was turned off for a phone call, and comes back on after it
     #[allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android")]
     static MUTED_FOR_CALL: Cell<bool> = const { Cell::new(false) };
-    // What the call notification last showed: in a call, mic on, its title, text and labels
+    // What Android was last told: in a call, mic on, the notification's title, text and labels, the main video's size
     #[allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android")]
-    static SHOWN: RefCell<Option<(bool, bool, Vec<SharedString>)>> = const { RefCell::new(None) };
+    static SHOWN: RefCell<Option<CallState>> = const { RefCell::new(None) };
 }
 
 /// `MainActivity.nativeInit(context)`, on the activity's main thread before the app starts.
@@ -64,6 +64,7 @@ pub extern "system" fn Java_com_danendz_call_MainActivity_nativeInit(
     match remember(&mut env, &context) {
         Ok(java) => {
             let _ = JAVA.set(java);
+            engine::android_camera::set_backend(Box::new(Camera));
         }
         Err(e) => tracing::error!("Shim isn't reachable: {e}"),
     }
@@ -159,7 +160,10 @@ pub(crate) fn attach(ui: &AppWindow, settings: &Rc<RefCell<crate::settings::Sett
     });
 }
 
-/// Keeps the call's foreground service and notification in step with the window; called on the UI's clock.
+type CallState = (bool, bool, Vec<SharedString>, (u32, u32));
+
+/// Keeps the call's foreground service, notification and picture-in-picture shape in step with the window; called on
+/// the UI's clock.
 pub(crate) fn sync(ui: &AppWindow) {
     let phase = ui.get_phase();
     let in_call = matches!(phase, AppPhase::Starting | AppPhase::Waiting | AppPhase::InCall);
@@ -168,11 +172,21 @@ pub(crate) fn sync(ui: &AppWindow) {
     // Title while waiting or in the call, then the text and the actions' labels
     let title = notice.row_data(if phase == AppPhase::InCall { 1 } else { 0 });
     let labels: Vec<SharedString> = title.into_iter().chain(notice.iter().skip(2)).collect();
-    let state = (in_call, mic_on, labels);
+    // The main video, which picture-in-picture shows: their screen when shared, else their camera turned upright,
+    // else yours while they're not there
+    let (screen, peer, own) = (ui.get_screen_video().size(), ui.get_peer_video().size(), ui.get_self_video().size());
+    let video = if ui.get_remote_screen() && screen.width > 0 {
+        (screen.width, screen.height)
+    } else if peer.width > 0 {
+        if ui.get_peer_frame_rotation() % 180 == 0 { (peer.width, peer.height) } else { (peer.height, peer.width) }
+    } else {
+        (own.width, own.height)
+    };
+    let state = (in_call, mic_on, labels, ratio(video));
     if SHOWN.with(|shown| shown.borrow().as_ref() == Some(&state)) {
         return;
     }
-    let (_, _, labels) = &state;
+    let (_, _, labels, (width, height)) = &state;
     with_java(|env, shim, context| {
         let array = env.new_object_array(labels.len() as jint, "java/lang/String", JObject::null())?;
         for (i, label) in labels.iter().enumerate() {
@@ -182,12 +196,14 @@ pub(crate) fn sync(ui: &AppWindow) {
         env.call_static_method(
             shim,
             "callState",
-            "(Landroid/content/Context;ZZ[Ljava/lang/String;)V",
+            "(Landroid/content/Context;ZZ[Ljava/lang/String;II)V",
             &[
                 JValue::Object(context),
                 JValue::Bool(in_call.into()),
                 JValue::Bool(mic_on.into()),
                 JValue::Object(&array),
+                JValue::Int(*width as jint),
+                JValue::Int(*height as jint),
             ],
         )
         .map(drop)
@@ -196,6 +212,15 @@ pub(crate) fn sync(ui: &AppWindow) {
         MUTED_FOR_CALL.set(false);
     }
     SHOWN.with(|shown| *shown.borrow_mut() = Some(state));
+}
+
+/// As a reduced ratio, so the video stepping its resolution up or down doesn't count as a change.
+fn ratio((w, h): (u32, u32)) -> (u32, u32) {
+    let (mut a, mut b) = (w, h);
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    w.checked_div(a).zip(h.checked_div(a)).unwrap_or_default()
 }
 
 fn on_ui(f: impl FnOnce(&AppWindow) + Send + 'static) {
@@ -221,6 +246,12 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativeAction(_env: JNIEnv, _cl
     });
 }
 
+/// `Shim.nativePip`: the activity went into or out of picture-in-picture.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_danendz_call_Shim_nativePip(_env: JNIEnv, _class: JClass, pip: jboolean) {
+    on_ui(move |ui| ui.set_pip(pip != 0));
+}
+
 /// `Shim.nativeAudio`: which outputs there are, as bits of `1 << route`, and the one the call plays on.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_danendz_call_Shim_nativeAudio(
@@ -239,5 +270,112 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativeAudio(
         ui.set_outputs(ModelRc::new(VecModel::from(outputs)));
         let current = usize::try_from(route).ok().and_then(|i| ROUTES.get(i)).copied().unwrap_or_default();
         ui.set_output(current.into());
+    });
+}
+
+/// The engine's camera, opened by `Camera.kt` through Shim.
+struct Camera;
+
+impl engine::android_camera::Backend for Camera {
+    fn request_access(&self) {
+        with_java(|env, shim, context| {
+            env.call_static_method(shim, "requestCamera", "(Landroid/content/Context;)V", &[JValue::Object(context)])
+                .map(drop)
+        });
+    }
+
+    fn list(&self) -> Vec<engine::Device> {
+        let mut devices = Vec::new();
+        with_java(|env, shim, context| {
+            let list = env
+                .call_static_method(
+                    shim,
+                    "cameraList",
+                    "(Landroid/content/Context;)[Ljava/lang/String;",
+                    &[JValue::Object(context)],
+                )?
+                .l()?;
+            let list = JObjectArray::from(list);
+            let mut strings = Vec::new();
+            for i in 0..env.get_array_length(&list)? {
+                let item = JString::from(env.get_object_array_element(&list, i)?);
+                strings.push(String::from(env.get_string(&item)?));
+            }
+            // Ids and labels, alternating
+            devices = strings
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|[id, label]| engine::Device { id: id.clone(), label: label.clone() })
+                .collect();
+            Ok(())
+        });
+        devices
+    }
+
+    fn start(&self, id: Option<&str>) -> Result<(), String> {
+        let mut started = false;
+        with_java(|env, shim, context| {
+            let id = match id {
+                Some(id) => JObject::from(env.new_string(id)?),
+                None => JObject::null(),
+            };
+            env.call_static_method(
+                shim,
+                "cameraStart",
+                "(Landroid/content/Context;Ljava/lang/String;)V",
+                &[JValue::Object(context), JValue::Object(&id)],
+            )?;
+            started = true;
+            Ok(())
+        });
+        if started { Ok(()) } else { Err("the camera couldn't be reached".into()) }
+    }
+
+    fn stop(&self) {
+        with_java(|env, shim, _| env.call_static_method(shim, "cameraStop", "()V", &[]).map(drop));
+    }
+}
+
+/// `Shim.nativeCameraAccess`: the camera permission was answered.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_danendz_call_Shim_nativeCameraAccess(_env: JNIEnv, _class: JClass, granted: jboolean) {
+    engine::android_camera::access(granted != 0);
+}
+
+/// `Camera.nativeFrame`: a captured frame, on the camera's thread. Its buffers are only valid during this call.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments, reason = "a JNI entry point, flat as Java calls it")]
+pub extern "system" fn Java_com_danendz_call_Camera_nativeFrame(
+    env: JNIEnv,
+    _class: JClass,
+    y: JByteBuffer,
+    u: JByteBuffer,
+    v: JByteBuffer,
+    y_stride: jint,
+    uv_stride: jint,
+    uv_pixel_stride: jint,
+    width: jint,
+    height: jint,
+    rotation: jint,
+) {
+    let plane = |buffer: &JByteBuffer| -> Option<&[u8]> {
+        let ptr = env.get_direct_buffer_address(buffer).ok()?;
+        let len = env.get_direct_buffer_capacity(buffer).ok()?;
+        // SAFETY: an Image plane's direct buffer, which Java keeps open until this call returns
+        (!ptr.is_null()).then(|| unsafe { std::slice::from_raw_parts(ptr, len) })
+    };
+    let (Some(y), Some(u), Some(v)) = (plane(&y), plane(&u), plane(&v)) else { return };
+    let size = |n: jint| usize::try_from(n).unwrap_or(0);
+    engine::android_camera::frame(&engine::android_camera::Planes {
+        y,
+        u,
+        v,
+        y_stride: size(y_stride),
+        uv_stride: size(uv_stride),
+        uv_pixel_stride: size(uv_pixel_stride),
+        width: u32::try_from(width).unwrap_or(0),
+        height: u32::try_from(height).unwrap_or(0),
+        rotation: u32::try_from(rotation).unwrap_or(0),
     });
 }

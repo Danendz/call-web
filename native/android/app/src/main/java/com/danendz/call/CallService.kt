@@ -1,5 +1,6 @@
 package com.danendz.call
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.os.Build
@@ -26,7 +28,12 @@ class CallService : Service() {
             else -> {
                 val notification = build(intent ?: return START_NOT_STICKY)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    startForeground(ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                    // The camera keeps sending too, where it's allowed; claiming it without the permission throws
+                    var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    }
+                    startForeground(ID, notification, types)
                 } else {
                     startForeground(ID, notification)
                 }

@@ -62,6 +62,8 @@ export component CallScreen inherits Rectangle {
     // A touch screen, where the chat doesn't focus its box on opening
     in property <bool> touch;
     in property <bool> keyboard-shown;
+    // Android's picture-in-picture window, too small for anything but the video
+    in property <bool> pip;
     in property <[string]> outputs;
     in property <string> output;
     callback pick-output(string);
@@ -174,6 +176,7 @@ export component CallScreen inherits Rectangle {
         messages: root.chat;
         open: root.chat-open;
         stacked: root.stacked;
+        visible: !root.pip;
         focus-on-open: !root.touch;
         keyboard-shown: root.keyboard-shown;
         can-send: !root.reconnecting && !root.starting;
@@ -185,8 +188,8 @@ export component CallScreen inherits Rectangle {
     stage := Rectangle {
         x: 0;
         y: 0;
-        width: root.width - (root.chat-open && !root.stacked ? root.chat-width : 0);
-        height: root.height - (root.chat-open && root.stacked ? root.chat-height : 0);
+        width: root.width - (root.chat-open && !root.pip && !root.stacked ? root.chat-width : 0);
+        height: root.height - (root.chat-open && !root.pip && root.stacked ? root.chat-height : 0);
         animate width, height { duration: Theme.slow; easing: Theme.ease; }
         clip: true;
 
@@ -210,6 +213,7 @@ export component CallScreen inherits Rectangle {
             peer-cam-on: root.peer-cam-on;
             self-cam-on: root.cam-on && root.self-video.width > 0;
             pill-space: root.idle ? 20px : 96px;
+            only-main: root.pip;
             corner-self: root.corner-self;
             corner-peer: root.corner-peer;
             corner-screen: root.corner-screen;
@@ -220,7 +224,7 @@ export component CallScreen inherits Rectangle {
             }
         }
 
-        if !connected: Rectangle {
+        if !connected && !root.pip: Rectangle {
             background: @radial-gradient(circle, #0000008c 0%, #00000040 70%);
             property <bool> card-shown: false;
             init => { card-shown = true; }
@@ -261,6 +265,7 @@ export component CallScreen inherits Rectangle {
         VerticalLayout {
             y: 40px;
             height: self.preferred-height;
+            visible: !root.pip;
             alignment: start;
             spacing: 6px;
 
@@ -358,7 +363,7 @@ export component CallScreen inherits Rectangle {
             height: line.preferred-height + 16px;
             border-radius: Theme.radius;
             background: #000000b8;
-            opacity: subtitle-shown && !chat-open && connected ? 1 : 0;
+            opacity: subtitle-shown && !chat-open && connected && !root.pip ? 1 : 0;
             visible: self.opacity > 0;
             animate opacity { duration: Theme.med; easing: Theme.ease; }
             line := Text {
@@ -377,7 +382,7 @@ export component CallScreen inherits Rectangle {
             // Clear of the pill below it
             limit-width: parent.width - 28px;
             limit-height: parent.height - self.y - 100px;
-            open: root.stats-open && root.connected;
+            open: root.stats-open && root.connected && !root.pip;
             stats: root.stats;
             force-relay: root.force-relay;
             set-force-relay(relay) => { root.set-force-relay(relay); }
@@ -390,6 +395,7 @@ export component CallScreen inherits Rectangle {
             button-size: root.stacked && root.chat-open ? 42px : root.width < 900px ? 46px : 48px;
             gap: root.width < 900px ? 6px : 10px;
             opacity: root.idle ? 0 : 1;
+            visible: !root.pip;
             animate y, opacity { duration: Theme.med; easing: Theme.ease; }
             hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;

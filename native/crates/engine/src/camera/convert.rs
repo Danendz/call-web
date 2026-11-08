@@ -26,7 +26,7 @@ impl Crop {
 /// Two-plane 4:2:0 (Y, then interleaved UV), as macOS and most Windows cameras deliver it. Done here rather than by
 /// libyuv, whose wrapper wants `stride * height` bytes after the crop's first pixel and panics on a portrait slice of
 /// a plane that holds exactly the picture.
-#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android camera comes in A2"))]
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "Android's cameras deliver YUV_420_888"))]
 pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, crop: Crop) -> Option<I420Buffer> {
     if crop.width == 0 || crop.height == 0 {
         return None;
@@ -48,6 +48,56 @@ pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, c
         let v = dv.get_mut(row * sv..row * sv + w / 2)?;
         for (([cb, cr], u), v) in src.as_chunks::<2>().0.iter().zip(u).zip(v) {
             (*u, *v) = (*cb, *cr);
+        }
+    }
+    Some(out)
+}
+
+/// Android's YUV_420_888: a Y plane, then U and V planes whose samples are `uv_pixel_stride` apart (1 when planar,
+/// 2 when they interleave like NV12 or NV21).
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+pub(crate) struct Yuv420<'a> {
+    pub y: &'a [u8],
+    pub y_stride: usize,
+    pub u: &'a [u8],
+    pub v: &'a [u8],
+    pub uv_stride: usize,
+    pub uv_pixel_stride: usize,
+}
+
+/// The crop of a [`Yuv420`] picture turned clockwise by `rotation` (0, 90, 180 or 270), as an upright I420 frame: a
+/// phone's camera sensor lies sideways in it.
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+pub(crate) fn yuv420_to_i420(src: &Yuv420<'_>, crop: Crop, rotation: u32) -> Option<I420Buffer> {
+    if crop.width == 0 || crop.height == 0 {
+        return None;
+    }
+    let sideways = rotation % 180 == 90;
+    let (w, h) = if sideways { (crop.height, crop.width) } else { (crop.width, crop.height) };
+    let mut out = I420Buffer::new(w, h);
+    let (sy, su, sv) = out.strides();
+    let (dy, du, dv) = out.data_mut();
+    // Where the output's pixel (x, y) is in the crop of a plane `cw` x `ch` pixels big
+    let at = |x: usize, y: usize, cw: usize, ch: usize| match rotation {
+        90 => (y, ch - 1 - x),
+        180 => (cw - 1 - x, ch - 1 - y),
+        270 => (cw - 1 - y, x),
+        _ => (x, y),
+    };
+    let (w, h, cw, ch) = (w as usize, h as usize, crop.width as usize, crop.height as usize);
+    let (x0, y0) = (crop.x as usize, crop.y as usize);
+    for row in 0..h {
+        for col in 0..w {
+            let (x, y) = at(col, row, cw, ch);
+            *dy.get_mut(row * sy as usize + col)? = *src.y.get((y0 + y) * src.y_stride + x0 + x)?;
+        }
+    }
+    for row in 0..h / 2 {
+        for col in 0..w / 2 {
+            let (x, y) = at(col, row, cw / 2, ch / 2);
+            let from = (y0 / 2 + y) * src.uv_stride + (x0 / 2 + x) * src.uv_pixel_stride;
+            *du.get_mut(row * su as usize + col)? = *src.u.get(from)?;
+            *dv.get_mut(row * sv as usize + col)? = *src.v.get(from)?;
         }
     }
     Some(out)
@@ -83,6 +133,8 @@ pub(crate) fn yuyv_to_i420(src: &[u8], stride: u32, crop: Crop) -> Option<I420Bu
 
 #[cfg(test)]
 mod tests {
+    use libwebrtc::prelude::VideoBuffer;
+
     use super::*;
 
     #[test]
@@ -134,6 +186,38 @@ mod tests {
         assert_eq!(&oy[7 * sy as usize..7 * sy as usize + 4], &[238, 239, 240, 241]);
         assert_eq!((&u[..2], &v[..2]), (&[14, 16][..], &[15, 17][..]));
         assert_eq!(u[3 * su as usize], 3 * 32 + 14);
+    }
+
+    #[test]
+    fn yuv420_turns_a_sideways_sensor_upright() {
+        // 4x2 picture with interleaved chroma (NV21: V first, U one byte on), turned 90° clockwise into 2x4. The U
+        // plane is one byte short of V, as Android hands it
+        let y = [1, 2, 3, 4, 5, 6, 7, 8];
+        let vu = [20, 10, 21, 11];
+        let src = Yuv420 { y: &y, y_stride: 4, u: &vu[1..], v: &vu, uv_stride: 4, uv_pixel_stride: 2 };
+        let out = yuv420_to_i420(&src, Crop::new(4, 2, false), 90).unwrap();
+        let (oy, u, v) = out.data();
+        let (sy, ..) = out.strides();
+        let rows: Vec<&[u8]> = (0..4).map(|r| &oy[r * sy as usize..r * sy as usize + 2]).collect();
+        assert_eq!(rows, [&[5, 1][..], &[6, 2], &[7, 3], &[8, 4]]);
+        assert_eq!((u[0], v[0]), (10, 20));
+        assert_eq!((out.width(), out.height()), (2, 4));
+    }
+
+    #[test]
+    fn yuv420_turned_the_other_ways() {
+        let y = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (u, v) = ([0; 2], [0; 2]);
+        let src = Yuv420 { y: &y, y_stride: 4, u: &u, v: &v, uv_stride: 2, uv_pixel_stride: 1 };
+        let luma = |rotation| {
+            let out = yuv420_to_i420(&src, Crop::new(4, 2, false), rotation).unwrap();
+            let (sy, ..) = out.strides();
+            let (w, h) = (out.width() as usize, out.height() as usize);
+            (0..h).flat_map(|r| out.data().0[r * sy as usize..r * sy as usize + w].to_vec()).collect::<Vec<_>>()
+        };
+        assert_eq!(luma(0), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(luma(180), [8, 7, 6, 5, 4, 3, 2, 1]);
+        assert_eq!(luma(270), [4, 8, 3, 7, 2, 6, 1, 5]);
     }
 
     #[test]

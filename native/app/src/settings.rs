@@ -6,14 +6,14 @@ use std::path::PathBuf;
 use engine::Lang;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub lang: Option<Lang>,
     /// The picked mic's id, applied when it's plugged in
     pub mic: Option<String>,
     pub cam: Option<String>,
-    /// Send 9:16 video instead of 16:9
-    #[serde(default)]
+    /// Send 9:16 video instead of 16:9; a phone is held upright, so it starts in portrait
+    #[serde(default = "upright")]
     pub portrait: bool,
     /// Speech to chat, which the web also remembers
     #[serde(default)]
@@ -24,6 +24,24 @@ pub struct Settings {
     /// The phone's guide to its battery and app launch settings has been read
     #[serde(default)]
     pub background_guide_seen: bool,
+}
+
+fn upright() -> bool {
+    cfg!(target_os = "android")
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            lang: None,
+            mic: None,
+            cam: None,
+            portrait: upright(),
+            transcribe: false,
+            corners: std::collections::BTreeMap::new(),
+            background_guide_seen: false,
+        }
+    }
 }
 
 impl Settings {

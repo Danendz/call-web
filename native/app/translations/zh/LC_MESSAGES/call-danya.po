@@ -8,6 +8,9 @@ msgstr ""
 msgid "Back"
 msgstr "返回"
 
+msgid "Back camera"
+msgstr "后置摄像头"
+
 msgid "Bluetooth"
 msgstr "蓝牙"
 
@@ -61,6 +64,12 @@ msgstr "复制"
 
 msgid "Done"
 msgstr "完成"
+
+msgid "External camera"
+msgstr "外接摄像头"
+
+msgid "Front camera"
+msgstr "前置摄像头"
 
 msgid "Hang up"
 msgstr "挂断"
