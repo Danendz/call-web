@@ -129,6 +129,7 @@ impl Peer {
             ice_servers: config.ice_servers,
             screen_stream_id: config.screen_stream_id,
             screen_sender: None,
+            sharing: false,
             counters: None,
             ignore_offer: false,
             last_restart: None,
@@ -183,6 +184,8 @@ struct Session {
     ice_servers: Vec<IceServerConfig>,
     screen_stream_id: String,
     screen_sender: Option<RtpSender>,
+    /// The sender keeps the screen track after a share stops, so this says whether one is on
+    sharing: bool,
     counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
@@ -319,12 +322,14 @@ impl Session {
         }));
     }
 
-    /// The first share adds its transceiver (one renegotiation); after that, stopping and starting again only swaps
-    /// the track in it, like the web's setScreen.
+    /// The first share adds its transceiver (one renegotiation); after that, starting again only swaps the track in
+    /// it, like the web's setScreen. Stopping leaves the track in place: capture has stopped, so it sends nothing, and
+    /// LiveKit's `set_track(None)` dereferences the null track and crashes.
     fn set_screen(&mut self, track: Option<MediaStreamTrack>) {
+        self.sharing = track.is_some();
         match (&self.screen_sender, track) {
-            (Some(sender), track) => {
-                if let Err(e) = sender.set_track(track) {
+            (Some(sender), Some(track)) => {
+                if let Err(e) = sender.set_track(Some(track)) {
                     tracing::warn!("couldn't swap the screen track: {}", e.message);
                 }
             }
@@ -335,7 +340,7 @@ impl Session {
                     Err(e) => tracing::warn!("couldn't add the screen: {}", e.message),
                 }
             }
-            (None, None) => {}
+            (_, None) => {}
         }
         self.tune_senders();
     }
@@ -346,7 +351,7 @@ impl Session {
     /// mic gets priority so voices survive congestion. Encodings only exist after negotiation, so this runs after
     /// every description change.
     fn tune_senders(&self) {
-        let sharing = self.screen_sender.as_ref().is_some_and(|s| s.track().is_some());
+        let sharing = self.sharing;
         for transceiver in self.pc.transceivers() {
             let sender = transceiver.sender();
             let (video, screen) = match sender.track() {
