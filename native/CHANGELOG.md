@@ -3,6 +3,14 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.2.1 — 2026-11-08
+
+Chinese text on more Android phones.
+
+### Fixed
+
+- Chinese text showed as boxes on some Android phones
+
 ## 0.2.0 — 2026-11-08
 
 The app comes to Android, and speech can be recognized on the device.
