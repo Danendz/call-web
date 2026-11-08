@@ -81,7 +81,8 @@ async function proxy(
     headers: signedHeaders(bucket, req.method ?? "GET", url),
     signal,
   });
-  if (upstream.status === 404 || upstream.status === 403) {
+  // A 403 is our credentials, not a missing file, so it's thrown and logged
+  if (upstream.status === 404) {
     await upstream.body?.cancel();
     res.writeHead(404).end();
     return;
