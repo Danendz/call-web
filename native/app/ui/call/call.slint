@@ -374,6 +374,9 @@ export component CallScreen inherits Rectangle {
         StatsOverlay {
             x: 14px;
             y: 40px;
+            // Clear of the pill below it
+            limit-width: parent.width - 28px;
+            limit-height: parent.height - self.y - 100px;
             open: root.stats-open && root.connected;
             stats: root.stats;
             force-relay: root.force-relay;
