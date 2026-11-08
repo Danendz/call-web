@@ -39,6 +39,8 @@ if [ "$channel" = osx ]; then
     security unlock-keychain -p ci "$keychain"
     security import "$RUNNER_TEMP/sign.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
     security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain" > /dev/null
+    # codesign only finds an identity in a keychain on the search list, whatever --keychain says
+    eval "security list-keychains -d user -s \"\$keychain\" $(security list-keychains -d user | tr '\n' ' ')"
     rm "$RUNNER_TEMP/sign.p12"
     pack --packDir "target/release/Call Danya.app" --mainExe call-danya \
         --signAppIdentity "Call Danya" --keychain "$keychain" --signEntitlements packaging/macos/call-danya.entitlements

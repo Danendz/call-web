@@ -2,7 +2,8 @@
 # release builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner): test
 # builds run on `build/**` branches (push a branch there to get installable artifacts) and when started by hand from
 # the Actions tab. A merge to `main` that bumps app/Cargo.toml's version (from a `bump/*` branch) builds and publishes
-# a release with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh). Windows
+# a release with Velopack to the releases bucket, served at call.danendz.com/updates (packaging/release.sh), then a
+# GitHub release `native-v<version>` with that version's native/CHANGELOG.md section and the installers. Windows
 # is unsigned (SmartScreen needs "Run anyway" on the first install); macOS is signed with our self-signed certificate
 # (right-click → Open on the first install). The first build of a cache downloads prebuilt WebRTC (~200 MB).
 name: native
@@ -37,6 +38,15 @@ jobs:
       - uses: taiki-e/install-action@cargo-audit
       - run: cargo audit
         working-directory: native
+
+  # Every version needs its changelog section, checked on the PR so a bump can't merge without one
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' native/app/Cargo.toml)
+          grep -q "^## $version " native/CHANGELOG.md || { echo "::error::native/CHANGELOG.md has no section for $version"; exit 1; }
 
   check:
     if: github.event_name == 'pull_request'
@@ -83,6 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - id: check
@@ -94,9 +105,10 @@ jobs:
           done
           echo "$version: release=$release"
           echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   release:
-    needs: version
+    needs: [version, changelog]
     if: needs.version.outputs.release == 'true'
     strategy:
       fail-fast: false
@@ -124,3 +136,32 @@ jobs:
           RELEASES_SECRET: ${{ secrets.RELEASES_SECRET }}
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      # For the GitHub release; nothing when this channel already had the version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            native/target/velopack/*-Setup.*
+            native/target/velopack/*-Portable.zip
+          if-no-files-found: ignore
+
+  # Only once both OSes are published. A private repo's release is a changelog and a backup copy of the installers
+  # for us; she installs and updates from call.danendz.com.
+  github-release:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: installers-*, merge-multiple: true, path: installers }
+      - run: |
+          awk -v v="$VERSION" '/^## /{ if (p) exit; if ($2 == v) { p = 1; next } } p' native/CHANGELOG.md > notes.md
+          tag="native-v$VERSION"
+          gh release view "$tag" > /dev/null 2>&1 ||
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Call Danya $VERSION" --notes-file notes.md
+          if [ -n "$(ls installers 2>/dev/null)" ]; then gh release upload "$tag" installers/* --clobber; fi

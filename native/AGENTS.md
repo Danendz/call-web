@@ -61,8 +61,35 @@ native/
 ## Distribution
 
 - **Velopack** (`velopack` crate, `vpk` CLI, same pinned version in `app/Cargo.toml` and `native.yml`) installs the app per user and updates it (`app/src/update.rs`): it checks `{server}/updates` at launch and every 4 hours, downloads quietly, and installs on quit or from the start screen's "Update to …" button, never during a call. A dev build isn't installed, so it skips all of this.
-- **A release is a version bump.** Raise `version` in `app/Cargo.toml` on a `bump/*` branch; when it merges to `main`, CI builds both OSes and `packaging/release.sh` packs them and uploads to the Railway `releases` bucket, which the server serves at `/updates/*` (`server/updates.ts`). Feed `releases.{win,osx}.json`, first installs `CallDanya-win-Setup.exe` and `CallDanya-osx-Setup.pkg` (or `-Portable.zip`).
+- **A release is a version bump** (see Releasing). When it merges to `main`, CI builds both OSes and `packaging/release.sh` packs them and uploads to the Railway `releases` bucket, which the server serves at `/updates/*` (`server/updates.ts`), then makes the GitHub release. Feed `releases.{win,osx}.json`, first installs `CallDanya-win-Setup.exe` and `CallDanya-osx-Setup.pkg` (or `-Portable.zip`).
 - **Signing costs nothing:** Windows is unsigned (SmartScreen "Run anyway" once; add the install folder, `%LocalAppData%\CallDanya`, to an antivirus's trust list if it flags an update). macOS is signed with our self-signed "Call Danya" certificate (`MACOS_CERT_P12` secret) and the hardened runtime with `packaging/macos/call-danya.entitlements`, so camera, mic and screen recording permissions survive updates; first install is right-click → Open. Replacing the certificate makes macOS ask for those permissions once more.
+
+## Releasing
+
+Do these the same way every time, so releases read alike:
+
+1. From an up-to-date `main`: `git checkout -b bump/<version>`. Pick the version by semver from what changed since the last `native-v*` tag (`git log --oneline --no-merges native-v<last>..main -- native server/updates.ts`): patch for fixes only, minor for anything new. Until 1.0, a breaking change is also minor.
+2. Set `version` in `app/Cargo.toml` and run `cargo build` so `Cargo.lock` follows. `packaging/macos/bundle.sh` copies the version into the macOS bundle; nothing else holds it.
+3. Add a section at the top of `CHANGELOG.md` (CI fails the PR without one; the GitHub release gets its body from it):
+
+   ```
+   ## <version> — <YYYY-MM-DD>
+
+   <One sentence: what this release is about.>
+
+   ### New
+   - <What she or you can now do, in a few words>
+
+   ### Fixed
+   - <What was broken, said as what works now>
+
+   ### Changed
+   - <Behavior that's different, when it isn't new or a fix>
+   ```
+
+   Leave out empty headings. Write for the people using the app, not for developers: no crate names, file paths or commit types. Group the commits since the last tag by feature, one line each; leave out CI, docs and refactors that change nothing for the user.
+4. Commit as `chore(native): release <version>` and open the PR titled the same, with the new changelog section as its body.
+5. After the merge, the `native` workflow on `main` runs `version` → `release` (macOS, Windows) → `github-release`. If one OS fails, rerun the failed jobs: `release.sh` skips a channel that already has the version, and `github-release` only adds what's missing.
 
 ## Before saying it's done
 
