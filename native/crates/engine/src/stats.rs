@@ -16,6 +16,10 @@ pub struct VideoStats {
     pub width: u32,
     pub height: u32,
     pub fps: f64,
+    /// "VP8", "H264"…
+    pub codec: Option<String>,
+    /// The encoder or decoder doing the work, e.g. "libvpx" or a hardware one
+    pub implementation: Option<String>,
     /// What holds the outgoing picture back: "cpu" or "bandwidth"
     pub limited_by: Option<&'static str>,
 }
@@ -78,6 +82,17 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
         })
     });
 
+    let codec = |id: &str| {
+        report.iter().find_map(|s| match s {
+            RtcStats::Codec(c) if c.rtc.id == id => {
+                let mime = c.codec.mime_type.as_str();
+                Some(mime.split_once('/').map_or(mime, |(_, name)| name).to_owned())
+            }
+            _ => None,
+        })
+    };
+    let non_empty = |s: &str| Some(s.to_owned()).filter(|s| !s.is_empty());
+
     let mut counters = Counters { at: now, bytes_in: 0, bytes_out: 0, packets_in: 0, packets_lost: 0 };
     let (mut jitter_ms, mut video_in, mut video_out, mut loss_out_pct) = (None, None, None, None::<f64>);
     for s in report {
@@ -89,28 +104,34 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
                 if r.stream.kind == "audio" {
                     jitter_ms = Some(r.received.jitter * 1000.0);
                 } else if r.stream.kind == "video" && r.inbound.frame_width > 0 {
-                    video_in = Some(VideoStats {
+                    let video = VideoStats {
                         width: r.inbound.frame_width,
                         height: r.inbound.frame_height,
                         fps: r.inbound.frames_per_second,
+                        codec: codec(&r.stream.codec_id),
+                        implementation: non_empty(&r.inbound.decoder_implementation),
                         limited_by: None,
-                    });
+                    };
+                    video_in = Some(bigger(video_in, video));
                 }
             }
             RtcStats::OutboundRtp(r) => {
                 counters.bytes_out += r.sent.bytes_sent;
                 if r.stream.kind == "video" && r.outbound.frame_width > 0 {
-                    video_out = Some(VideoStats {
+                    let video = VideoStats {
                         width: r.outbound.frame_width,
                         height: r.outbound.frame_height,
                         fps: r.outbound.frames_per_second,
+                        codec: codec(&r.stream.codec_id),
+                        implementation: non_empty(&r.outbound.encoder_implementation),
                         limited_by: match r.outbound.quality_limitation_reason {
                             QualityLimitationReason::Cpu => Some("cpu"),
                             QualityLimitationReason::Bandwidth => Some("bandwidth"),
                             QualityLimitationReason::Other => Some("other"),
                             QualityLimitationReason::None => None,
                         },
-                    });
+                    };
+                    video_out = Some(bigger(video_out, video));
                 }
             }
             RtcStats::RemoteInboundRtp(r) => {
@@ -173,6 +194,14 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
     (stats, counters)
 }
 
+/// While sharing, the camera and the screen both send: the overlay shows the bigger picture, which is the screen.
+fn bigger(current: Option<VideoStats>, next: VideoStats) -> VideoStats {
+    match current {
+        Some(c) if u64::from(c.width) * u64::from(c.height) >= u64::from(next.width) * u64::from(next.height) => c,
+        _ => next,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +240,23 @@ mod tests {
         assert_eq!(stats.path, Path::Unknown, "no selected pair in this report");
         assert_eq!(stats.in_kbps.round(), 1000.0);
         assert_eq!(stats.loss_pct.map(|l| l.round()), Some(10.0));
+    }
+
+    #[test]
+    fn video_out_is_the_shared_screen_with_its_codec() {
+        let both = report(
+            r#"[
+            {"type":"codec","id":"C","timestamp":0,"mimeType":"video/VP8"},
+            {"type":"outbound-rtp","id":"S","timestamp":0,"kind":"video","codecId":"C","frameWidth":1920,
+             "frameHeight":1080,"framesPerSecond":60,"encoderImplementation":"libvpx"},
+            {"type":"outbound-rtp","id":"K","timestamp":0,"kind":"video","codecId":"C","frameWidth":640,
+             "frameHeight":360,"framesPerSecond":30,"encoderImplementation":"libvpx"}
+        ]"#,
+        );
+        let (stats, _) = sample(&both, None, Instant::now());
+        let out = stats.video_out.unwrap();
+        assert_eq!((out.width, out.height), (1920, 1080), "the screen, not the camera after it");
+        assert_eq!(out.codec.as_deref(), Some("VP8"));
+        assert_eq!(out.implementation.as_deref(), Some("libvpx"));
     }
 }

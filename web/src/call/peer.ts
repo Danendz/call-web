@@ -4,8 +4,11 @@ const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
 // Enough for clean 720p; a direct call into mainland China carried ~2 Mbps with negligible loss.
 const VIDEO_MAX_BITRATE = 2_000_000;
-// While sharing, the same ~2 Mbps is split: most for the screen (text must stay sharp), a small face for the camera.
-const SHARE_SCREEN_BITRATE = 1_600_000;
+// While sharing: the screen, and a small face for the camera. The screen's cap is only a ceiling: congestion control
+// finds what the path carries below it, so a LAN or a good link gets a sharp, smooth screen (a playing video needs far
+// more than text), and a weak one isn't hurt.
+const SHARE_SCREEN_BITRATE = 15_000_000;
+const SHARE_SCREEN_FPS = 60;
 const SHARE_CAMERA_BITRATE = 400_000;
 const SHARE_CAMERA_SHORT_SIDE = 360;
 
@@ -171,9 +174,10 @@ export class PeerSession {
 
   /**
    * Caps video bitrate and tells the encoder what to give up when bandwidth runs short: resolution for the camera
-   * (a smaller clean picture beats a blocky one), frame rate for the screen (text must stay readable). While sharing,
-   * the camera shrinks to a small face so the screen gets the bandwidth. The mic gets priority so voices survive
-   * congestion. Encodings only exist after negotiation, so this runs after every description change.
+   * (a smaller clean picture beats a blocky one), some of both for the screen (a playing video stays watchable instead
+   * of freezing, and text is sharp again once it settles). While sharing, the camera shrinks to a small face so the
+   * screen gets the bandwidth. The mic gets priority so voices survive congestion. Encodings only exist after
+   * negotiation, so this runs after every description change.
    */
   private async tuneSenders(): Promise<void> {
     const sharing = !!this.screenVideo?.track;
@@ -189,9 +193,10 @@ export class PeerSession {
         if (isVideo) {
           enc.maxBitrate = maxBitrate;
           enc.scaleResolutionDownBy = scale;
+          if (isScreen) enc.maxFramerate = SHARE_SCREEN_FPS;
         } else enc.priority = enc.networkPriority = "high";
       }
-      if (isVideo) params.degradationPreference = isScreen ? "maintain-resolution" : "maintain-framerate";
+      if (isVideo) params.degradationPreference = isScreen ? "balanced" : "maintain-framerate";
       try {
         await sender.setParameters(params);
       } catch {

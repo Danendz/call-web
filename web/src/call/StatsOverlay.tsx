@@ -1,4 +1,4 @@
-import type { CallStats } from "./stats";
+import type { CallStats, VideoStats } from "./stats";
 
 export function StatsOverlay({
   open,
@@ -58,8 +58,11 @@ export function StatsOverlay({
   );
 }
 
-function fmtVideo(v: { width?: number; height?: number; fps?: number } | undefined): string {
-  return v?.width ? `${v.width}×${v.height} @ ${fmt(v.fps, "fps")}` : "—";
+function fmtVideo(v: VideoStats | undefined): string {
+  if (!v?.width) return "—";
+  const size = `${v.width}×${v.height} @ ${fmt(v.fps, "fps")}`;
+  if (!v.codec) return size;
+  return v.implementation ? `${size} · ${v.codec} (${v.implementation})` : `${size} · ${v.codec}`;
 }
 
 function fmt(value: number | undefined, unit: string, digits = 0): string {
