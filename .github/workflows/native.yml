@@ -1,5 +1,5 @@
-# Checks and builds the native app. Pull requests only get the quick checks (on macOS); the macOS and Windows
-# release builds take most of an hour, so they run on `main`, on `build/**` branches (push a branch there to get
+# Checks and builds the native app. Pull requests get fmt, clippy and tests on macOS; the macOS and Windows release
+# builds only build (each extra cargo command is another full compile, ~20 min on a Windows runner) and run on `main`, on `build/**` branches (push a branch there to get
 # installable artifacts) and when started by hand from the Actions tab. Builds are unsigned until M6: macOS needs
 # right-click → Open the first time, Windows SmartScreen needs "Run anyway". The first build of a cache downloads
 # prebuilt WebRTC (~200 MB).
@@ -63,9 +63,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native }
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo test --locked
       - run: cargo build --release --locked
       - if: runner.os == 'macOS'
         run: packaging/macos/bundle.sh
