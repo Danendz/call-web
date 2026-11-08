@@ -9,6 +9,7 @@ import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
 import { DeviceRow } from "./DeviceRow";
+import { DownloadApp } from "./DownloadApp";
 import { MicLevel } from "./MicLevel";
 import "./setup.css";
 
@@ -74,7 +75,10 @@ export function Setup({ controller, state, roomUrl }: { controller: CallControll
       </div>
 
       <div className="setup-panel">
-        <h1>{t.readyToJoin}</h1>
+        <div className="panel-head">
+          <h1>{t.readyToJoin}</h1>
+          <DownloadApp />
+        </div>
         <div className="share">
           <p className="muted">{t.shareLink}</p>
           <CopyLink url={roomUrl} />

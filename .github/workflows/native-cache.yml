@@ -8,7 +8,7 @@ name: native-cache
 on:
   push:
     branches: [main]
-    paths: ["native/Cargo.lock", "native/rust-toolchain.toml", ".github/workflows/native-cache.yml"]
+    paths: ["native/Cargo.lock", "native/rust-toolchain.toml", ".github/workflows/native-cache.yml", ".github/actions/android/**"]
   workflow_dispatch:
 
 concurrency:
@@ -44,3 +44,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release }
       - run: cargo build --release --locked
+
+  # Same keys and commands as native.yml's Android jobs
+  android:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { key: check-android, run: "cargo ndk -t arm64-v8a -P 29 clippy -p call-danya --lib -p engine --locked" }
+          - { key: release-android, run: "cargo ndk -t arm64-v8a -P 29 build -p call-danya --lib --release --locked" }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/android
+        with: { cache-key: "${{ matrix.key }}" }
+      - run: ${{ matrix.run }}
+        working-directory: native

@@ -8,6 +8,12 @@ msgstr ""
 msgid "Back"
 msgstr "返回"
 
+msgid "Back camera"
+msgstr "后置摄像头"
+
+msgid "Bluetooth"
+msgstr "蓝牙"
+
 msgid "Call ended"
 msgstr "通话已结束"
 
@@ -35,6 +41,9 @@ msgstr "取消"
 msgid "Chat"
 msgstr "聊天"
 
+msgid "Close"
+msgstr "关闭"
+
 msgid "Close chat"
 msgstr "关闭聊天"
 
@@ -56,11 +65,41 @@ msgstr "已复制"
 msgid "Copy"
 msgstr "复制"
 
+msgid "Delete"
+msgstr "删除"
+
+msgid "Done"
+msgstr "完成"
+
+msgid "Download"
+msgstr "下载"
+
+msgid "Downloaded · {}"
+msgstr "已下载 · {}"
+
+msgid "Downloading speech model… {}%"
+msgstr "正在下载语音模型… {}%"
+
+msgid "Downloading update… {}%"
+msgstr "正在下载更新… {}%"
+
+msgid "Downloading… {}%"
+msgstr "正在下载… {}%"
+
+msgid "External camera"
+msgstr "外接摄像头"
+
+msgid "Front camera"
+msgstr "前置摄像头"
+
 msgid "Hang up"
 msgstr "挂断"
 
 msgid "I speak"
 msgstr "我说"
+
+msgid "In a call"
+msgstr "通话中"
 
 msgid "Join"
 msgstr "加入"
@@ -86,17 +125,44 @@ msgstr "麦克风：未找到"
 msgid "More"
 msgstr "更多"
 
+msgid "Mute"
+msgstr "静音"
+
 msgid "New room"
 msgstr "新房间"
 
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
 
+msgid "Not downloaded · {}"
+msgstr "未下载 · {}"
+
+msgid "Not now"
+msgstr "以后再说"
+
+msgid "On-device recognition"
+msgstr "本机识别"
+
+msgid "Open settings"
+msgstr "打开设置"
+
+msgid "Phone earpiece"
+msgstr "听筒"
+
 msgid "Portrait video"
 msgstr "竖屏视频"
 
 msgid "Ready to join?"
 msgstr "准备好加入了吗？"
+
+msgid "Recognize on this device"
+msgstr "在本机上识别"
+
+msgid "Recognize speech on this device?"
+msgstr "在本机上识别语音？"
+
+msgid "Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device."
+msgstr "在本机上识别语音，转成聊天更快，服务器的语音额度用完时也能继续用，而且你的声音不会离开这台设备。"
 
 msgid "Rejoin"
 msgstr "重新加入"
@@ -125,6 +191,9 @@ msgstr "发送横屏视频"
 msgid "Send portrait video"
 msgstr "发送竖屏视频"
 
+msgid "Settings"
+msgstr "设置"
+
 msgid "Share screen"
 msgstr "共享屏幕"
 
@@ -134,8 +203,23 @@ msgstr "把这个链接发给你要通话的人"
 msgid "Show in folder"
 msgstr "在文件夹中显示"
 
+msgid "So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings."
+msgstr "为了在锁屏后通话不中断，请在应用设置中允许 Call Danya 在后台运行，并取消电池限制。"
+
+msgid "So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches."
+msgstr "为了在锁屏后通话不中断：请在 设置 → 应用 → 应用启动管理 中，将 Call Danya 设为“手动管理”，并打开全部三个开关。"
+
+msgid "Speaker"
+msgstr "扬声器"
+
+msgid "Speech goes to the server"
+msgstr "语音发送到服务器识别"
+
 msgid "Speech to chat"
 msgstr "语音转文字"
+
+msgid "Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings."
+msgstr "语音转聊天会更快，服务器的语音额度用完时也能继续用，而且你的声音不会离开这台设备。需要一次性下载 {}，也可以以后在设置里下载。"
 
 msgid "Speech-to-chat isn't available right now"
 msgstr "语音转文字暂不可用"
@@ -161,8 +245,14 @@ msgstr "切换画面"
 msgid "Switch camera"
 msgstr "切换摄像头"
 
+msgid "Tap to return to the call"
+msgstr "点按返回通话"
+
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
+
+msgid "The download stopped. Try again to continue where it left off."
+msgstr "下载中断了。重试会从中断的地方继续。"
 
 msgid "The other person took a screenshot"
 msgstr "对方截了一张图"
@@ -176,6 +266,9 @@ msgstr "对方的屏幕"
 msgid "This room already has two people in it."
 msgstr "这个房间已经有两个人了。"
 
+msgid "Try again"
+msgstr "重试"
+
 msgid "Turn off camera"
 msgstr "关闭摄像头"
 
@@ -187,6 +280,9 @@ msgstr "打开摄像头"
 
 msgid "Turn on microphone"
 msgstr "打开麦克风"
+
+msgid "Unmute"
+msgstr "取消静音"
 
 msgid "Update to {}"
 msgstr "更新到 {}"

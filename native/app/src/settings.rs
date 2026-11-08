@@ -6,14 +6,14 @@ use std::path::PathBuf;
 use engine::Lang;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub lang: Option<Lang>,
     /// The picked mic's id, applied when it's plugged in
     pub mic: Option<String>,
     pub cam: Option<String>,
-    /// Send 9:16 video instead of 16:9
-    #[serde(default)]
+    /// Send 9:16 video instead of 16:9; a phone is held upright, so it starts in portrait
+    #[serde(default = "upright")]
     pub portrait: bool,
     /// Speech to chat, which the web also remembers
     #[serde(default)]
@@ -21,6 +21,39 @@ pub struct Settings {
     /// Which corner each video tile sits in: "self", "peer" or "screen" to tl, tr, bl or br
     #[serde(default)]
     pub corners: std::collections::BTreeMap<String, String>,
+    /// The phone's guide to its battery and app launch settings has been read
+    #[serde(default)]
+    pub background_guide_seen: bool,
+    /// Speech is recognized on this device once its model is downloaded, instead of on the server
+    #[serde(default = "yes")]
+    pub on_device_speech: bool,
+    /// The first launch's question about downloading the speech model was answered
+    #[serde(default)]
+    pub speech_prompt_seen: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn upright() -> bool {
+    cfg!(target_os = "android")
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            lang: None,
+            mic: None,
+            cam: None,
+            portrait: upright(),
+            transcribe: false,
+            corners: std::collections::BTreeMap::new(),
+            background_guide_seen: false,
+            on_device_speech: true,
+            speech_prompt_seen: false,
+        }
+    }
 }
 
 impl Settings {
@@ -44,7 +77,22 @@ impl Settings {
     }
 }
 
+/// The app's private data folder on Android, which only the activity knows; set once at startup.
+#[cfg(target_os = "android")]
+pub static ANDROID_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
 fn path() -> Option<PathBuf> {
+    Some(data_dir()?.join("settings.json"))
+}
+
+/// The app's own folder, for settings and the speech model.
+#[cfg(target_os = "android")]
+pub fn data_dir() -> Option<PathBuf> {
+    ANDROID_DIR.get().cloned()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn data_dir() -> Option<PathBuf> {
     let base = if cfg!(target_os = "windows") {
         PathBuf::from(std::env::var_os("APPDATA")?)
     } else if cfg!(target_os = "macos") {
@@ -54,7 +102,7 @@ fn path() -> Option<PathBuf> {
             .map(PathBuf::from)
             .or_else(|| Some(PathBuf::from(std::env::var_os("HOME")?).join(".config")))?
     };
-    Some(base.join("Call Danya").join("settings.json"))
+    Some(base.join("Call Danya"))
 }
 
 /// The OS language, for the first launch: Chinese if it's any Chinese, otherwise English, as the web does.

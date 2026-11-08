@@ -21,6 +21,12 @@ export component ControlPill inherits Rectangle {
     in property <bool> can-screenshot;
     in property <bool> sharing;
     in property <bool> can-share;
+    in property <[string]> outputs;
+    in property <string> output;
+    callback pick-output(string);
+    // Smaller on a phone, like the web's narrow .pill
+    in property <length> button-size: 48px;
+    in property <length> gap: 10px;
     callback screenshot();
     callback toggle-share();
     // The pointer is over the pill: the controls stay up meanwhile
@@ -51,13 +57,14 @@ export component ControlPill inherits Rectangle {
     }
 
     row := HorizontalLayout {
-        padding: 8px;
+        padding: root.gap < 10px ? 4px : 8px;
         // The web's extra margin before hang up
-        spacing: 16px;
+        spacing: root.gap + 6px;
 
         HorizontalLayout {
-            spacing: 10px;
+            spacing: root.gap;
             IconButton {
+                size: root.button-size;
                 icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
                 label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
                 kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
@@ -65,6 +72,7 @@ export component ControlPill inherits Rectangle {
                 clicked => { root.toggle-mic(); }
             }
             IconButton {
+                size: root.button-size;
                 icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
                 label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
                 kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
@@ -72,6 +80,7 @@ export component ControlPill inherits Rectangle {
                 clicked => { root.toggle-cam(); }
             }
             IconButton {
+                size: root.button-size;
                 icon: Icons.captions;
                 label: @tr("Speech to chat");
                 kind: transcribe-on ? IconButtonKind.active : IconButtonKind.normal;
@@ -79,6 +88,7 @@ export component ControlPill inherits Rectangle {
                 clicked => { root.toggle-transcribe(); }
             }
             IconButton {
+                size: root.button-size;
                 icon: Icons.message-square;
                 label: @tr("Chat");
                 kind: chat-open ? IconButtonKind.active : IconButtonKind.normal;
@@ -86,6 +96,7 @@ export component ControlPill inherits Rectangle {
                 clicked => { root.toggle-chat(); }
             }
             MoreMenu {
+                size: root.button-size;
                 cams: root.cams;
                 cam-id: root.cam-id;
                 cam-granted: root.cam-granted;
@@ -95,6 +106,9 @@ export component ControlPill inherits Rectangle {
                 can-screenshot: root.can-screenshot;
                 sharing: root.sharing;
                 can-share: root.can-share;
+                outputs: root.outputs;
+                output: root.output;
+                pick-output(id) => { root.pick-output(id); }
                 screenshot => { root.screenshot(); }
                 toggle-share => { root.toggle-share(); }
                 pick-cam(id) => { root.pick-cam(id); }
@@ -105,6 +119,7 @@ export component ControlPill inherits Rectangle {
             }
         }
         IconButton {
+            size: root.button-size;
             icon: Icons.phone-off;
             label: @tr("Hang up");
             kind: IconButtonKind.danger;

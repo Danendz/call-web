@@ -1,0 +1,253 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
+
+// Where the on-device speech model stands, as the engine's ModelStatus
+export enum ModelState { missing, downloading, ready, failed }
+
+// An on/off switch, like the OS's own
+component Switch inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled();
+
+    width: 44px;
+    height: 26px;
+    border-radius: self.height / 2;
+    background: checked ? Theme.accent : Theme.surface-3;
+    opacity: enabled ? 1 : 0.38;
+    animate background { duration: Theme.fast; easing: Theme.ease; }
+    accessible-role: switch;
+    accessible-checked: checked;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (enabled) { root.toggled(); } }
+
+    Rectangle {
+        width: parent.height - 6px;
+        height: self.width;
+        x: checked ? parent.width - self.width - 3px : 3px;
+        border-radius: self.width / 2;
+        background: #fff;
+        animate x { duration: Theme.fast; easing: Theme.ease; }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { if (root.enabled) { root.toggled(); } }
+    }
+}
+
+// One row of a settings group: a title, a line under it, and a control at the end.
+component SettingRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> detail;
+    in property <color> detail-color: Theme.muted;
+
+    padding: 16px;
+    spacing: 14px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 3px;
+        horizontal-stretch: 1;
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.font-size;
+            wrap: word-wrap;
+        }
+        if root.detail != "": Text {
+            text: root.detail;
+            color: root.detail-color;
+            font-size: Theme.font-size-small;
+            wrap: word-wrap;
+        }
+    }
+    @children
+}
+
+// The app's settings: a page of its own on a phone, a sheet over the start screen on a computer. Laid out like the
+// OS's settings (a heading per section, grouped rows) in the app's own colors.
+export component SettingsScreen inherits Rectangle {
+    in property <bool> touch;
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    callback download-model();
+    callback cancel-download();
+    callback delete-model();
+    callback set-on-device(bool);
+    callback close();
+    property <bool> shown: false;
+    init => {
+        shown = true;
+        keys.focus();
+    }
+
+    background: touch ? Theme.bg : shown ? #00000099 : #00000000;
+    animate background { duration: Theme.med; easing: Theme.ease; }
+
+    // Back on a phone, Escape on a computer
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape || event.text == Key.Back) {
+                root.close();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Clicking outside the sheet closes it
+    TouchArea {
+        clicked => { if (!root.touch) { root.close(); } }
+    }
+
+    sheet := Rectangle {
+        width: touch ? parent.width : min(520px, parent.width - 32px);
+        height: touch ? parent.height : content.preferred-height;
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: touch ? 0 : Theme.radius-lg;
+        border-width: touch ? 0 : 1px;
+        border-color: Theme.glass-border;
+        background: touch ? Theme.bg : Theme.surface;
+        drop-shadow-blur: touch ? 0 : 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+        // Swallows clicks so they don't reach the backdrop
+        TouchArea { }
+
+        content := VerticalLayout {
+            alignment: start;
+            padding: touch ? 8px : 22px;
+            spacing: 18px;
+
+            // A phone's page has a back arrow before its title; a sheet has a close button after it
+            HorizontalLayout {
+                spacing: 8px;
+                if root.touch: IconButton {
+                    icon: Icons.arrow-left;
+                    label: @tr("Back");
+                    transparent: true;
+                    clicked => { root.close(); }
+                }
+                Text {
+                    text: @tr("Settings");
+                    color: Theme.text;
+                    font-size: 20px;
+                    font-weight: 650;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                if !root.touch: IconButton {
+                    icon: Icons.x;
+                    label: @tr("Close");
+                    size: 36px;
+                    transparent: true;
+                    clicked => { root.close(); }
+                }
+            }
+
+            VerticalLayout {
+                padding-left: touch ? 8px : 0;
+                padding-right: touch ? 8px : 0;
+                spacing: 8px;
+
+                Text {
+                    text: @tr("Speech to chat");
+                    color: Theme.muted;
+                    font-size: Theme.font-size-small;
+                    font-weight: 600;
+                }
+
+                Rectangle {
+                    border-radius: Theme.radius;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface-2;
+                    VerticalLayout {
+                        SettingRow {
+                            title: @tr("On-device recognition");
+                            detail: root.model-state == ModelState.ready ? @tr("Downloaded · {}", root.model-size)
+                                : root.model-state == ModelState.downloading ? @tr("Downloading… {}%", root.model-progress)
+                                : root.model-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
+                                : @tr("Not downloaded · {}", root.model-size);
+                            detail-color: root.model-state == ModelState.failed ? Theme.danger-text : Theme.muted;
+                            VerticalLayout {
+                                alignment: center;
+                                if root.model-state == ModelState.missing: Button {
+                                    text: @tr("Download");
+                                    icon: Icons.download;
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-model(); }
+                                }
+                                if root.model-state == ModelState.failed: Button {
+                                    text: @tr("Try again");
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-model(); }
+                                }
+                                if root.model-state == ModelState.downloading: Button {
+                                    text: @tr("Cancel");
+                                    height-hint: 38px;
+                                    clicked => { root.cancel-download(); }
+                                }
+                                if root.model-state == ModelState.ready: Button {
+                                    text: @tr("Delete");
+                                    kind: ButtonKind.danger;
+                                    height-hint: 38px;
+                                    clicked => { root.delete-model(); }
+                                }
+                            }
+                        }
+
+                        if root.model-state == ModelState.downloading: VerticalLayout {
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            padding-bottom: 16px;
+                            Rectangle {
+                                height: 4px;
+                                border-radius: 2px;
+                                background: Theme.surface-3;
+                                Rectangle {
+                                    x: 0;
+                                    width: parent.width * root.model-progress / 100;
+                                    border-radius: 2px;
+                                    background: Theme.accent;
+                                    animate width { duration: Theme.med; easing: Theme.ease; }
+                                }
+                            }
+                        }
+
+                        if root.model-state == ModelState.ready: Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        if root.model-state == ModelState.ready: SettingRow {
+                            title: @tr("Recognize on this device");
+                            detail: root.on-device ? "" : @tr("Speech goes to the server");
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    checked: root.on-device;
+                                    toggled => { root.set-on-device(!root.on-device); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: @tr("Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device.");
+                    color: Theme.muted;
+                    font-size: Theme.font-size-small;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

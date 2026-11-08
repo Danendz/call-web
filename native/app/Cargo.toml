@@ -14,10 +14,7 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "std",
     "compat-1-2",
     "accessibility",
-    "backend-winit",
     "renderer-skia-opengl",
-    # Only for the window attributes hook in window.rs; it's why slint is pinned exactly
-    "unstable-winit-030",
 ] }
 sys-locale = "0.3"
 tracing = "0.1"
@@ -25,7 +22,27 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 url = "2"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 skia-safe = { version = "=0.153.3", default-features = false }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = [
+    "backend-winit",
+    # Only for the window attributes hook in window.rs; it's why slint is pinned exactly
+    "unstable-winit-030",
+] }
 velopack = "=1.2.161"
+
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06"] }
+# The version LiveKit's libwebrtc takes its JavaVM in
+jni = "0.21"
+
+# The desktop app is `main.rs`; Android builds this library as a cdylib (`--crate-type cdylib`, see android/)
+[lib]
+name = "call_danya"
+
+[[bin]]
+name = "call-danya"
+path = "src/main.rs"
 
 [features]
 # Slint's embedded MCP server for driving and screenshotting the app in development (SLINT_MCP_PORT=<port>); see
@@ -34,6 +51,8 @@ dev-mcp = ["slint/mcp"]
 
 [build-dependencies]
 slint-build = "=1.18.1"
+# Android: exports WebRTC's JNI symbols from our library, which webrtc-sys can't do for us
+webrtc-sys-build = "=0.3.21"
 
 [lints]
 workspace = true

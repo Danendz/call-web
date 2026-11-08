@@ -11,7 +11,7 @@ use nokhwa::utils::{
     ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
 };
 
-use super::convert::{Crop, nv12_to_i420, yuyv_to_i420};
+use super::convert::{Crop, nv12_to_i420, timed, yuyv_to_i420};
 use super::{HEIGHT, MAX_FPS, Output, WIDTH};
 use crate::media::Device;
 
@@ -74,13 +74,13 @@ pub(super) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Running, St
                 let Resolution { width_x: width, height_y: height } = frame.resolution();
                 let crop = Crop::new(width, height, output.portrait());
                 let data = frame.buffer();
-                let i420 = match frame.source_frame_format() {
+                let i420 = timed(|| match frame.source_frame_format() {
                     FrameFormat::NV12 => data
                         .split_at_checked((width * height) as usize)
                         .and_then(|(y, uv)| nv12_to_i420(y, width, uv, width, crop)),
                     FrameFormat::YUYV => yuyv_to_i420(data, width * 2, crop),
                     _ => None,
-                };
+                });
                 if let Some(i420) = i420 {
                     output.deliver(i420);
                 }

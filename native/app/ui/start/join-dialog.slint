@@ -34,8 +34,8 @@ export component JoinDialog inherits Rectangle {
         drop-shadow-color: Theme.shadow;
         animate y, opacity { duration: Theme.med; easing: Theme.ease; }
 
-        // Swallows clicks so they don't reach the backdrop
-        TouchArea { }
+        // Swallows clicks so they don't reach the backdrop, and puts the on-screen keyboard away
+        TouchArea { clicked => { input.clear-focus(); } }
 
         content := VerticalLayout {
             padding: 22px;
@@ -67,7 +67,8 @@ export component JoinDialog inherits Rectangle {
                     edited => { invalid = false; }
                     accepted => { go(); }
                     key-pressed(event) => {
-                        if (event.text == Key.Escape) {
+                        // Back on a phone, once the on-screen keyboard is away
+                        if (event.text == Key.Escape || event.text == Key.Back) {
                             root.close();
                             return accept;
                         }

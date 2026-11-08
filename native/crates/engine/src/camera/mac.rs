@@ -23,7 +23,7 @@ use objc2_core_video::{
 };
 use objc2_foundation::{NSDictionary, NSNumber, NSString};
 
-use super::convert::{Crop, nv12_to_i420};
+use super::convert::{Crop, nv12_to_i420, timed};
 use super::{CameraAccess, HEIGHT, MAX_FPS, Output, WIDTH};
 use crate::media::Device;
 
@@ -215,7 +215,7 @@ fn frame(output: &Output, sample: &CMSampleBuffer) {
         let height = CVPixelBufferGetHeight(&image);
         let (y, y_stride) = plane(0, height);
         let (uv, uv_stride) = plane(1, height.div_ceil(2));
-        let i420 = nv12_to_i420(y, y_stride, uv, uv_stride, crop);
+        let i420 = timed(|| nv12_to_i420(y, y_stride, uv, uv_stride, crop));
         CVPixelBufferUnlockBaseAddress(&image, CVPixelBufferLockFlags::ReadOnly);
         i420
     };
