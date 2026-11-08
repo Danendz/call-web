@@ -1,6 +1,6 @@
 # Roadmap
 
-Where the project is going: make the web call hold up better on the China ↔ Uzbekistan link, then build a native desktop app in Rust with [Slint](https://slint.dev) for the things a browser can't do (game overlay, notifications, global hotkeys, deep encoder and network control).
+Where the project is going: make the web call hold up better on calls into mainland China, then build a native desktop app in Rust with [Slint](https://slint.dev) for the things a browser can't do (game overlay, notifications, global hotkeys, deep encoder and network control).
 
 The web app stays. The native app is a second client on the same server and the same `/ws` protocol, so a native user can call a browser user. Call-quality work goes into both clients. Overlay and notification features are native only, with no browser workarounds.
 
@@ -34,19 +34,19 @@ Ordered by value per hour of work. The native app gets the same behavior from li
 
 Target Windows and macOS first. Lives in `native/` as a Cargo workspace in this repo, with its conventions in `native/AGENTS.md`. The server stays as it is. M0–M4 reach parity with the web app; nothing native-only goes in before that.
 
-- [x] **M0 — Skeleton.** Slint window (Skia renderer) with the web's tokens, start screen (new room, join by link), setup screen with "I speak", waiting screen, room full and call ended screens, `/ws` join with heartbeat and resume. English and Chinese UI from bundled `.po`. Protocol types written by hand in `crates/protocol` and checked against examples in `shared/protocol.fixtures.ts`. CI checks every PR on macOS and builds macOS and Windows (unsigned) on `main`, `build/**` branches or on demand.
+- [x] **M0 — Skeleton.** Slint window (Skia renderer) with the web's tokens, start screen (new room, join by link), setup screen with "I speak", waiting screen, room full and call ended screens, `/ws` join with heartbeat and resume. English and Chinese UI from bundled `.po`. Protocol types written by hand in `crates/protocol` and checked against examples in `shared/protocol.fixtures.ts`. CI checks every PR on macOS and builds macOS and Windows (unsigned) on `build/**` branches.
 - [x] **M1 — Audio call with a browser peer.** WebRTC through Google's libwebrtc via LiveKit's Rust bindings (`libwebrtc` / `webrtc-sys`, prebuilt binaries). Not `webrtc-rs`: it has no capture, codecs or echo cancellation and weaker congestion control. TURN credentials come in `joined`. Start with a spike that proves mic capture, playback and echo cancellation on both OSes before building on it. Device pickers and mic level on the setup screen. Built: platform audio device (echo cancellation, noise suppression, gain control), perfect negotiation with a browser, TURN from `joined`, mute, call timer, mic picker and level, macOS app bundle for permissions.
 - [x] **M2 — Camera video** both ways, rendered in Slint: I420 converted to RGBA on the CPU behind a `VideoSink`, conversion time in the stats overlay; Slint's `BorrowedOpenGLTexture` with a YUV shader if that proves too slow. Hardware encoders (Media Foundation, VideoToolbox) where available. Rotate and switch camera, stats overlay, relay → direct upgrade. Built: camera both ways (AVFoundation zero-copy on macOS, Media Foundation on Windows), self tile, camera off, picker and switch, portrait, rotate, stats overlay with conversion time, relay → direct upgrade, force relay. 60 fps where the camera has it (an iPhone as Continuity Camera; built-in Mac cameras stop at 30), with a higher bitrate cap than at 30.
 - [x] **M3 — Chat, speech-to-text, translation and subtitles**, using the server's existing endpoints and the member `token`. Speech goes through `/ws/speech` behind a `Recognizer` trait. Screenshot with date stamp. Built: chat panel with translations and unread badge, speech to chat over `/ws/speech` with echo cancellation against the other person's voice, subtitles, paused/unavailable notices, screenshot with date stamp and the other side's notice.
 - [~] **M4 — Screen share.** Windows Graphics Capture and ScreenCaptureKit, up to 60 fps, alongside the camera. Draggable tiles, auto-hiding controls and a final animation pass: parity with the web app. Built: sharing alongside the camera both ways (ScreenCaptureKit picker on macOS, an in-app picker on Windows), the web's bitrate split, tiles you drag to a corner (remembered) or tap onto the stage, auto-hiding controls, popup and menu animations. Up to 60 fps (WebRTC's capturers: ScreenCaptureKit, and Windows Graphics Capture), scaled to fit 1080p, 3 Mbps cap; the encoder drops frames, not detail, when bandwidth runs short. The computer's sound goes with the share, without the call's own (ScreenCaptureKit on macOS 13+, process loopback on Windows). Left: the user trying 60 fps shares and their sound on both OSes.
 - [ ] **M5 — Overlay, notifications and desktop features.** See Phase 3.
-- [~] **M6 — Distribution.** Installers, signing, updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary. Built: Velopack per-user installers and delta updates, from the Railway `releases` bucket through `call.danendz.com/updates`; a version bump merged to `main` publishes a release; updates download quietly and install on quit or from an "Update" button on the start screen. Signing at no cost: Windows unsigned, macOS with a self-signed certificate so permissions survive updates (paid signing only if the app ever goes beyond the two of us). No Google service hosts in the release binary (checked with `strings`). Left: the first real release on both OSes.
+- [~] **M6 — Distribution.** Installers, signing, updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary. Built: Velopack per-user installers and delta updates, from the Railway `releases` bucket through `call.danendz.com/updates`; a version bump merged to `main` and pushed to `release/<version>` publishes a release; updates download quietly and install on quit or from an "Update" button on the start screen. Signing at no cost: Windows unsigned, macOS with a self-signed certificate so permissions survive updates (paid signing only if the app ever goes beyond personal use). No Google service hosts in the release binary (checked with `strings`). Left: the first real release on both OSes.
 
 ## Phase 3 — Native only
 
 ### Don't miss messages while gaming
 
-During screen sharing she's in a game and can't see the chat, so new messages have to reach her over it.
+During screen sharing the other person may be in a full-screen game and can't see the chat, so new messages have to reach them over it.
 
 | Feature | Notes |
 |---|---|
@@ -69,7 +69,7 @@ During screen sharing she's in a game and can't see the chat, so new messages ha
 
 ## Phase 4 — Android (Native only)
 
-After M6. Only worth building if a phone is really used for calls or mobile games: first open a call link on her phone in its default browser and from WeChat, and lock the screen for a minute. If the web app holds up there, this phase can wait.
+After M6. Only worth building if a phone is really used for calls or mobile games: first open a call link on a phone in its default browser and from WeChat, and lock the screen for a minute. If the web app holds up there, this phase can wait.
 
 Why an app and not the mobile web: Chrome on Android can't share the screen; a browser tab doesn't keep a call alive in the background, and Chinese phones (Xiaomi, Huawei, Oppo, Vivo) kill background work aggressively; Chinese phones rarely have Chrome, and links opened in WeChat land in its built-in browser, with weak WebRTC, while an APK ships its own libwebrtc.
 
