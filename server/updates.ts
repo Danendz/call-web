@@ -8,8 +8,9 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { clientIp, concurrencyLimit, rateLimit } from "./limits.js";
 
-// Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe. Nothing with a
-// slash, so a request can only name a file at the bucket's root.
+// Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe; Android's
+// (packaging/android/release.sh): android.json, call-danya-1.2.3.apk, call-danya.apk. Nothing with a slash, so a
+// request can only name a file at the bucket's root.
 const FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 // An update check is one request, an update a few; a package is ~20 MB, so a few at a time per IP is plenty.
@@ -22,6 +23,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".zip": "application/zip",
   ".exe": "application/vnd.microsoft.portable-executable",
   ".pkg": "application/octet-stream",
+  ".apk": "application/vnd.android.package-archive",
 };
 
 type Bucket = { endpoint: URL; name: string; region: string; keyId: string; secret: string };
@@ -95,8 +97,8 @@ async function proxy(
   const ext = file.slice(file.lastIndexOf("."));
   const headers: Record<string, string> = {
     "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream",
-    // Package names carry their version and never change; the feed and the installers keep one name across releases
-    "cache-control": ext === ".nupkg" ? "public, max-age=31536000, immutable" : "no-cache",
+    // A name with a version in it never changes; the feeds and the installers keep one name across releases
+    "cache-control": /\d+\.\d+\.\d+/.test(file) ? "public, max-age=31536000, immutable" : "no-cache",
   };
   const length = upstream.headers.get("content-length");
   if (length) headers["content-length"] = length;

@@ -7,6 +7,8 @@ import { JoinDialog } from "join-dialog.slint";
 export component StartScreen inherits Rectangle {
     in property <string> version;
     in property <string> update-version;
+    // 0–100 while an update downloads, else -1
+    in property <int> update-progress: -1;
     callback update-now();
     callback new-room();
     callback open-link(string) -> bool;
@@ -120,6 +122,12 @@ export component StartScreen inherits Rectangle {
         spacing: 12px;
         Text {
             text: "v" + root.version;
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
+        if root.update-version == "" && root.update-progress >= 0: Text {
+            text: @tr("Downloading update… {}%", root.update-progress);
             color: Theme.muted;
             font-size: Theme.font-size-small;
             vertical-alignment: center;

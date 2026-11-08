@@ -160,6 +160,31 @@ pub(crate) fn attach(ui: &AppWindow, settings: &Rc<RefCell<crate::settings::Sett
     });
 }
 
+/// Checks `{server}/updates/android.json` (`Updater.kt`) and installs from the start screen's button. A debug build
+/// talks to the dev server, which has no updates.
+pub(crate) fn updates(ui: &AppWindow, server: &url::Url) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let Ok(feed) = server.join("updates") else { return };
+    with_java(|env, shim, context| {
+        let feed = env.new_string(feed.as_str())?;
+        env.call_static_method(
+            shim,
+            "startUpdates",
+            "(Landroid/content/Context;Ljava/lang/String;)V",
+            &[JValue::Object(context), JValue::Object(&feed)],
+        )
+        .map(drop)
+    });
+    ui.on_update_now(|| {
+        with_java(|env, shim, context| {
+            env.call_static_method(shim, "installUpdate", "(Landroid/content/Context;)V", &[JValue::Object(context)])
+                .map(drop)
+        });
+    });
+}
+
 type CallState = (bool, bool, Vec<SharedString>, (u32, u32));
 
 /// Keeps the call's foreground service, notification and picture-in-picture shape in step with the window; called on
@@ -244,6 +269,23 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativeAction(_env: JNIEnv, _cl
         ACTION_RESUMED if MUTED_FOR_CALL.replace(false) && !ui.get_mic_on() => ui.invoke_toggle_mic(),
         _ => {}
     });
+}
+
+/// `Updater.nativeUpdateProgress`: how much of an update has downloaded, or -1 when it stopped.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_danendz_call_Updater_nativeUpdateProgress(_env: JNIEnv, _class: JClass, percent: jint) {
+    on_ui(move |ui| ui.set_update_progress(percent));
+}
+
+/// `Updater.nativeUpdateReady`: an update is downloaded and checked, ready to install.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_danendz_call_Updater_nativeUpdateReady(
+    mut env: JNIEnv,
+    _class: JClass,
+    version: JString,
+) {
+    let Ok(version) = env.get_string(&version).map(String::from) else { return };
+    on_ui(move |ui| ui.set_update_version(version.into()));
 }
 
 /// `Shim.nativePip`: the activity went into or out of picture-in-picture.

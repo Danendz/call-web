@@ -18,6 +18,9 @@ fn android() {
     if let Err(e) = webrtc_sys_build::configure_jni_symbols() {
         println!("cargo::error=couldn't export WebRTC's JNI symbols: {e:#}");
     }
+    // WebRTC and Skia each bring libjpeg-turbo, and a release build (LTO) pulls both copies in. Either does: nothing
+    // decodes JPEG on Android (cameras give YUV, Slint decodes its own images), so the linker keeps the first
+    println!("cargo::rustc-link-arg=-Wl,--allow-multiple-definition");
     let jar = webrtc_sys_build::webrtc_dir().join("libwebrtc.jar");
     let out = std::env::var_os("OUT_DIR").map(std::path::PathBuf::from);
     // OUT_DIR is target/<triple>/<profile>/build/<crate>/out

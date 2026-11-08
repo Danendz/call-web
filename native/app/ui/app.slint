@@ -59,6 +59,8 @@ export component AppWindow inherits Window {
     in property <string> version;
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
+    // 0–100 while an update downloads, else -1
+    in property <int> update-progress: -1;
     // Set on a phone: a touch screen with an on-screen keyboard
     in property <bool> touch;
     // Where the call's sound plays on a phone ("speaker", "earpiece", "bluetooth"), and which of them there are
@@ -139,6 +141,7 @@ export component AppWindow inherits Window {
         if phase == AppPhase.start: StartScreen {
             version: root.version;
             update-version: root.update-version;
+            update-progress: root.update-progress;
             update-now => { root.update-now(); }
             new-room => { root.new-room(); }
             open-link(link) => { root.open-link(link) }

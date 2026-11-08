@@ -24,8 +24,23 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // The release key, from CI's secrets (packaging/android/release.sh). Android installs an update only when it's
+    // signed with the same key as the installed app, so losing this key means reinstalling on every phone.
+    val keystore = System.getenv("ANDROID_KEYSTORE")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
             // R8 would strip WebRTC's and Slint's Java classes, which are only reached from native code
             isMinifyEnabled = false
         }

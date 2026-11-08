@@ -3,6 +3,7 @@ package com.danendz.call
 import android.Manifest
 import android.app.NativeActivity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -30,6 +31,13 @@ class MainActivity : NativeActivity() {
             requestPermissions(wanted.toTypedArray(), 0)
         }
         super.onCreate(savedInstanceState)
+        Updater.answered(this, intent)
+    }
+
+    // singleTask: the update installer's answer comes back to the running activity
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        Updater.answered(this, intent)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

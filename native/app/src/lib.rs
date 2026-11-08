@@ -62,12 +62,21 @@ pub fn run() -> anyhow::Result<()> {
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
     #[cfg(not(target_os = "android"))]
-    let updater = update::Updater::start(&server, {
-        let weak = ui.as_weak();
-        move |version| {
-            let _ = weak.upgrade_in_event_loop(move |ui| ui.set_update_version(version.into()));
-        }
-    });
+    let updater = update::Updater::start(
+        &server,
+        {
+            let weak = ui.as_weak();
+            move |percent| {
+                let _ = weak.upgrade_in_event_loop(move |ui| ui.set_update_progress(percent.into()));
+            }
+        },
+        {
+            let weak = ui.as_weak();
+            move |version| {
+                let _ = weak.upgrade_in_event_loop(move |ui| ui.set_update_version(version.into()));
+            }
+        },
+    );
     #[cfg(not(target_os = "android"))]
     ui.on_update_now({
         let updater = updater.clone();
@@ -77,6 +86,9 @@ pub fn run() -> anyhow::Result<()> {
             }
         }
     });
+
+    #[cfg(target_os = "android")]
+    android::updates(&ui, &server);
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
