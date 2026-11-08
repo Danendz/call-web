@@ -13,6 +13,9 @@ getrandom = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# rustls's crypto for wss://. Nothing else picks one on Android (velopack's ureq does on desktop), and without it the
+# first connection to an https server panics
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tracing = "0.1"
 url = "2"
 libwebrtc = "0.4"
