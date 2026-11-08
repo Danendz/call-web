@@ -35,6 +35,13 @@ The service is public: anyone can open the site and connect to `/ws` or `/api`. 
 - **Secrets stay in Railway variables**, never in source, logs, client code, or messages sent to the browser.
 - **Keep dependencies patched.** Run `npm audit --omit=dev` when adding or upgrading a package, and don't add a dependency for something a few lines of code can do.
 
+## Public repo
+
+The repo is public, so everything committed (code, comments, docs, commit messages, PR descriptions) can be read by anyone and stays in history.
+
+- **Keep personal details out.** Don't write who uses the app or where they live: no names, genders (write "the other person" or "users", never "she" or "he"), relationships, countries or cities beyond "mainland China", or anything said about the people in a conversation. Describe what the code does and why, not whom it's for.
+- **No private infrastructure values.** IPs, account IDs, emails and anything from `.env` or Railway variables stay out; use placeholders like `CHANGE_ME_PUBLIC_IP` in configs and docs.
+
 ## Before saying it's done
 
 - There are no tests or linter yet. Run `npm run typecheck` and `npm run build`, and both must pass.
