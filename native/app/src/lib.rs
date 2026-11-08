@@ -93,9 +93,12 @@ pub fn run() -> anyhow::Result<()> {
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
     let chat_weak = ui.as_weak();
+    let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
     let engine = Rc::new(Engine::start(
         server,
         lang,
+        data_dir.clone(),
+        on_device,
         sink,
         move |state| {
             let _ = weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.render(&ui, &state)));
@@ -270,6 +273,34 @@ pub fn run() -> anyhow::Result<()> {
             Command::SetLang(lang)
         },
     ));
+    ui.set_model_size(format!("{} MB", engine::MODEL_SIZE.div_ceil(1_000_000)).into());
+    // Asked once, where there's somewhere to keep the model
+    ui.set_speech_prompt(data_dir.is_some() && !settings.borrow().speech_prompt_seen);
+    ui.on_dismiss_speech_prompt({
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_speech_prompt(false);
+            }
+            let mut settings = settings.borrow_mut();
+            settings.speech_prompt_seen = true;
+            settings.save();
+        }
+    });
+    ui.on_download_model(send(Command::DownloadModel));
+    ui.on_cancel_model_download(send(Command::CancelModelDownload));
+    ui.on_delete_model(send(Command::DeleteModel));
+    ui.on_set_on_device({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        move |on| {
+            let mut settings = settings.borrow_mut();
+            settings.on_device_speech = on;
+            settings.save();
+            engine.send(Command::SetOnDevice(on));
+        }
+    });
     ui.on_set_portrait({
         let engine = engine.clone();
         let settings = settings.clone();

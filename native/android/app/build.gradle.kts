@@ -72,6 +72,15 @@ fun cargoTask(variant: String, release: Boolean) = tasks.register<Exec>("cargo$v
             "rustc", "-p", "call-danya", "--lib", "--crate-type", "cdylib", "--locked") +
             (if (release) listOf("--release") else emptyList())
     )
+    // sherpa-onnx (on-device speech) only comes as shared libraries on Android; its build script downloads them here
+    doLast {
+        copy {
+            from(workspace.resolve("target/sherpa-onnx-prebuilt/jniLibs/arm64-v8a")) {
+                include("libsherpa-onnx-c-api.so", "libonnxruntime.so")
+            }
+            into(layout.buildDirectory.dir("rust/jniLibs/arm64-v8a"))
+        }
+    }
 }
 
 val cargoDebug = cargoTask("Debug", release = false)

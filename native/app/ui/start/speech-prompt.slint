@@ -1,0 +1,91 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+
+// Asked once, on the first launch: the model is too big to download without asking. Settings has it after that.
+export component SpeechPrompt inherits Rectangle {
+    in property <string> model-size;
+    callback download();
+    callback dismiss();
+    property <bool> shown: false;
+    init => {
+        shown = true;
+        keys.focus();
+    }
+
+    background: shown ? #00000099 : #00000000;
+    animate background { duration: Theme.med; easing: Theme.ease; }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape || event.text == Key.Back) {
+                root.dismiss();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Swallows clicks: this asks for an answer
+    TouchArea { }
+
+    Rectangle {
+        width: min(440px, parent.width - 32px);
+        height: content.preferred-height;
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.surface;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+        content := VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                border-radius: self.width / 2;
+                background: Theme.accent-soft;
+                Image {
+                    source: Icons.captions;
+                    colorize: Theme.accent;
+                    width: 22px;
+                    height: 22px;
+                }
+            }
+            Text {
+                text: @tr("Recognize speech on this device?");
+                color: Theme.text;
+                font-size: 20px;
+                font-weight: 650;
+                wrap: word-wrap;
+            }
+            Text {
+                text: @tr("Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings.", root.model-size);
+                color: Theme.muted;
+                font-size: Theme.font-size;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+                Button {
+                    text: @tr("Not now");
+                    clicked => { root.dismiss(); }
+                }
+                Button {
+                    text: @tr("Download");
+                    icon: Icons.download;
+                    kind: ButtonKind.primary;
+                    clicked => { root.download(); }
+                }
+            }
+        }
+    }
+}
