@@ -35,6 +35,8 @@ velopack = "=1.2.161"
 slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06"] }
 # The version LiveKit's libwebrtc takes its JavaVM in
 jni = "0.21"
+# To read the system's fonts.xml; Slint's font library already brings it in
+roxmltree = "0.21"
 
 # The desktop app is `main.rs`; Android builds this library as a cdylib (`--crate-type cdylib`, see android/)
 [lib]
