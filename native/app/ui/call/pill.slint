@@ -100,7 +100,7 @@ export component ControlPill inherits Rectangle {
                 area-width: root.area-width;
                 area-height: root.area-height;
 
-                if root.has-mic: MenuHead { text: @tr("Microphone").to-uppercase(); }
+                if root.mics.length > 0: MenuHead { text: @tr("Microphone").to-uppercase(); }
                 for m in root.mics: MenuItem {
                     text: DeviceName.of(m.label, @tr("Microphone"));
                     checked: m.id == root.mic-id;

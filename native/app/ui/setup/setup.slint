@@ -121,6 +121,7 @@ export component SetupScreen inherits Rectangle {
     in property <string> speaker-label;
     in property <bool> mic-on;
     in property <float> mic-level;
+    in property <bool> has-mic;
     in property <string> mic-status;
     in property <image> video;
     in property <int> video-rotation;
@@ -163,7 +164,7 @@ export component SetupScreen inherits Rectangle {
                 height: self.width / ar;
                 animate width, height { duration: Theme.slow; easing: Theme.ease; }
                 mic-on: root.mic-on;
-                has-mic: root.mics.length > 0;
+                has-mic: root.has-mic;
                 mic-level: root.mic-level;
                 video: root.video;
                 video-rotation: root.video-rotation;
@@ -220,7 +221,7 @@ export component SetupScreen inherits Rectangle {
                 width: self.height * ar;
                 visible: self.height > 120px;
                 mic-on: root.mic-on;
-                has-mic: root.mics.length > 0;
+                has-mic: root.has-mic;
                 mic-level: root.mic-level;
                 video: root.video;
                 video-rotation: root.video-rotation;

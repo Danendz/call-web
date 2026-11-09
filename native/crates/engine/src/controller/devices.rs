@@ -8,9 +8,10 @@ impl Controller {
     /// Starts and stops what depends on the screen: the mic meter on setup, the camera while a screen shows it or a
     /// call sends it. Runs after everything, so no path forgets it.
     pub(super) fn sync_devices(&mut self) {
-        if self.state.phase != Phase::Setup || self.state.mics.is_empty() {
+        if self.state.phase != Phase::Setup || !self.state.has_mic {
             self.meter = None;
         } else if self.meter.is_none() {
+            // No list on Android: the meter opens the default mic
             let id = self.state.mic_id.as_ref();
             let name = self.state.mics.iter().find(|d| Some(&d.id) == id).map(|d| d.label.clone());
             self.meter = Some(Meter::start(name, self.level.clone()));
