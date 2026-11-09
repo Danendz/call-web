@@ -4,7 +4,6 @@ import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { isRearCamera } from "../call/media";
-import { CopyLink } from "../ui/CopyLink";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
@@ -14,7 +13,7 @@ import { MicLevel } from "./MicLevel";
 import "./setup.css";
 
 /** Pre-join screen: camera preview, mic level, device pickers and permission help. */
-export function Setup({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
+export function Setup({ controller, state }: { controller: CallController; state: CallState }) {
   const t = useT();
   useEffect(() => {
     void controller.preview();
@@ -78,10 +77,6 @@ export function Setup({ controller, state, roomUrl }: { controller: CallControll
         <div className="panel-head">
           <h1>{t.readyToJoin}</h1>
           <DownloadApp />
-        </div>
-        <div className="share">
-          <p className="muted">{t.shareLink}</p>
-          <CopyLink url={roomUrl} />
         </div>
 
         <div className="devices">

@@ -20,8 +20,10 @@ export component Preview inherits Rectangle {
     callback toggle-cam();
     callback toggle-portrait();
 
-    // A portrait preview on a phone is narrower than the three buttons at their usual size
-    property <length> button: root.width < 190px ? 38px : 46px;
+    // A portrait preview on a phone is narrower than the three buttons at their usual size: they shrink to keep
+    // 8px of the picture on each side
+    property <length> button: max(30px, min(46px, (root.width - 16px - 12px - 2 * gap) / 3));
+    property <length> gap: root.width < 190px ? 4px : 10px;
 
     property <bool> showing: cam-granted && cam-on && video.width > 0;
     property <bool> turned: Math.mod(video-rotation, 180) != 0;
@@ -78,7 +80,7 @@ export component Preview inherits Rectangle {
 
         controls := HorizontalLayout {
             padding: 6px;
-            spacing: root.width < 190px ? 4px : 10px;
+            spacing: root.gap;
 
             Rectangle {
                 width: mic.width;

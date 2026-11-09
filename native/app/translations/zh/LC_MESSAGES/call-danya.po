@@ -197,9 +197,6 @@ msgstr "设置"
 msgid "Share screen"
 msgstr "共享屏幕"
 
-msgid "Share this link with the person you want to call"
-msgstr "把这个链接发给你要通话的人"
-
 msgid "Show in folder"
 msgstr "在文件夹中显示"
 

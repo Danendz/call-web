@@ -35,7 +35,7 @@ function screen(controller: CallController, state: CallState, roomUrl: string) {
   const t = STRINGS[state.lang];
   switch (state.phase) {
     case "idle":
-      return <Setup controller={controller} state={state} roomUrl={roomUrl} />;
+      return <Setup controller={controller} state={state} />;
     case "full":
       return (
         <Centered icon={<Users size={30} />}>
