@@ -116,6 +116,9 @@ msgstr "加入通话"
 msgid "Lost connection to server, reconnecting…"
 msgstr "与服务器断开连接，正在重连…"
 
+msgid "May slow down games or other heavy apps while you share your screen."
+msgstr "共享屏幕时，可能会拖慢游戏或其他占用较高的应用。"
+
 msgid "Message"
 msgstr "消息"
 
@@ -136,6 +139,9 @@ msgstr "新房间"
 
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
+
+msgid "Noise suppression"
+msgstr "降噪"
 
 msgid "Not downloaded · {}"
 msgstr "未下载 · {}"

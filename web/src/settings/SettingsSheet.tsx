@@ -1,10 +1,11 @@
-import { Activity, Languages } from "lucide-react";
+import { Activity, AudioLines, Languages } from "lucide-react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import { useT } from "../ui/i18n";
 import { Sheet } from "../ui/Sheet";
 import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import "./settings.css";
+import { setNoiseSuppression, useNoiseSuppression } from "./noise";
 import { setShowStats, useShowStats } from "./stats";
 
 /** Settings over the current screen: a bottom sheet on narrow screens, a side panel on the right otherwise. */
@@ -22,6 +23,7 @@ export function SettingsSheet({
   const t = useT();
   const narrow = useMediaQuery(SHEET_QUERY);
   const showStats = useShowStats();
+  const noiseSuppression = useNoiseSuppression();
 
   return (
     <Sheet label={t.settings} open={open} onClose={onClose} side={narrow ? "bottom" : "right"} showTitle>
@@ -32,6 +34,21 @@ export function SettingsSheet({
           </span>
           <span className="settings-label">{t.stats}</span>
           <input type="checkbox" role="switch" checked={showStats} onChange={(e) => setShowStats(e.target.checked)} />
+        </label>
+        <label className="settings-row">
+          <span className="row-icon" aria-hidden>
+            <AudioLines size={18} />
+          </span>
+          <span className="settings-label">
+            {t.noiseSuppression}
+            <span className="settings-detail">{t.noiseSuppressionDetail}</span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={noiseSuppression}
+            onChange={(e) => setNoiseSuppression(e.target.checked)}
+          />
         </label>
         <label className="settings-row">
           <span className="row-icon" aria-hidden>

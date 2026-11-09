@@ -145,6 +145,7 @@ pub fn run() -> anyhow::Result<()> {
         if settings.transcribe {
             engine.send(Command::SetTranscribe(true));
         }
+        engine.send(Command::SetNoiseSuppression(settings.noise_suppression));
     }
 
     let send = |command: Command| {
@@ -317,6 +318,21 @@ pub fn run() -> anyhow::Result<()> {
             let mut settings = settings.borrow_mut();
             settings.show_stats = on;
             settings.save();
+        }
+    });
+    ui.set_noise_suppression(settings.borrow().noise_suppression);
+    ui.on_set_noise_suppression({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |on| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_noise_suppression(on);
+            }
+            let mut settings = settings.borrow_mut();
+            settings.noise_suppression = on;
+            settings.save();
+            engine.send(Command::SetNoiseSuppression(on));
         }
     });
     ui.on_set_portrait({

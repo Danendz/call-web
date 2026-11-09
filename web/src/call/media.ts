@@ -1,3 +1,5 @@
+import { getNoiseSuppression } from "../settings/noise";
+
 /** What happened when we asked for a device: denied = blocked by the user/browser, busy = another app holds it. */
 export type MediaAccess = "pending" | "granted" | "denied" | "missing" | "busy";
 export type MediaKind = "audio" | "video";
@@ -9,7 +11,13 @@ export interface DeviceOption {
   label: string;
 }
 
-const AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+/** The browser's own processing of the mic, all on: what's asked for when noise suppression is off or can't run. */
+export const BROWSER_AUDIO: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+/** With noise suppression on, DeepFilterNet replaces the browser's (`denoise/`), so it doesn't run twice. */
+function audioConstraints(): MediaTrackConstraints {
+  return { ...BROWSER_AUDIO, noiseSuppression: !getNoiseSuppression() };
+}
 
 export function videoConstraints(orientation: Orientation): MediaTrackConstraints {
   const [width, height] = orientation === "portrait" ? [720, 1280] : [1280, 720];
@@ -21,7 +29,7 @@ export function videoConstraints(orientation: Orientation): MediaTrackConstraint
  * open device. A remembered one is only `ideal`, so a device that's gone falls back to another.
  */
 function constraintsFor(kind: MediaKind, deviceId: string | null, exact = false): MediaTrackConstraints {
-  const base = kind === "audio" ? AUDIO : videoConstraints(loadOrientation());
+  const base = kind === "audio" ? audioConstraints() : videoConstraints(loadOrientation());
   if (deviceId) return { ...base, deviceId: exact ? { exact: deviceId } : { ideal: deviceId } };
   return kind === "video" ? { ...base, facingMode: "user" } : base;
 }

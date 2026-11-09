@@ -119,6 +119,8 @@ pub enum Command {
     SelectCam(String),
     SetPortrait(bool),
     SetForceRelay(bool),
+    /// DeepFilterNet on the mic instead of WebRTC's own noise suppression; any time, live in a call
+    SetNoiseSuppression(bool),
     /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes
     SendChat(String),
     /// Tells the other person a picture of the call was saved

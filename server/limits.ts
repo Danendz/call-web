@@ -66,7 +66,8 @@ export function setSecurityHeaders(req: IncomingMessage, res: ServerResponse): v
     "content-security-policy",
     [
       "default-src 'self'",
-      "script-src 'self' blob:",
+      // 'wasm-unsafe-eval' compiles WebAssembly only (not JS eval): the mic's noise suppression runs as WASM
+      "script-src 'self' blob: 'wasm-unsafe-eval'",
       "style-src 'self'",
       `connect-src 'self'${sockets}`,
       "img-src 'self' data: blob:",

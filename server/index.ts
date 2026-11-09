@@ -31,6 +31,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
   ".json": "application/json",
   ".woff2": "font/woff2",
+  ".wasm": "application/wasm",
 };
 
 async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -47,21 +48,30 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     res.writeHead(400).end();
     return;
   }
-  const isFile = await stat(filePath).then((s) => s.isFile(), () => false);
   // SPA fallback: /, /r/<id> and anything unknown get index.html.
-  if (!isFile) filePath = path.join(STATIC_DIR, "index.html");
+  if (!(await isFile(filePath))) filePath = path.join(STATIC_DIR, "index.html");
 
   try {
-    const body = await readFile(filePath);
+    // A brotli copy made at build time (scripts/precompress.ts), for a browser that takes it
+    const brotli = /\bbr\b/.test(String(req.headers["accept-encoding"] ?? "")) && (await isFile(`${filePath}.br`));
+    const body = await readFile(brotli ? `${filePath}.br` : filePath);
     const isAsset = filePath.includes(`${path.sep}assets${path.sep}`);
     res.writeHead(200, {
       "content-type": CONTENT_TYPES[path.extname(filePath)] ?? "application/octet-stream",
       "cache-control": isAsset ? "public, max-age=31536000, immutable" : "no-cache",
+      ...(brotli && { "content-encoding": "br", vary: "accept-encoding" }),
     });
     res.end(body);
   } catch {
     res.writeHead(404, { "content-type": "text/plain" }).end("Not found (did you run `npm run build`?)");
   }
+}
+
+function isFile(file: string): Promise<boolean> {
+  return stat(file).then(
+    (s) => s.isFile(),
+    () => false,
+  );
 }
 
 const server = createServer((req, res) => {
