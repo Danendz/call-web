@@ -58,7 +58,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
 
   const onPointerDown = (e: React.PointerEvent) => {
     // On touch, tapping the bare video toggles the controls, like in phone call apps
-    const onVideo = !(e.target as Element).closest(".pill, .pip, .stats, .chat");
+    const onVideo = !(e.target as Element).closest(".pill, .pip, .stats, .chat, .sheet, .sheet-dim");
     if (e.pointerType !== "mouse" && onVideo && !idle) sleep();
     else wake();
   };

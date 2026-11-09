@@ -1,7 +1,7 @@
 import { ChevronUp } from "lucide-react";
 import { useRef, type ReactNode } from "react";
+import { MenuPanel } from "./MenuPanel";
 import { MenuButton, type MenuItem } from "./MoreMenu";
-import { useDismiss } from "./useDismiss";
 
 export interface MenuSection {
   title: string;
@@ -12,7 +12,8 @@ export interface MenuSection {
 
 /**
  * A pill button with a chevron beside it that opens a menu above: the button keeps its one-tap job (mute), the
- * chevron holds the choices behind it (which device). Closes on outside tap and Esc.
+ * chevron holds the choices behind it (which device). Picking leaves it open, so the spinner and then the check
+ * mark show the switch, and a mic and a speaker can be picked in one go.
  */
 export function DeviceMenu({
   label,
@@ -22,7 +23,7 @@ export function DeviceMenu({
   onOpenChange,
   children,
 }: {
-  /** The chevron's name, for screen readers and its tooltip. */
+  /** The chevron's name, for screen readers and its tooltip; also the sheet's. */
   label: string;
   sections: MenuSection[];
   footer?: MenuItem[];
@@ -33,7 +34,6 @@ export function DeviceMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = () => onOpenChange(false);
-  useDismiss(ref, open, close);
 
   return (
     <div className="split" ref={ref}>
@@ -48,7 +48,14 @@ export function DeviceMenu({
       >
         <ChevronUp size={16} />
       </button>
-      <div className={`menu ${open ? "open" : ""}`} role="menu" aria-hidden={!open}>
+      <MenuPanel
+        label={label}
+        open={open}
+        onClose={close}
+        within={ref}
+        className="device-menu"
+        footer={footer.length > 0 && footer.map((item) => <MenuButton key={item.label} item={item} />)}
+      >
         {sections.map((section) => (
           <div key={section.title} className="menu-section" role="group" aria-label={section.title}>
             <div className="menu-head">
@@ -66,15 +73,11 @@ export function DeviceMenu({
               )}
             </div>
             {section.items.map((item) => (
-              <MenuButton key={item.id ?? item.label} item={item} onDone={close} />
+              <MenuButton key={item.id ?? item.label} item={item} />
             ))}
           </div>
         ))}
-        {footer.length > 0 && <div className="menu-sep" />}
-        {footer.map((item) => (
-          <MenuButton key={item.label} item={item} onDone={close} />
-        ))}
-      </div>
+      </MenuPanel>
     </div>
   );
 }

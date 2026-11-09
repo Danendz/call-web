@@ -460,8 +460,6 @@ button.split-chevron[aria-expanded="true"] {
   left: -8px;
   right: auto;
   width: 268px;
-  max-height: min(70vh, 520px);
-  overflow-y: auto;
   transform-origin: bottom left;
 }
 
@@ -507,10 +505,28 @@ button.menu-chip.on {
   color: #ff8a85;
 }
 
-.menu-sep {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--glass-border);
+/* The list scrolls; what's under it (speech to chat) stays in view */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.menu-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .menu {
@@ -520,6 +536,7 @@ button.menu-chip.on {
   display: flex;
   flex-direction: column;
   width: 236px;
+  max-height: min(70vh, 520px);
   padding: 6px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
@@ -576,6 +593,55 @@ button.menu-item:active:not(:disabled) {
 
 .menu-item .check {
   color: var(--accent-hover);
+}
+
+/* ---- bottom sheet: the pill's menus on narrow screens (SHEET_QUERY in useMediaQuery.ts) ---- */
+
+.sheet-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* vaul moves it: no transform or transition here */
+.sheet {
+  position: fixed;
+  z-index: 51;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  max-height: min(80dvh, 640px);
+  margin: 0 auto;
+  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+  border: 1px solid var(--glass-border);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  outline: none;
+}
+
+.sheet-grip {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 10px 0 8px;
+}
+
+.sheet-grip span {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0.5;
 }
 
 /* ---- narrow screens ---- */

@@ -3,7 +3,7 @@ import { useRef, type ReactNode } from "react";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
-import { useDismiss } from "./useDismiss";
+import { MenuPanel } from "./MenuPanel";
 
 export interface MenuItem {
   /** For lists of devices, whose names can repeat. */
@@ -18,28 +18,28 @@ export interface MenuItem {
   onSelect: () => void;
 }
 
-/** The ⋯ button and its popover with the controls that don't fit in the pill. Closes on outside tap and Esc. */
+/** The ⋯ button and its menu with the controls that don't fit in the pill. Picking an action closes it. */
 export function MoreMenu({ items, open, onOpenChange }: { items: MenuItem[]; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, open, () => onOpenChange(false));
+  const close = () => onOpenChange(false);
 
   return (
     <div className="more" ref={ref}>
       <IconButton label={t.more} variant={open ? "active" : null} expanded={open} onClick={() => onOpenChange(!open)}>
         <Ellipsis size={22} />
       </IconButton>
-      <div className={`menu ${open ? "open" : ""}`} role="menu" aria-hidden={!open}>
+      <MenuPanel label={t.more} open={open} onClose={close} within={ref}>
         {items.map((item) => (
-          <MenuButton key={item.label} item={item} onDone={() => onOpenChange(false)} />
+          <MenuButton key={item.label} item={item} onDone={close} />
         ))}
-      </div>
+      </MenuPanel>
     </div>
   );
 }
 
-/** One row of a popover menu; it closes the menu once picked. */
-export function MenuButton({ item, onDone }: { item: MenuItem; onDone: () => void }) {
+/** One row of a menu; `onDone` runs once it's picked, to close the menu. */
+export function MenuButton({ item, onDone }: { item: MenuItem; onDone?: () => void }) {
   return (
     <button
       type="button"
@@ -49,7 +49,7 @@ export function MenuButton({ item, onDone }: { item: MenuItem; onDone: () => voi
       disabled={item.disabled}
       onClick={() => {
         item.onSelect();
-        onDone();
+        onDone?.();
       }}
     >
       {item.icon}
