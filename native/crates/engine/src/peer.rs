@@ -129,6 +129,7 @@ impl Peer {
                 pc.add_transceiver_for_media(MediaType::Audio, init(RtpTransceiverDirection::SendRecv, &stream_ids))?;
             }
         }
+        prefer_red(factory, &pc);
         // add_track, not add_transceiver: the other side's offer can then reuse this transceiver instead of adding one
         pc.add_track(camera, &stream_ids)?;
 
@@ -167,6 +168,25 @@ impl Peer {
     /// Sends the shared screen alongside the camera, or stops; see [`Session::set_screen`].
     pub fn set_screen(&self, tracks: Option<ScreenTracks>) {
         let _ = self.input.send(Input::Screen(tracks));
+    }
+}
+
+/// Puts RED before Opus on the mic (the first transceiver), so each packet also carries the previous one and a single
+/// lost packet leaves no gap. The answer keeps only what both sides have, so a peer without RED gets plain Opus.
+fn prefer_red(factory: &PeerConnectionFactory, pc: &PeerConnection) {
+    let mut codecs = factory.get_rtp_receiver_capabilities(MediaType::Audio).codecs;
+    let is_red = |mime: &str| mime.eq_ignore_ascii_case("audio/red");
+    if !codecs.iter().any(|c| is_red(&c.mime_type)) {
+        return;
+    }
+    codecs.sort_by_key(|c| match c.mime_type.as_str() {
+        m if is_red(m) => 0,
+        m if m.eq_ignore_ascii_case("audio/opus") => 1,
+        _ => 2,
+    });
+    let Some(mic) = pc.transceivers().into_iter().next() else { return };
+    if let Err(e) = mic.set_codec_preferences(codecs) {
+        tracing::warn!("couldn't prefer RED: {}", e.message);
     }
 }
 
