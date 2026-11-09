@@ -15,6 +15,7 @@ native/
     src/             lib.rs (the app's run()), main.rs (desktop entry), android/ (Android entry), the bridge
     translations/    zh .po, bundled into the binary
   android/           Gradle project: the APK, MainActivity and what only Java can do
+  vendor/            third-party crates we patch (webrtc-sys), outside the workspace; see its README
 ```
 
 - **`protocol` mirrors `shared/protocol.ts` by hand.** The TS file is the source of truth. When it changes: update `shared/protocol.fixtures.ts` with an example of the new shape, run `npm run fixtures`, then update `crates/protocol` until `cargo test -p protocol` passes. Never add a message only on the Rust side.
@@ -49,7 +50,7 @@ native/
 
 ## WebRTC
 
-- **LiveKit's `libwebrtc` crate**, Google's libwebrtc prebuilt. The first build downloads it (~200 MB) into `target/`. On macOS it needs `-ObjC` at link time (`.cargo/config.toml`), or creating the factory crashes.
+- **LiveKit's `libwebrtc` crate**, Google's libwebrtc prebuilt. The first build downloads it (~200 MB) into `target/`. On macOS it needs `-ObjC` at link time (`.cargo/config.toml`), or creating the factory crashes. `libwebrtc`'s `webrtc-sys` is patched in from `vendor/` with a hook for our noise suppression: change it only through `vendor/webrtc-sys.patch` (`vendor/README.md` says why and how).
 - **Audio uses WebRTC's platform audio device** (`media.rs`): it captures the picked mic and plays the other person through the default output, with WebRTC's echo canceller, noise suppression and gain control, like a browser with the web's constraints. Its blocking calls (starting playout) run on WebRTC's signaling thread, so a peer connection call from the engine can wait on them.
 - **The setup screen's mic level** opens the mic separately with `cpal` (`level.rs`), only while that screen is up: WebRTC captures nothing until a call.
 - **Video frames reach the screen through `VideoSink`** (`engine/src/video.rs`, the app's `video.rs`): each feed keeps only its newest frame, converted straight into a fresh Slint buffer, and at most one UI hop per feed is pending, so a busy UI skips frames instead of falling behind. Conversion time shows in the stats overlay.

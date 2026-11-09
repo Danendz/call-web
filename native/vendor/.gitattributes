@@ -1,0 +1,2 @@
+# Keep vendored files byte for byte as published, so vendor/webrtc-sys.sh --check matches them on every checkout
+* -text

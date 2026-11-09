@@ -52,6 +52,8 @@ jobs:
       - run: npx tsx scripts/denoise-wasm.ts --check
       - run: cargo audit
         working-directory: native/wasm/denoise
+      # vendor/webrtc-sys must stay the published crate plus our patch (native/vendor/README.md)
+      - run: native/vendor/webrtc-sys.sh --check
       # Every version needs its changelog section, checked on the PR so a bump can't merge without one
       - run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' native/app/Cargo.toml)
