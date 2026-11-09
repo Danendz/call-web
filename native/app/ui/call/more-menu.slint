@@ -125,7 +125,7 @@ export component MoreMenu inherits IconButton {
                         icon: Icons.video;
                         text: DeviceName.of(cam.label, @tr("Camera"));
                         checked: cam.id == root.cam-id;
-                        activated => { menu.close(); root.pick-cam(cam.id); }
+                        activated => { root.pick-cam(cam.id); menu.close(); }
                     }
                 }
                 MenuItem {

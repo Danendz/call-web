@@ -25,6 +25,11 @@ pub(crate) fn open(name: Option<&str>, on_samples: impl FnMut(&[f32]) + Send + '
     let host = cpal::default_host();
     let named = name
         .and_then(|name| host.input_devices().ok()?.find(|d| d.description().is_ok_and(|desc| desc.name() == name)));
+    if named.is_none()
+        && let Some(name) = name
+    {
+        tracing::info!("no mic named {name:?} outside WebRTC, using the system default");
+    }
     let device = named.or_else(|| host.default_input_device()).ok_or("no input device")?;
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let stream = match config.sample_format() {
