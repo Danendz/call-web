@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { DeviceItem, DeviceName } from "../setup/device-row.slint";
+import { MenuPanel } from "menu-panel.slint";
 
 component MenuItem inherits Rectangle {
     in property <image> icon;
@@ -76,89 +77,83 @@ export component MoreMenu inherits IconButton {
     callback toggle-portrait();
     callback rotate();
     callback toggle-stats();
+    // A bottom sheet instead of a popover, on a phone or a narrow window
+    in property <bool> sheet;
+    // The call screen's place in the window, which the menu's popup covers
+    in property <length> area-x;
+    in property <length> area-y;
+    in property <length> area-width;
+    in property <length> area-height;
+    out property <bool> open: menu.is-open;
 
     icon: Icons.ellipsis;
     label: @tr("More");
-    // Slint can't tell when a popup closes, so unlike the web the button doesn't stay lit while the menu is open
     clicked => { menu.show(); }
 
     menu := PopupWindow {
-        width: 236px;
-        // Above the button, its right edge 8px past the button's, like the web
-        x: root.width + 8px - self.width;
-        y: -self.height - 16px;
-        close-policy: close-on-click-outside;
+        // Over the whole call screen: the panel places itself, and a press outside it closes it
+        x: root.area-x - root.absolute-position.x;
+        y: root.area-y - root.absolute-position.y;
+        width: root.area-width;
+        height: root.area-height;
+        close-policy: no-auto-close;
 
-        Rectangle {
-            // Springs open from the button, like the web's .menu.open; the popup's content is new on every show.
-            // Scale, not position: moving it would lose the popup its size
-            property <bool> shown;
-            init => { shown = true; }
-            opacity: shown ? 1 : 0;
-            transform-scale: shown ? 1 : 0.94;
-            transform-origin: { x: self.width, y: self.height };
-            animate opacity { duration: Theme.med; easing: Theme.ease; }
-            animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
-            border-radius: Theme.radius;
-            border-width: 1px;
-            border-color: Theme.glass-border;
-            background: Theme.glass;
-            drop-shadow-blur: 30px;
-            drop-shadow-offset-y: 10px;
-            drop-shadow-color: Theme.shadow;
+        panel := MenuPanel {
+            sheet: root.sheet;
+            label: root.label;
+            anchor-right: root.absolute-position.x - root.area-x + root.width;
+            anchor-top: root.absolute-position.y - root.area-y;
+            closed => { menu.close(); }
 
-            VerticalLayout {
-                padding: 6px;
-                for id in root.outputs: MenuItem {
-                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
-                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");
-                    checked: id == root.output;
-                    activated => { menu.close(); root.pick-output(id); }
+            for id in root.outputs: MenuItem {
+                icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
+                text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");
+                checked: id == root.output;
+                activated => { panel.dismiss(); root.pick-output(id); }
+            }
+            if cam-granted && cams.length == 2: MenuItem {
+                icon: Icons.switch-camera;
+                text: @tr("Switch camera");
+                activated => { panel.dismiss(); root.next-cam(); }
+            }
+            if cam-granted && cams.length > 2: VerticalLayout {
+                for cam in cams: MenuItem {
+                    icon: Icons.video;
+                    text: DeviceName.of(cam.label, @tr("Camera"));
+                    checked: cam.id == root.cam-id;
+                    activated => { root.pick-cam(cam.id); panel.dismiss(); }
                 }
-                if cam-granted && cams.length == 2: MenuItem {
-                    icon: Icons.switch-camera;
-                    text: @tr("Switch camera");
-                    activated => { menu.close(); root.next-cam(); }
-                }
-                if cam-granted && cams.length > 2: VerticalLayout {
-                    for cam in cams: MenuItem {
-                        icon: Icons.video;
-                        text: DeviceName.of(cam.label, @tr("Camera"));
-                        checked: cam.id == root.cam-id;
-                        activated => { root.pick-cam(cam.id); menu.close(); }
-                    }
-                }
-                MenuItem {
-                    icon: root.sharing ? Icons.screen-share-off : Icons.screen-share;
-                    text: root.sharing ? @tr("Stop sharing") : @tr("Share screen");
-                    enabled: root.can-share;
-                    activated => { menu.close(); root.toggle-share(); }
-                }
-                MenuItem {
-                    icon: Icons.rectangle-vertical;
-                    text: @tr("Portrait video");
-                    checked: root.portrait;
-                    enabled: root.cam-granted;
-                    activated => { menu.close(); root.toggle-portrait(); }
-                }
-                MenuItem {
-                    icon: Icons.rotate-cw;
-                    text: @tr("Rotate their video");
-                    enabled: root.can-rotate;
-                    activated => { menu.close(); root.rotate(); }
-                }
-                MenuItem {
-                    icon: Icons.camera;
-                    text: @tr("Screenshot");
-                    enabled: root.can-screenshot;
-                    activated => { menu.close(); root.screenshot(); }
-                }
-                MenuItem {
-                    icon: Icons.activity;
-                    text: @tr("Connection stats");
-                    checked: root.stats-open;
-                    activated => { menu.close(); root.toggle-stats(); }
-                }
+            }
+            MenuItem {
+                icon: root.sharing ? Icons.screen-share-off : Icons.screen-share;
+                text: root.sharing ? @tr("Stop sharing") : @tr("Share screen");
+                enabled: root.can-share;
+                activated => { panel.dismiss(); root.toggle-share(); }
+            }
+            MenuItem {
+                icon: Icons.rectangle-vertical;
+                text: @tr("Portrait video");
+                checked: root.portrait;
+                enabled: root.cam-granted;
+                activated => { panel.dismiss(); root.toggle-portrait(); }
+            }
+            MenuItem {
+                icon: Icons.rotate-cw;
+                text: @tr("Rotate their video");
+                enabled: root.can-rotate;
+                activated => { panel.dismiss(); root.rotate(); }
+            }
+            MenuItem {
+                icon: Icons.camera;
+                text: @tr("Screenshot");
+                enabled: root.can-screenshot;
+                activated => { panel.dismiss(); root.screenshot(); }
+            }
+            MenuItem {
+                icon: Icons.activity;
+                text: @tr("Connection stats");
+                checked: root.stats-open;
+                activated => { panel.dismiss(); root.toggle-stats(); }
             }
         }
     }

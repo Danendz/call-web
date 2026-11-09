@@ -395,6 +395,11 @@ export component CallScreen inherits Rectangle {
             // Off the video while idle, like the web's .call.idle .pill; tucked lower and smaller over the stacked chat
             y: parent.height - self.height - (root.stacked && root.chat-open ? 10px : 20px) + (root.idle ? 24px : 0);
             button-size: root.stacked && root.chat-open ? 42px : root.width < 900px ? 46px : 48px;
+            sheet: root.touch || root.width < 900px;
+            area-x: root.absolute-position.x;
+            area-y: root.absolute-position.y;
+            area-width: root.width;
+            area-height: root.height;
             gap: root.width < 900px ? 6px : 10px;
             opacity: root.idle ? 0 : 1;
             visible: !root.pip;

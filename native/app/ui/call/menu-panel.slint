@@ -1,0 +1,189 @@
+import { Theme } from "../theme.slint";
+
+// A pill menu's panel. It fills its PopupWindow, which covers the whole window: a popover above its button, or
+// on a phone or a narrow window a bottom sheet that feels like the web's (vaul): it follows a drag down, closes
+// past a quarter of its height or on a flick, springs back otherwise and only gives a little when pulled up. A tap
+// on the dim, Esc or Back close it too. The list scrolls when it doesn't fit; a drag down only moves the sheet
+// once the list is at its top.
+export component MenuPanel inherits Rectangle {
+    in property <bool> sheet;
+    in property <string> label;
+    // The menu button's right edge and top, in this panel's coordinates: the popover opens above it
+    in property <length> anchor-right;
+    in property <length> anchor-top;
+    in property <length> popover-width: 236px;
+    // The panel is gone: the owner closes the popup
+    callback closed();
+
+    property <bool> shown;
+    property <bool> closing;
+    // How far the sheet is pulled from where it rests, down positive; raw is the finger's distance
+    property <length> drag;
+    property <length> raw-drag;
+    property <bool> dragging;
+    property <duration> drag-start;
+
+    init => { keys.focus(); }
+    // Opens a tick after the first frame: set in init, there would be nothing to animate from
+    enter-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            self.running = false;
+            root.shown = true;
+        }
+    }
+
+    // Slides the sheet away, then closes; a popover just closes
+    public function dismiss() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        shown = false;
+        if (sheet) {
+            exit-timer.running = true;
+        } else {
+            closed();
+        }
+    }
+
+    exit-timer := Timer {
+        interval: Theme.sheet;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.closed();
+        }
+    }
+
+    keys := FocusScope {
+        width: 0;
+        height: 0;
+        key-pressed(event) => {
+            if (event.text == Key.Escape || event.text == Key.Back) {
+                root.dismiss();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // The dim on a sheet; for a popover invisible, there to close it on a press outside like a popup does
+    Rectangle {
+        background: root.sheet ? Theme.sheet-dim : transparent;
+        opacity: !root.sheet ? 1 : root.shown ? 1 - max(0, root.drag / panel.height) : 0;
+        animate opacity {
+            duration: root.dragging ? 0ms : Theme.sheet;
+            easing: Theme.ease-sheet;
+        }
+        TouchArea {
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.dismiss();
+                }
+            }
+        }
+    }
+
+    panel := Rectangle {
+        property <length> rest: root.height - self.height;
+        width: root.sheet ? min(root.width, 520px) : root.popover-width;
+        height: min(body.preferred-height, root.sheet ? min(root.height * 0.8, 640px) : root.anchor-top - 32px);
+        x: root.sheet ? (root.width - self.width) / 2 : root.anchor-right + 8px - self.width;
+        y: !root.sheet ? root.anchor-top - self.height - 16px : root.shown ? self.rest + root.drag : root.height;
+        animate y {
+            duration: root.sheet && !root.dragging ? Theme.sheet : 0ms;
+            easing: Theme.ease-sheet;
+        }
+        // A popover springs open from the button, like the web's .menu.open
+        opacity: root.sheet || root.shown ? 1 : 0;
+        transform-scale: root.sheet || root.shown ? 1 : 0.94;
+        transform-origin: { x: self.width, y: self.height };
+        animate opacity { duration: Theme.med; easing: Theme.ease; }
+        animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
+        border-radius: root.sheet ? 0 : Theme.radius;
+        border-top-left-radius: root.sheet ? Theme.radius-lg : Theme.radius;
+        border-top-right-radius: root.sheet ? Theme.radius-lg : Theme.radius;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        // Glass without blur shows the pill through a sheet over it, so a sheet is solid
+        background: root.sheet ? Theme.surface : Theme.glass;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        accessible-role: AccessibleRole.list;
+        accessible-label: root.label;
+
+        // Under the sheet's bottom edge, so a pull up shows no gap
+        if root.sheet: Rectangle {
+            y: parent.height - 1px;
+            height: 80px;
+            background: Theme.surface;
+        }
+
+        // Swallows presses that miss a row, so they don't reach the dim
+        TouchArea { }
+
+        SwipeGestureHandler {
+            enabled: root.sheet && !root.closing;
+            handle-swipe-down: list.content-y >= 0;
+            handle-swipe-up: list.content-height <= list.height;
+            moved => {
+                // It also reports moves too short to be a swipe, and a release then neither swipes nor cancels:
+                // following those would leave the sheet where the pointer let go
+                if (!self.swiping) {
+                    return;
+                }
+                // Timed here rather than on `swiping`, whose change handler runs too late to time a flick
+                if (!root.dragging) {
+                    root.dragging = true;
+                    root.drag-start = animation-tick();
+                }
+                // The positions move with the sheet, so add back how far it has moved
+                root.raw-drag = self.current-position.y - self.pressed-position.y + root.drag;
+                // vaul's damping: up it gives a few pixels, slower and slower
+                root.drag = root.raw-drag >= 0 ? root.raw-drag : -max(0, 8 * (ln(-root.raw-drag / 1px + 1) - 2)) * 1px;
+            }
+            swiped => {
+                root.dragging = false;
+                // px per ms, like vaul's VELOCITY_THRESHOLD
+                if (root.raw-drag / 1px / max(1, (animation-tick() - root.drag-start) / 1ms) > 0.4
+                    || root.drag > panel.height * 0.25) {
+                    root.dismiss();
+                } else {
+                    root.drag = 0;
+                }
+            }
+            cancelled => {
+                root.dragging = false;
+                root.drag = 0;
+            }
+
+            body := VerticalLayout {
+                padding: 6px;
+                padding-top: root.sheet ? 0 : 6px;
+                padding-bottom: root.sheet ? 12px : 6px;
+
+                if root.sheet: Rectangle {
+                    height: 22px;
+                    Rectangle {
+                        y: 10px;
+                        width: 36px;
+                        height: 4px;
+                        border-radius: 2px;
+                        background: Theme.muted;
+                        opacity: 0.5;
+                    }
+                }
+                list := Flickable {
+                    preferred-height: items.preferred-height;
+                    content-height: items.preferred-height;
+                    items := VerticalLayout {
+                        width: list.width;
+                        @children
+                    }
+                }
+            }
+        }
+    }
+}
