@@ -208,12 +208,13 @@ pub fn run() -> anyhow::Result<()> {
             let weak = ui.as_weak();
             // Encoding takes a moment; the window doesn't wait for it
             std::thread::spawn(move || match screenshot::save(&picture) {
-                Ok(path) => {
-                    let _ = weak.upgrade_in_event_loop(move |ui| {
-                        ui.set_saved_shot(path.to_string_lossy().as_ref().into());
-                    });
+                Ok(saved) => {
+                    let _ = weak.upgrade_in_event_loop(move |ui| ui.set_saved_shot(saved.into()));
                 }
-                Err(e) => tracing::warn!("screenshot failed: {e}"),
+                Err(e) => {
+                    tracing::warn!("screenshot failed: {e}");
+                    let _ = weak.upgrade_in_event_loop(|ui| ui.set_shot_failures(ui.get_shot_failures() + 1));
+                }
             });
         }
     });
@@ -221,7 +222,7 @@ pub fn run() -> anyhow::Result<()> {
         let weak = ui.as_weak();
         move || {
             if let Some(ui) = weak.upgrade() {
-                screenshot::show_in_folder(std::path::Path::new(ui.get_saved_shot().as_str()));
+                screenshot::show(ui.get_saved_shot().as_str());
             }
         }
     });

@@ -58,6 +58,7 @@ export component CallScreen inherits Rectangle {
     in property <bool> peer-screenshot;
     // Where the last screenshot was saved; a new one shows the toast for a while
     in property <string> saved-shot;
+    in property <int> shot-failures;
     // A phone held upright: the chat opens under the video instead of beside it, like the web's STACKED_QUERY
     in property <bool> stacked;
     // A touch screen, where the chat doesn't focus its box on opening
@@ -120,8 +121,16 @@ export component CallScreen inherits Rectangle {
     }
 
     property <bool> toast-shown;
+    property <bool> shot-failed;
     changed saved-shot => {
+        shot-failed = false;
         toast-shown = saved-shot != "";
+        toast-timer.running = true;
+        toast-timer.restart();
+    }
+    changed shot-failures => {
+        shot-failed = true;
+        toast-shown = true;
         toast-timer.running = true;
         toast-timer.restart();
     }
@@ -339,15 +348,17 @@ export component CallScreen inherits Rectangle {
             toast := HorizontalLayout {
                 padding: 6px;
                 padding-left: 16px;
+                padding-right: root.shot-failed ? 16px : 6px;
                 spacing: 10px;
                 Text {
-                    text: @tr("Screenshot saved");
+                    text: root.shot-failed ? @tr("Couldn't save the screenshot") : @tr("Screenshot saved");
                     color: Theme.text;
                     font-size: 13px;
                     vertical-alignment: center;
                 }
-                Button {
-                    text: @tr("Show in folder");
+                if !root.shot-failed: Button {
+                    // A phone has no folders to show: the picture opens in its photo viewer
+                    text: root.touch ? @tr("Open") : @tr("Show in folder");
                     icon: Icons.folder-open;
                     height-hint: 32px;
                     font-size: 13px;

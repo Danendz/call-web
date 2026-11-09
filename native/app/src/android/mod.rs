@@ -108,6 +108,42 @@ fn with_java(f: impl FnOnce(&mut JNIEnv, &JClass, &JObject) -> jni::errors::Resu
     }
 }
 
+/// Adds a JPEG to the phone's gallery as `Pictures/Call Danya/<name>.jpg`; its content URI, or None if it couldn't.
+pub(crate) fn save_picture(name: &str, jpeg: &[u8]) -> Option<String> {
+    let mut uri = None;
+    with_java(|env, shim, context| {
+        let name = env.new_string(name)?;
+        let bytes = env.byte_array_from_slice(jpeg)?;
+        let saved = env
+            .call_static_method(
+                shim,
+                "savePicture",
+                "(Landroid/content/Context;Ljava/lang/String;[B)Ljava/lang/String;",
+                &[JValue::Object(context), JValue::Object(&name), JValue::Object(&bytes)],
+            )?
+            .l()?;
+        if !saved.is_null() {
+            uri = Some(env.get_string(&JString::from(saved))?.into());
+        }
+        Ok(())
+    });
+    uri
+}
+
+/// Opens a picture [`save_picture`] saved, in the phone's photo viewer.
+pub(crate) fn open_picture(uri: &str) {
+    with_java(|env, shim, context| {
+        let uri = env.new_string(uri)?;
+        env.call_static_method(
+            shim,
+            "openPicture",
+            "(Landroid/content/Context;Ljava/lang/String;)V",
+            &[JValue::Object(context), JValue::Object(&uri)],
+        )
+        .map(drop)
+    });
+}
+
 /// Takes in the window, and wires up what Android does for it.
 pub(crate) fn attach(ui: &AppWindow, settings: &Rc<RefCell<crate::settings::Settings>>) {
     UI.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));

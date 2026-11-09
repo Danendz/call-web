@@ -156,6 +156,12 @@ object Shim {
     fun cameraStop() = Camera.stop()
 
     @JvmStatic
+    fun savePicture(context: Context, name: String, jpeg: ByteArray): String? = Gallery.save(context, name, jpeg)
+
+    @JvmStatic
+    fun openPicture(context: Context, uri: String) = Gallery.open(context, uri)
+
+    @JvmStatic
     fun startUpdates(context: Context, feed: String) = Updater.start(context, feed)
 
     @JvmStatic

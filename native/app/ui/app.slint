@@ -58,6 +58,8 @@ export component AppWindow inherits Window {
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
     in property <string> saved-shot;
+    // Counts screenshots that couldn't be saved, so each one shows its toast
+    in property <int> shot-failures;
     in property <string> version;
     // The on-device speech model, for settings and the first launch's question
     in property <ModelState> model-state;
@@ -244,6 +246,7 @@ export component AppWindow inherits Window {
             speech-paused-until: root.speech-paused-until;
             peer-screenshot: root.peer-screenshot;
             saved-shot: root.saved-shot;
+            shot-failures: root.shot-failures;
             screenshot(feed, rotation) => { root.screenshot(feed, rotation); }
             show-shot => { root.show-shot(); }
             toggle-transcribe => { root.toggle-transcribe(); }
