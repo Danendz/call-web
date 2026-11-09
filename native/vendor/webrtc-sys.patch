@@ -1,0 +1,304 @@
+diff --git a/build.rs b/build.rs
+index 37912530..786400ff 100644
+--- a/build.rs
++++ b/build.rs
+@@ -31,6 +31,7 @@ fn main() {
+     let mut rust_files = vec![
+         "src/peer_connection.rs",
+         "src/peer_connection_factory.rs",
++        "src/capture_processor.rs",
+         "src/audio_device_controller.rs",
+         "src/media_stream.rs",
+         "src/media_stream_track.rs",
+@@ -67,6 +68,7 @@ fn main() {
+     builder.files(&[
+         "src/peer_connection.cpp",
+         "src/peer_connection_factory.cpp",
++        "src/capture_processor.cpp",
+         "src/audio_device_controller.cpp",
+         "src/media_stream.cpp",
+         "src/media_stream_track.cpp",
+diff --git a/include/livekit/capture_processor.h b/include/livekit/capture_processor.h
+new file mode 100644
+index 00000000..f86beac3
+--- /dev/null
++++ b/include/livekit/capture_processor.h
+@@ -0,0 +1,46 @@
++/*
++ * Copyright 2025 LiveKit, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#pragma once
++
++#include <memory>
++
++#include "api/audio/audio_processing.h"
++#include "api/media_stream_interface.h"
++#include "api/scoped_refptr.h"
++
++namespace livekit_ffi {
++
++// The audio processing builder for the peer connection factory: it adds a
++// capture post-processor that hands every 10 ms mic frame (after echo
++// cancellation and gain control) to the Rust callback set with
++// `set_capture_processor`, and remembers the processing module it built so the
++// built-in noise suppression can be switched while it runs.
++std::unique_ptr<webrtc::AudioProcessingBuilderInterface>
++create_capture_processing_builder();
++
++// Applies the current built-in noise suppression setting to a new device
++// (microphone) audio source, and remembers it so a later switch reaches it.
++void track_device_audio_source(
++    webrtc::scoped_refptr<webrtc::AudioSourceInterface> source);
++
++// Whether a device audio source gets the built-in noise suppression.
++bool builtin_noise_suppression();
++
++// Turns WebRTC's own noise suppression on or off for the microphone, live.
++void set_builtin_noise_suppression(bool enabled);
++
++}  // namespace livekit_ffi
+diff --git a/src/capture_processor.cpp b/src/capture_processor.cpp
+new file mode 100644
+index 00000000..14c25962
+--- /dev/null
++++ b/src/capture_processor.cpp
+@@ -0,0 +1,111 @@
++/*
++ * Copyright 2025 LiveKit, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "livekit/capture_processor.h"
++
++#include <algorithm>
++#include <atomic>
++#include <mutex>
++#include <string>
++
++#include "api/audio/builtin_audio_processing_builder.h"
++#include "modules/audio_processing/audio_buffer.h"
++#include "rust/cxx.h"
++#include "webrtc-sys/src/capture_processor.rs.h"
++
++namespace livekit_ffi {
++
++namespace {
++
++std::atomic<bool> g_builtin_ns{true};
++std::mutex g_mutex;
++// The latest ones built; a factory is made once per app in practice
++webrtc::scoped_refptr<webrtc::AudioProcessing> g_apm;
++webrtc::scoped_refptr<webrtc::AudioSourceInterface> g_device_source;
++
++class RustCaptureProcessor : public webrtc::CustomProcessing {
++ public:
++  void Initialize(int sample_rate_hz, int num_channels) override {
++    sample_rate_hz_ = sample_rate_hz;
++  }
++
++  // Samples are floats in the 16-bit range. The first channel is processed and
++  // copied to the others: a mic is mono, and one model state can't serve two.
++  void Process(webrtc::AudioBuffer* audio) override {
++    if (audio->num_channels() == 0 || audio->num_frames() == 0)
++      return;
++    float* const* channels = audio->channels();
++    process_capture(rust::Slice<float>(channels[0], audio->num_frames()),
++                    sample_rate_hz_);
++    for (size_t ch = 1; ch < audio->num_channels(); ++ch)
++      std::copy(channels[0], channels[0] + audio->num_frames(), channels[ch]);
++  }
++
++  std::string ToString() const override { return "RustCaptureProcessor"; }
++
++ private:
++  int sample_rate_hz_ = 0;
++};
++
++class KeepingBuilder : public webrtc::AudioProcessingBuilderInterface {
++ public:
++  webrtc::scoped_refptr<webrtc::AudioProcessing> Build(
++      const webrtc::Environment& env) override {
++    auto apm = webrtc::BuiltinAudioProcessingBuilder()
++                   .SetCapturePostProcessing(
++                       std::make_unique<RustCaptureProcessor>())
++                   .Build(env);
++    std::lock_guard<std::mutex> lock(g_mutex);
++    g_apm = apm;
++    return apm;
++  }
++};
++
++}  // namespace
++
++std::unique_ptr<webrtc::AudioProcessingBuilderInterface>
++create_capture_processing_builder() {
++  return std::make_unique<KeepingBuilder>();
++}
++
++void track_device_audio_source(
++    webrtc::scoped_refptr<webrtc::AudioSourceInterface> source) {
++  std::lock_guard<std::mutex> lock(g_mutex);
++  g_device_source = source;
++}
++
++bool builtin_noise_suppression() {
++  return g_builtin_ns.load();
++}
++
++void set_builtin_noise_suppression(bool enabled) {
++  g_builtin_ns.store(enabled);
++  std::lock_guard<std::mutex> lock(g_mutex);
++  // The source's options are applied again whenever its sender changes (a
++  // mute, a renegotiation), so they have to agree with the live setting
++  if (g_device_source) {
++    webrtc::AudioOptions options = g_device_source->options();
++    options.noise_suppression = enabled;
++    g_device_source->SetOptions(options);
++  }
++  if (g_apm) {
++    webrtc::AudioProcessing::Config config = g_apm->GetConfig();
++    config.noise_suppression.enabled = enabled;
++    g_apm->ApplyConfig(config);
++  }
++}
++
++}  // namespace livekit_ffi
+diff --git a/src/capture_processor.rs b/src/capture_processor.rs
+new file mode 100644
+index 00000000..fad5ef1d
+--- /dev/null
++++ b/src/capture_processor.rs
+@@ -0,0 +1,59 @@
++// Copyright 2025 LiveKit, Inc.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++//! A hook into the microphone's audio after WebRTC's own processing (echo
++//! cancellation, gain control), for custom processing such as ML noise
++//! suppression, and a switch for WebRTC's built-in noise suppression.
++
++use std::sync::Mutex;
++
++/// Called on the audio thread with each 10 ms frame of the first channel, as
++/// floats in the 16-bit range, and the sample rate. It must not block.
++pub type CaptureProcessor = Box<dyn FnMut(&mut [f32], u32) + Send>;
++
++static PROCESSOR: Mutex<Option<CaptureProcessor>> = Mutex::new(None);
++
++#[cxx::bridge(namespace = "livekit_ffi")]
++mod ffi {
++    unsafe extern "C++" {
++        include!("livekit/capture_processor.h");
++
++        fn set_builtin_noise_suppression(enabled: bool);
++    }
++
++    extern "Rust" {
++        fn process_capture(samples: &mut [f32], sample_rate: i32);
++    }
++}
++
++/// Sets (or with None, removes) the processor for the microphone's audio.
++/// Applies to every peer connection factory.
++pub fn set_capture_processor(processor: Option<CaptureProcessor>) {
++    *PROCESSOR.lock().unwrap_or_else(|e| e.into_inner()) = processor;
++}
++
++/// Turns WebRTC's own noise suppression on (the default) or off for the
++/// microphone, live and for tracks made later.
++pub fn set_builtin_noise_suppression(enabled: bool) {
++    ffi::set_builtin_noise_suppression(enabled);
++}
++
++fn process_capture(samples: &mut [f32], sample_rate: i32) {
++    // A frame passes through untouched rather than wait for a processor that
++    // is being swapped
++    let Ok(mut processor) = PROCESSOR.try_lock() else { return };
++    if let (Some(processor), Ok(rate)) = (processor.as_mut(), u32::try_from(sample_rate)) {
++        processor(samples, rate);
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index d33322f1..dfae43a9 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -20,6 +20,7 @@ pub mod audio_mixer;
+ pub mod audio_resampler;
+ pub mod audio_track;
+ pub mod candidate;
++pub mod capture_processor;
+ pub mod data_channel;
+ #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+ pub mod desktop_capturer;
+diff --git a/src/peer_connection_factory.cpp b/src/peer_connection_factory.cpp
+index 944a9c9c..347fcaa8 100644
+--- a/src/peer_connection_factory.cpp
++++ b/src/peer_connection_factory.cpp
+@@ -37,6 +37,7 @@
+ #include "api/audio_options.h"
+ #include "livekit/adm_proxy.h"
+ #include "livekit/audio_track.h"
++#include "livekit/capture_processor.h"
+ #include "livekit/peer_connection.h"
+ #include "livekit/rtc_error.h"
+ #include "livekit/rtp_parameters.h"
+@@ -194,7 +195,7 @@ PeerConnectionFactory::PeerConnectionFactory(
+       std::move(std::make_unique<livekit_ffi::VideoDecoderFactory>());
+   dependencies.audio_encoder_factory = webrtc::CreateBuiltinAudioEncoderFactory();
+   dependencies.audio_decoder_factory = webrtc::CreateBuiltinAudioDecoderFactory();
+-  dependencies.audio_processing_builder = std::make_unique<webrtc::BuiltinAudioProcessingBuilder>();
++  dependencies.audio_processing_builder = create_capture_processing_builder();
+ 
+   webrtc::EnableMedia(dependencies);
+   peer_factory_ =
+@@ -251,7 +252,7 @@ std::shared_ptr<AudioTrack> PeerConnectionFactory::create_device_audio_track(
+   webrtc::AudioOptions audio_options;
+   audio_options.echo_cancellation = true;
+   audio_options.auto_gain_control = true;
+-  audio_options.noise_suppression = true;
++  audio_options.noise_suppression = builtin_noise_suppression();
+ 
+   webrtc::scoped_refptr<webrtc::AudioSourceInterface> audio_source =
+       peer_factory_->CreateAudioSource(audio_options);
+@@ -260,6 +261,7 @@ std::shared_ptr<AudioTrack> PeerConnectionFactory::create_device_audio_track(
+     RTC_LOG(LS_ERROR) << "Failed to create device audio source";
+     return nullptr;
+   }
++  track_device_audio_source(audio_source);
+ 
+   return std::static_pointer_cast<AudioTrack>(
+       rtc_runtime_->get_or_create_media_stream_track(

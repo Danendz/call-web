@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "app"]
+# Third-party code we patch (vendor/README.md): built as a dependency, not linted or formatted as ours
+exclude = ["vendor"]
 
 [workspace.package]
 edition = "2024"
@@ -32,6 +34,7 @@ codegen-units = 1
 strip = "symbols"
 
 # LiveKit's webrtc-sys with a hook into the mic's audio after WebRTC's processing, where DeepFilterNet runs
-# (`crates/denoise`), and a switch for WebRTC's own noise suppression. Fork of v0.3.53; only the C++ shim changes.
+# (`crates/denoise`), and a switch for WebRTC's own noise suppression. The published crate plus vendor/webrtc-sys.patch;
+# why and how to update it: vendor/README.md.
 [patch.crates-io]
-webrtc-sys = { git = "https://github.com/Danendz/rust-sdks", rev = "1f3825243964f4bc31681e44c08384b2b619f30c" }
+webrtc-sys = { path = "vendor/webrtc-sys" }
