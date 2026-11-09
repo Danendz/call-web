@@ -26,5 +26,8 @@ runs:
     - shell: bash
       working-directory: native
       run: |
-        find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . ||
-          { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys --target aarch64-linux-android; }
+        find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . || {
+          rm -rf target/sherpa-onnx-prebuilt
+          cargo clean -p sherpa-onnx-sys --target aarch64-linux-android
+          cargo clean -p sherpa-onnx-sys --target aarch64-linux-android --release
+        }
