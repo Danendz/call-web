@@ -25,7 +25,7 @@ When a feature here is finished, mark it `[x]` in the same PR that ships it.
 
 Ordered by value per hour of work. The native app gets the same behavior from libwebrtc in Phase 2.
 
-- [ ] **Opus RED.** Put `audio/red` before Opus with `setCodecPreferences()`, so each audio packet also carries the previous one and a single lost packet leaves no gap. Falls back to plain Opus if the other side lacks it.
+- [x] **Opus RED.** Put `audio/red` before Opus with `setCodecPreferences()`, so each audio packet also carries the previous one and a single lost packet leaves no gap. Falls back to plain Opus if the other side lacks it.
 - [ ] **Noise suppression with RNNoise or DeepFilterNet** in an `AudioWorklet`, between the mic and the peer connection. Clearer voice over fans and keyboard while gaming. The WASM is shipped in the bundle (no CDN); it needs `'wasm-unsafe-eval'` in the CSP, which has to be approved on purpose. Native: run DeepFilterNet directly in Rust.
 - [~] **Encoder settings.** Done: bitrate caps, `contentHint: 'detail'` for the screen, `degradationPreference`, high priority for the mic (`peer.ts` `tuneSenders`). Left: `scalabilityMode: 'L1T3'` so the stream survives loss better, and choosing the codec per device (H.264 for hardware encoding on weak machines, VP9 where the CPU allows).
 - [ ] **Self-hosted speech recognition.** SenseVoice-small through `sherpa-onnx` (`sherpa-onnx-node`) in the server: strong Mandarin, mixed zh+en, punctuation, far fewer made-up lines than Whisper, fast on Railway's CPUs and no quota. Groq Whisper stays as the fallback (or for English). Costs ~0.5 GB RAM and a ~230 MB model in the image, served from our own build, not fetched at runtime.

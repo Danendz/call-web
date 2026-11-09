@@ -58,6 +58,7 @@ export class PeerSession {
       pc.getSenders().find((s) => s.track?.kind === kind) ??
       pc.addTransceiver(kind, { direction: "sendrecv", streams: [localStream] }).sender;
     this.senders = { audio: sender("audio"), video: sender("video") };
+    preferRed(pc.getTransceivers().find((t) => t.sender === this.senders.audio));
 
     pc.ontrack = ({ track, streams }) => {
       const id = streams[0]?.id ?? "";
@@ -236,4 +237,20 @@ function downscaleTo(track: MediaStreamTrack | null, short: number): number {
   const { width = 0, height = 0 } = track?.getSettings() ?? {};
   const side = Math.min(width, height);
   return side > short ? side / short : 1;
+}
+
+/**
+ * Puts RED before Opus on the mic, so each packet also carries the previous one and a single lost packet leaves no
+ * gap. The answer keeps only what both sides have, so a peer without RED gets plain Opus.
+ */
+function preferRed(transceiver: RTCRtpTransceiver | undefined): void {
+  const codecs = RTCRtpReceiver.getCapabilities?.("audio")?.codecs ?? [];
+  const isRed = (c: RTCRtpCodec) => c.mimeType.toLowerCase() === "audio/red";
+  if (!transceiver?.setCodecPreferences || !codecs.some(isRed)) return;
+  const rank = (c: RTCRtpCodec) => (isRed(c) ? 0 : c.mimeType.toLowerCase() === "audio/opus" ? 1 : 2);
+  try {
+    transceiver.setCodecPreferences([...codecs].sort((a, b) => rank(a) - rank(b)));
+  } catch (err) {
+    console.warn("couldn't prefer RED", err);
+  }
 }
