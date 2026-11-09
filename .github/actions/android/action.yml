@@ -21,13 +21,5 @@ runs:
         cd native && rustup target add aarch64-linux-android
     - uses: Swatinem/rust-cache@v2
       with: { workspaces: native, shared-key: "${{ inputs.cache-key }}" }
-    # The Rust cache keeps sherpa-onnx-sys's build-script result and its folders, but not the library files in them;
-    # the build script only checks the folder, so remove it to make it download again (as native.yml's check job)
-    - shell: bash
-      working-directory: native
-      run: |
-        find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . || {
-          rm -rf target/sherpa-onnx-prebuilt
-          cargo clean -p sherpa-onnx-sys --target aarch64-linux-android
-          cargo clean -p sherpa-onnx-sys --target aarch64-linux-android --release
-        }
+    - uses: ./.github/actions/sherpa-onnx
+      with: { target: aarch64-linux-android }
