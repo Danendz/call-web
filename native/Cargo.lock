@@ -7440,6 +7440,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sys"
 version = "0.3.53"
+source = "git+https://github.com/Danendz/rust-sdks?rev=1f3825243964f4bc31681e44c08384b2b619f30c#1f3825243964f4bc31681e44c08384b2b619f30c"
 dependencies = [
  "cc",
  "cxx",
@@ -7447,12 +7448,13 @@ dependencies = [
  "glob",
  "log",
  "pkg-config",
- "webrtc-sys-build 0.3.21",
+ "webrtc-sys-build 0.3.21 (git+https://github.com/Danendz/rust-sdks?rev=1f3825243964f4bc31681e44c08384b2b619f30c#1f3825243964f4bc31681e44c08384b2b619f30c)",
 ]
 
 [[package]]
 name = "webrtc-sys-build"
 version = "0.3.21"
+source = "git+https://github.com/Danendz/rust-sdks?rev=1f3825243964f4bc31681e44c08384b2b619f30c#1f3825243964f4bc31681e44c08384b2b619f30c"
 dependencies = [
  "anyhow",
  "fs2",
