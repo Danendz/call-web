@@ -107,8 +107,8 @@ export component DeviceRow inherits Rectangle {
                     accessible-role: list-item;
                     accessible-label: DeviceName.of(d.label, name);
                     accessible-action-default => {
-                        popup.close();
                         root.picked(d.id);
+                        popup.close();
                     }
 
                     HorizontalLayout {
@@ -135,8 +135,8 @@ export component DeviceRow inherits Rectangle {
                     item := TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
-                            popup.close();
                             root.picked(d.id);
+                            popup.close();
                         }
                     }
                 }

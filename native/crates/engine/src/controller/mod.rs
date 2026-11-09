@@ -238,6 +238,8 @@ impl Controller {
                     self.state.mic_id = Some(id);
                     // Reopened on the new mic
                     self.meter = None;
+                } else {
+                    tracing::warn!("couldn't pick mic {id:?} (in a call: {})", self.mic.is_some());
                 }
             }
             Command::ToggleCam => {
