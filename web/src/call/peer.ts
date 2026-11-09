@@ -132,7 +132,8 @@ export class PeerSession {
   /** Swaps in another camera without renegotiating. */
   async setCameraTrack(track: MediaStreamTrack | null): Promise<void> {
     await this.videoSender.replaceTrack(track);
-    await this.tuneSenders();
+    // The bitrate cap can follow; the new picture shouldn't wait for it
+    this.tuneSenders().catch((err) => console.warn("tuning senders failed", err));
   }
 
   /**

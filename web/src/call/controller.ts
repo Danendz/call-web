@@ -108,6 +108,7 @@ export class CallController {
   private remoteScreenId: string | null = null;
   private mediaReady: Promise<void> | null = null;
   private switchingDevice = false;
+  private pendingDevices = new Map<MediaKind, string>();
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
   private peerScreenshotTimer?: number;
@@ -164,14 +165,21 @@ export class CallController {
 
   /**
    * Switches mic or camera; remembered for next time. In a call only the camera can change: the new track replaces
-   * the old one in the sender, so there's no renegotiation.
+   * the old one in the sender, so there's no renegotiation. A pick made while a switch is running isn't lost: the
+   * latest one for each kind follows it.
    */
   async selectDevice(kind: MediaKind, deviceId: string): Promise<void> {
-    const stream = this.state.localStream;
-    if (!stream || (this.peer && kind === "audio") || this.switchingDevice) return;
+    if (!this.state.localStream || (this.peer && kind === "audio")) return;
+    this.pendingDevices.set(kind, deviceId);
+    if (this.switchingDevice) return;
     this.switchingDevice = true;
     try {
-      await this.swapDevice(stream, kind, deviceId);
+      for (let next = first(this.pendingDevices); next; next = first(this.pendingDevices)) {
+        const [kind, deviceId] = next;
+        this.pendingDevices.delete(kind);
+        const stream = this.state.localStream;
+        if (stream) await this.swapDevice(stream, kind, deviceId);
+      }
     } finally {
       this.switchingDevice = false;
     }
@@ -187,21 +195,35 @@ export class CallController {
 
   private async swapDevice(stream: MediaStream, kind: MediaKind, deviceId: string): Promise<void> {
     saveDevicePref(kind, deviceId);
-    const others = stream.getTracks().filter((t) => t.kind !== kind);
-    // Stop the old track first: iOS won't open a second camera while one is live.
-    stream.getTracks().filter((t) => t.kind === kind).forEach((t) => t.stop());
+    const old = stream.getTracks().filter((t) => t.kind === kind);
+    // The new device opens while the old one still runs, so there's no gap. A phone that can't hold two cameras at
+    // once says it's busy: stop the old one and ask again.
     let got = await getTrack(kind, deviceId);
-    if (!got.track) got = await getTrack(kind, null);
+    if (!got.track) {
+      old.forEach((t) => t.stop());
+      if (got.access === "busy") got = await getTrack(kind, deviceId);
+      if (!got.track) got = await getTrack(kind, null);
+    }
+    // Hung up or reacquired while the device was opening
+    if (this.state.localStream !== stream) {
+      got.track?.stop();
+      return;
+    }
     if (got.track) got.track.enabled = kind === "audio" ? this.state.micOn : this.state.camOn;
-    const next = new MediaStream(got.track ? [...others, got.track] : others);
     if (kind === "video") {
       this.camTrack = got.track;
       await this.peer?.setCameraTrack(got.track);
     }
+    // The same stream keeps playing with the new track, so the <video> showing it doesn't reload
+    old.forEach((t) => {
+      stream.removeTrack(t);
+      t.stop();
+    });
+    if (got.track) stream.addTrack(got.track);
     this.set({
-      localStream: next,
+      localStream: stream,
       ...(kind === "audio" ? { micAccess: got.access } : { camAccess: got.access }),
-      ...selectedDevices(next),
+      ...selectedDevices(stream),
     });
     if (kind === "video") this.sendMedia();
   }
@@ -471,4 +493,8 @@ export class CallController {
       peerScreenshot: false,
     });
   }
+}
+
+function first<K, V>(map: Map<K, V>): [K, V] | undefined {
+  return map.entries().next().value;
 }
