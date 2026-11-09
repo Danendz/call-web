@@ -108,6 +108,9 @@ pub enum ClientMessage {
     Media {
         cam_on: bool,
         screen: Option<String>,
+        /// You muted the other person's sound. Missing from older builds, which means false.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        speaker_off: bool,
     },
 }
 
@@ -149,6 +152,9 @@ pub enum ServerMessage {
     Media {
         cam_on: bool,
         screen: Option<String>,
+        /// You muted the other person's sound. Missing from older builds, which means false.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        speaker_off: bool,
     },
     Error {
         message: String,

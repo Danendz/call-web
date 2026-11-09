@@ -16,9 +16,13 @@ export function videoConstraints(orientation: Orientation): MediaTrackConstraint
   return { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: { ideal: 30, max: 30 } };
 }
 
-function constraintsFor(kind: MediaKind, deviceId: string | null): MediaTrackConstraints {
+/**
+ * `exact` for a device just picked: while another device of that kind is open, Chrome answers an `ideal` one with the
+ * open device. A remembered one is only `ideal`, so a device that's gone falls back to another.
+ */
+function constraintsFor(kind: MediaKind, deviceId: string | null, exact = false): MediaTrackConstraints {
   const base = kind === "audio" ? AUDIO : videoConstraints(loadOrientation());
-  if (deviceId) return { ...base, deviceId: { ideal: deviceId } }; // ideal: falls back if the device is gone
+  if (deviceId) return { ...base, deviceId: exact ? { exact: deviceId } : { ideal: deviceId } };
   return kind === "video" ? { ...base, facingMode: "user" } : base;
 }
 
@@ -43,9 +47,13 @@ export async function getLocalMedia(
   }
 }
 
-export async function getTrack(kind: MediaKind, deviceId: string | null): Promise<{ track: MediaStreamTrack | null; access: MediaAccess }> {
+export async function getTrack(
+  kind: MediaKind,
+  deviceId: string | null,
+  exact = false,
+): Promise<{ track: MediaStreamTrack | null; access: MediaAccess }> {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ [kind]: constraintsFor(kind, deviceId) });
+    const stream = await navigator.mediaDevices.getUserMedia({ [kind]: constraintsFor(kind, deviceId, exact) });
     return { track: stream.getTracks()[0], access: "granted" };
   } catch (err) {
     const name = (err as DOMException).name;
@@ -78,6 +86,22 @@ export function loadDevicePref(kind: MediaKind): string | null {
 export function saveDevicePref(kind: MediaKind, deviceId: string): void {
   try {
     localStorage.setItem(`device.${kind}`, deviceId);
+  } catch {
+    // storage blocked: the choice just isn't remembered
+  }
+}
+
+export function loadSpeakerPref(): string | null {
+  try {
+    return localStorage.getItem("device.audiooutput");
+  } catch {
+    return null;
+  }
+}
+
+export function saveSpeakerPref(deviceId: string): void {
+  try {
+    localStorage.setItem("device.audiooutput", deviceId);
   } catch {
     // storage blocked: the choice just isn't remembered
   }

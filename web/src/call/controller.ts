@@ -4,9 +4,11 @@ import {
   getLocalMedia,
   getTrack,
   loadDevicePref,
+  loadSpeakerPref,
   loadOrientation,
   saveDevicePref,
   saveOrientation,
+  saveSpeakerPref,
   selectedDevices,
   videoConstraints,
   type DeviceOption,
@@ -47,6 +49,16 @@ export interface CallState {
   cams: DeviceOption[];
   micDeviceId: string | null;
   camDeviceId: string | null;
+  /** The device of each kind being opened, until it's in use: opening one can take a second or two. */
+  switching: Record<MediaKind, string | null>;
+  /** Empty where the browser can't pick where sound plays (iOS Safari): it plays where the system sends it. */
+  speakers: DeviceOption[];
+  /** The speaker picked; null for the system's default, also when the picked one is unplugged. */
+  speakerDeviceId: string | null;
+  /** You muted the other person's sound. Only for this call: the next one starts with sound. */
+  speakerOff: boolean;
+  /** The other person muted your sound. */
+  remoteSpeakerOff: boolean;
   sharing: boolean;
   orientation: Orientation;
   forceRelay: boolean;
@@ -79,6 +91,11 @@ const initialState: CallState = {
   cams: [],
   micDeviceId: null,
   camDeviceId: null,
+  switching: { audio: null, video: null },
+  speakers: [],
+  speakerDeviceId: null,
+  speakerOff: false,
+  remoteSpeakerOff: false,
   sharing: false,
   orientation: loadOrientation(),
   forceRelay: new URLSearchParams(location.search).has("relay"),
@@ -164,13 +181,13 @@ export class CallController {
   }
 
   /**
-   * Switches mic or camera; remembered for next time. In a call only the camera can change: the new track replaces
-   * the old one in the sender, so there's no renegotiation. A pick made while a switch is running isn't lost: the
-   * latest one for each kind follows it.
+   * Switches mic or camera; remembered for next time. In a call the new track replaces the old one in the sender, so
+   * there's no renegotiation. A pick made while a switch is running isn't lost: the latest one for each kind follows it.
    */
   async selectDevice(kind: MediaKind, deviceId: string): Promise<void> {
-    if (!this.state.localStream || (this.peer && kind === "audio")) return;
+    if (!this.state.localStream) return;
     this.pendingDevices.set(kind, deviceId);
+    this.setSwitching(kind, deviceId);
     if (this.switchingDevice) return;
     this.switchingDevice = true;
     try {
@@ -179,29 +196,28 @@ export class CallController {
         this.pendingDevices.delete(kind);
         const stream = this.state.localStream;
         if (stream) await this.swapDevice(stream, kind, deviceId);
+        // A newer pick for this kind is still to come; it keeps showing until it's done
+        if (!this.pendingDevices.has(kind)) this.setSwitching(kind, null);
       }
     } finally {
       this.switchingDevice = false;
+      this.set({ switching: { audio: null, video: null } });
     }
   }
 
-  /** Moves to the next camera: front ↔ back on a phone. */
-  nextCamera(): void {
-    const { cams, camDeviceId } = this.state;
-    if (cams.length < 2) return;
-    const i = cams.findIndex((c) => c.id === camDeviceId);
-    void this.selectDevice("video", cams[(i + 1) % cams.length].id);
+  private setSwitching(kind: MediaKind, deviceId: string | null): void {
+    this.set({ switching: { ...this.state.switching, [kind]: deviceId } });
   }
 
   private async swapDevice(stream: MediaStream, kind: MediaKind, deviceId: string): Promise<void> {
     saveDevicePref(kind, deviceId);
     const old = stream.getTracks().filter((t) => t.kind === kind);
     // The new device opens while the old one still runs, so there's no gap. A phone that can't hold two cameras at
-    // once says it's busy: stop the old one and ask again.
-    let got = await getTrack(kind, deviceId);
+    // once says it's busy: stop the old one and ask again. A device that's gone falls back to the default.
+    let got = await getTrack(kind, deviceId, true);
     if (!got.track) {
       old.forEach((t) => t.stop());
-      if (got.access === "busy") got = await getTrack(kind, deviceId);
+      if (got.access === "busy") got = await getTrack(kind, deviceId, true);
       if (!got.track) got = await getTrack(kind, null);
     }
     // Hung up or reacquired while the device was opening
@@ -210,10 +226,8 @@ export class CallController {
       return;
     }
     if (got.track) got.track.enabled = kind === "audio" ? this.state.micOn : this.state.camOn;
-    if (kind === "video") {
-      this.camTrack = got.track;
-      await this.peer?.setCameraTrack(got.track);
-    }
+    if (kind === "video") this.camTrack = got.track;
+    await this.peer?.setTrack(kind, got.track);
     // The same stream keeps playing with the new track, so the <video> showing it doesn't reload
     old.forEach((t) => {
       stream.removeTrack(t);
@@ -234,8 +248,27 @@ export class CallController {
       all
         .filter((d) => d.kind === kind && d.deviceId)
         .map((d, i) => ({ id: d.deviceId, label: d.label || `${fallback} ${i + 1}` }));
-    this.set({ mics: list("audioinput", "Microphone"), cams: list("videoinput", "Camera") });
+    const speakers = canPickSpeaker() ? list("audiooutput", "Speaker") : [];
+    const saved = loadSpeakerPref();
+    this.set({
+      mics: list("audioinput", "Microphone"),
+      cams: list("videoinput", "Camera"),
+      speakers,
+      speakerDeviceId: speakers.some((s) => s.id === saved) ? saved : null,
+    });
   };
+
+  /** Where the other person's sound plays; remembered for next time. */
+  selectSpeaker(deviceId: string): void {
+    saveSpeakerPref(deviceId);
+    this.set({ speakerDeviceId: deviceId });
+  }
+
+  /** Mutes or unmutes the other person, and tells them so they know you can't hear them. */
+  toggleSpeaker(): void {
+    this.set({ speakerOff: !this.state.speakerOff });
+    this.sendMedia();
+  }
 
   async start(): Promise<void> {
     this.set({ phase: "starting", chat: [], remoteStream: null });
@@ -328,7 +361,8 @@ export class CallController {
   private sendMedia(): void {
     if (!this.peer) return;
     const camOn = !!this.camTrack && this.state.camOn;
-    this.signaling.send({ type: "media", camOn, screen: this.screen ? this.peer.screenId : null });
+    const { speakerOff } = this.state;
+    this.signaling.send({ type: "media", camOn, screen: this.screen ? this.peer.screenId : null, speakerOff });
   }
 
   setForceRelay(forceRelay: boolean): void {
@@ -364,7 +398,7 @@ export class CallController {
       case "peer-left":
         this.remoteScreenId = null;
         this.dropPeer();
-        this.set({ remoteCamOn: true });
+        this.set({ remoteCamOn: true, remoteSpeakerOff: false });
         break;
       case "signal":
         this.peer?.handleSignal(msg.payload);
@@ -387,7 +421,7 @@ export class CallController {
       case "media":
         this.remoteScreenId = msg.screen;
         this.peer?.setRemoteScreen(msg.screen);
-        this.set({ remoteCamOn: msg.camOn });
+        this.set({ remoteCamOn: msg.camOn, remoteSpeakerOff: msg.speakerOff === true });
         break;
       case "error":
         console.warn("server error", msg.message);
@@ -486,6 +520,8 @@ export class CallController {
       remoteStream: null,
       remoteScreen: null,
       remoteCamOn: true,
+      speakerOff: false,
+      remoteSpeakerOff: false,
       iceState: null,
       stats: null,
       sharing: false,
@@ -493,6 +529,11 @@ export class CallController {
       peerScreenshot: false,
     });
   }
+}
+
+// Safari on iOS has no setSinkId: sound goes where the system sends it
+function canPickSpeaker(): boolean {
+  return typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 }
 
 function first<K, V>(map: Map<K, V>): [K, V] | undefined {

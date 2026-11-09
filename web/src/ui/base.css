@@ -24,6 +24,16 @@ h1 {
   letter-spacing: -0.02em;
 }
 
+/* Read by screen readers, not shown */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -175,6 +185,22 @@ button.icon-btn.small:hover:not(:disabled) {
   animation: pop var(--med) var(--ease-spring);
 }
 
+/* A small icon on the corner of an icon button */
+.mark {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  animation: pop var(--med) var(--ease-spring);
+}
+
 /* ---- inputs ---- */
 
 input,
@@ -294,6 +320,17 @@ select:disabled {
   }
 }
 
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.spinner {
+  flex: none;
+  animation: spin 0.9s linear infinite;
+}
+
 @keyframes pop {
   from {
     transform: scale(0.4);
@@ -306,5 +343,10 @@ select:disabled {
   *::after {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
+  }
+
+  /* Spun every 1ms it would jitter; it still reads as loading standing still */
+  .spinner {
+    animation: none !important;
   }
 }

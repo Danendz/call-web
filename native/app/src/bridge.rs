@@ -17,6 +17,7 @@ use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState
 /// What the bridge keeps on the UI thread between states.
 pub struct Bridge {
     mics: Rc<VecModel<DeviceItem>>,
+    speakers: Rc<VecModel<DeviceItem>>,
     cams: Rc<VecModel<DeviceItem>>,
     screen_sources: Rc<VecModel<DeviceItem>>,
     chat: RefCell<Chat>,
@@ -27,12 +28,21 @@ pub struct Bridge {
 impl Bridge {
     pub fn new(ui: &AppWindow, lang: Lang) -> Self {
         let mics = Rc::new(VecModel::default());
+        let speakers = Rc::new(VecModel::default());
         let cams = Rc::new(VecModel::default());
         ui.set_mics(ModelRc::from(mics.clone()));
+        ui.set_speakers(ModelRc::from(speakers.clone()));
         ui.set_cams(ModelRc::from(cams.clone()));
         let screen_sources = Rc::new(VecModel::default());
         ui.set_screen_sources(ModelRc::from(screen_sources.clone()));
-        Self { mics, cams, screen_sources, chat: RefCell::new(Chat::new(ui, lang)), call_started: Rc::default() }
+        Self {
+            mics,
+            speakers,
+            cams,
+            screen_sources,
+            chat: RefCell::new(Chat::new(ui, lang)),
+            call_started: Rc::default(),
+        }
     }
 
     pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
@@ -42,6 +52,7 @@ impl Bridge {
     pub fn render(&self, ui: &AppWindow, state: &State) {
         *self.call_started.borrow_mut() = state.call_started;
         sync_devices(&self.mics, &state.mics);
+        sync_devices(&self.speakers, &state.speakers);
         sync_devices(&self.cams, &state.cams);
         sync_devices(&self.screen_sources, state.screen_picker.as_deref().unwrap_or_default());
 
@@ -71,6 +82,11 @@ impl Bridge {
         let mic = picked(&state.mics, state.mic_id.as_ref());
         ui.set_mic_id(mic.map(|d| d.id.as_str()).unwrap_or_default().into());
         ui.set_mic_label(mic.map(|d| d.label.as_str()).unwrap_or_default().into());
+        let speaker = picked(&state.speakers, state.speaker_id.as_ref());
+        ui.set_speaker_id(speaker.map(|d| d.id.as_str()).unwrap_or_default().into());
+        ui.set_speaker_label(speaker.map(|d| d.label.as_str()).unwrap_or_default().into());
+        ui.set_speaker_off(state.speaker_off);
+        ui.set_peer_speaker_off(state.remote_speaker_off);
 
         ui.set_cam_on(state.cam_on);
         ui.set_cam_access(match state.cam_access {

@@ -1,4 +1,4 @@
-import { VideoOff } from "lucide-react";
+import { VideoOff, VolumeOff } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useT } from "../ui/i18n";
 import { Video } from "../ui/Video";
@@ -48,6 +48,9 @@ export function Feeds({
   remoteScreen,
   camOn,
   remoteCamOn,
+  speakerOff,
+  speakerId,
+  remoteSpeakerOff,
   layout,
   corners,
   remoteRotation,
@@ -59,6 +62,12 @@ export function Feeds({
   remoteScreen: MediaStream | null;
   camOn: boolean;
   remoteCamOn: boolean;
+  /** You muted the other person: their camera and screen play silently. */
+  speakerOff: boolean;
+  /** The speaker their sound plays on; null for the default. */
+  speakerId: string | null;
+  /** The other person muted you, shown on their video so you know they can't hear you. */
+  remoteSpeakerOff: boolean;
   layout: FeedLayout;
   corners: Record<FeedKey, Corner>;
   /** Clockwise degrees, a multiple of 90: fixes a picture that arrives sideways. Only on this screen. */
@@ -66,6 +75,8 @@ export function Feeds({
   onPick: (key: FeedKey) => void;
   onMove: (key: FeedKey, corner: Corner) => void;
 }) {
+  const t = useT();
+  const sinkId = speakerId ?? "";
   const [aspects, setAspects] = useState<Record<FeedKey, number>>({ self: 16 / 9, peer: 16 / 9, screen: 16 / 9 });
   const onAspect = (key: FeedKey) => (aspect: number) => setAspects((prev) => ({ ...prev, [key]: aspect }));
   const sizes = {
@@ -97,11 +108,27 @@ export function Feeds({
         feed(
           "peer",
           <>
-            <Video stream={remoteStream} className="feed-video" rotation={remoteRotation} onAspect={onAspect("peer")} />
+            <Video
+              stream={remoteStream}
+              className="feed-video"
+              muted={speakerOff}
+              sinkId={sinkId}
+              rotation={remoteRotation}
+              onAspect={onAspect("peer")}
+            />
             <CamOff shown={!remoteCamOn} large={layout.main === "peer"} />
+            {remoteSpeakerOff && (
+              <span className="feed-mark" title={t.peerSpeakerOff} aria-label={t.peerSpeakerOff}>
+                <VolumeOff size={16} />
+              </span>
+            )}
           </>,
         )}
-      {remoteScreen && feed("screen", <Video stream={remoteScreen} className="feed-video" onAspect={onAspect("screen")} />)}
+      {remoteScreen &&
+        feed(
+          "screen",
+          <Video stream={remoteScreen} className="feed-video" muted={speakerOff} sinkId={sinkId} onAspect={onAspect("screen")} />,
+        )}
       {localStream &&
         feed(
           "self",

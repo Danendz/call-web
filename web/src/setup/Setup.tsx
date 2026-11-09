@@ -1,10 +1,9 @@
-import { Languages, Mic, MicOff, RectangleHorizontal, RectangleVertical, Video as VideoIcon, VideoOff } from "lucide-react";
+import { Languages, Mic, MicOff, RectangleHorizontal, RectangleVertical, Video as VideoIcon, VideoOff, Volume2 } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { isRearCamera } from "../call/media";
-import { CopyLink } from "../ui/CopyLink";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
@@ -14,7 +13,7 @@ import { MicLevel } from "./MicLevel";
 import "./setup.css";
 
 /** Pre-join screen: camera preview, mic level, device pickers and permission help. */
-export function Setup({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
+export function Setup({ controller, state }: { controller: CallController; state: CallState }) {
   const t = useT();
   useEffect(() => {
     void controller.preview();
@@ -79,29 +78,35 @@ export function Setup({ controller, state, roomUrl }: { controller: CallControll
           <h1>{t.readyToJoin}</h1>
           <DownloadApp />
         </div>
-        <div className="share">
-          <p className="muted">{t.shareLink}</p>
-          <CopyLink url={roomUrl} />
-        </div>
 
         <div className="devices">
           <DeviceRow
             name={t.microphone}
             icon={<Mic size={18} />}
-            kind="audio"
             access={state.micAccess}
             devices={state.mics}
             selected={state.micDeviceId}
-            onSelect={(kind, id) => controller.selectDevice(kind, id)}
+            opening={state.switching.audio}
+            onSelect={(id) => controller.selectDevice("audio", id)}
           />
+          {state.speakers.length > 0 && (
+            <DeviceRow
+              name={t.speaker}
+              icon={<Volume2 size={18} />}
+              access="granted"
+              devices={state.speakers}
+              selected={state.speakerDeviceId ?? state.speakers[0].id}
+              onSelect={(id) => controller.selectSpeaker(id)}
+            />
+          )}
           <DeviceRow
             name={t.camera}
             icon={<VideoIcon size={18} />}
-            kind="video"
             access={state.camAccess}
             devices={state.cams}
             selected={state.camDeviceId}
-            onSelect={(kind, id) => controller.selectDevice(kind, id)}
+            opening={state.switching.video}
+            onSelect={(id) => controller.selectDevice("video", id)}
           />
           <label className="device-row">
             <span className="row-icon" aria-hidden>

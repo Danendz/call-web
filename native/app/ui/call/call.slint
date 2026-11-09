@@ -25,6 +25,15 @@ export component CallScreen inherits Rectangle {
     in property <string> elapsed;
     in property <bool> mic-on;
     in property <bool> has-mic;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    callback pick-mic(string);
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <bool> speaker-off;
+    in property <bool> peer-speaker-off;
+    callback pick-speaker(string);
+    callback toggle-speaker();
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <[DeviceItem]> cams;
@@ -72,7 +81,6 @@ export component CallScreen inherits Rectangle {
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
-    callback next-cam();
     callback set-portrait(bool);
     callback set-force-relay(bool);
     callback toggle-transcribe();
@@ -222,6 +230,7 @@ export component CallScreen inherits Rectangle {
             has-screen: root.connected && root.remote-screen;
             has-self: root.cam-granted;
             peer-cam-on: root.peer-cam-on;
+            peer-speaker-off: root.peer-speaker-off;
             self-cam-on: root.cam-on && root.self-video.width > 0;
             pill-space: root.idle ? 20px : 96px;
             only-main: root.pip;
@@ -406,6 +415,11 @@ export component CallScreen inherits Rectangle {
             // Off the video while idle, like the web's .call.idle .pill; tucked lower and smaller over the stacked chat
             y: parent.height - self.height - (root.stacked && root.chat-open ? 10px : 20px) + (root.idle ? 24px : 0);
             button-size: root.stacked && root.chat-open ? 42px : root.width < 900px ? 46px : 48px;
+            sheet: root.touch || root.width < 900px;
+            area-x: root.absolute-position.x;
+            area-y: root.absolute-position.y;
+            area-width: root.width;
+            area-height: root.height;
             gap: root.width < 900px ? 6px : 10px;
             opacity: root.idle ? 0 : 1;
             visible: !root.pip;
@@ -413,6 +427,14 @@ export component CallScreen inherits Rectangle {
             hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;
             has-mic: root.has-mic;
+            mics: root.mics;
+            mic-id: root.mic-id;
+            pick-mic(id) => { root.pick-mic(id); }
+            speakers: root.speakers;
+            speaker-id: root.speaker-id;
+            speaker-off: root.speaker-off;
+            pick-speaker(id) => { root.pick-speaker(id); }
+            toggle-speaker => { root.toggle-speaker(); }
             cam-on: root.cam-on;
             cam-granted: root.cam-granted;
             cams: root.cams;
@@ -445,7 +467,6 @@ export component CallScreen inherits Rectangle {
             toggle-mic => { root.toggle-mic(); }
             toggle-cam => { root.toggle-cam(); }
             pick-cam(id) => { root.pick-cam(id); }
-            next-cam => { root.next-cam(); }
             toggle-portrait => { root.set-portrait(!root.portrait); }
             rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
             toggle-stats => { root.stats-open = !root.stats-open; }

@@ -177,21 +177,6 @@ a.download-item:focus-visible {
   line-height: 1.35;
 }
 
-.share {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.share p {
-  margin: 0;
-  font-size: 14px;
-}
-
-.share .copy-link {
-  width: 100%;
-}
-
 .devices {
   display: flex;
   flex-direction: column;

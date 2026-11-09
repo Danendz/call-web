@@ -10,21 +10,25 @@ import {
   RotateCw,
   ScreenShare,
   ScreenShareOff,
-  SwitchCamera,
   Video as VideoIcon,
   VideoOff,
+  VolumeOff,
 } from "lucide-react";
 import { useState } from "react";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
+import { Spinner } from "../ui/Spinner";
 import type { CallController, CallState } from "./controller";
+import { DeviceMenu, type MenuSection } from "./DeviceMenu";
+import type { DeviceOption } from "./media";
 import { MoreMenu, type MenuItem } from "./MoreMenu";
 
-/** Floating call controls. Compact drops speech-to-chat into the ⋯ menu to fit above the chat on phones. */
+type OpenMenu = "mic" | "cam" | "more" | null;
+
+/** Floating call controls. The mic and camera chevrons hold device choices; the rest goes in ⋯. */
 export function ControlPill({
   controller,
   state,
-  compact,
   chatOpen,
   unread,
   showStats,
@@ -39,7 +43,6 @@ export function ControlPill({
 }: {
   controller: CallController;
   state: CallState;
-  compact: boolean;
   chatOpen: boolean;
   unread: number;
   showStats: boolean;
@@ -53,11 +56,15 @@ export function ControlPill({
   onHover: (hovering: boolean) => void;
 }) {
   const t = useT();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const setMenu = (open: boolean) => {
-    setMenuOpen(open);
-    onMenuChange(open);
-  };
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const menu = (which: Exclude<OpenMenu, null>) => ({
+    open: openMenu === which,
+    onOpenChange: (open: boolean) => {
+      const next = open ? which : openMenu === which ? null : openMenu;
+      setOpenMenu(next);
+      onMenuChange(next !== null);
+    },
+  });
 
   const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
   const micGranted = state.micAccess === "granted";
@@ -65,27 +72,36 @@ export function ControlPill({
   const micOn = micGranted && state.micOn;
   const camOn = camGranted && state.camOn;
 
-  const transcribe: Omit<MenuItem, "icon"> = {
+  // While one opens, it gets the spinner and the check mark leaves the old one
+  const devices = (list: DeviceOption[], current: string | null, opening: string | null, onPick: (id: string) => void): MenuItem[] =>
+    list.map((d) => ({
+      id: d.id,
+      label: d.label,
+      icon: null,
+      checked: !opening && d.id === current,
+      busy: d.id === opening,
+      onSelect: () => onPick(d.id),
+    }));
+  const micSections: MenuSection[] = [
+    ...(micGranted
+      ? [{ title: t.microphone, items: devices(state.mics, state.micDeviceId, state.switching.audio, (id) => void controller.selectDevice("audio", id)) }]
+      : []),
+    {
+      title: t.speaker,
+      toggle: { label: t.muteSpeaker, icon: <VolumeOff size={14} />, on: state.speakerOff, onToggle: () => controller.toggleSpeaker() },
+      // Nothing picked plays on the default, which browsers list first
+      items: devices(state.speakers, state.speakerDeviceId ?? state.speakers[0]?.id ?? null, null, (id) => controller.selectSpeaker(id)),
+    },
+  ];
+  const speech: MenuItem = {
     label: t.speechToChat,
+    icon: <Captions size={18} />,
     checked: state.transcribeOn,
     disabled: !micGranted,
     onSelect: () => controller.toggleTranscribe(),
   };
-  // Two cameras is a phone's front and back: one flip item. More (a laptop with USB cameras) are listed to pick from.
-  const cameras: MenuItem[] =
-    !camGranted || state.cams.length < 2
-      ? []
-      : state.cams.length === 2
-        ? [{ label: t.switchCamera, icon: <SwitchCamera size={18} />, onSelect: () => controller.nextCamera() }]
-        : state.cams.map((cam) => ({
-            label: cam.label,
-            icon: <VideoIcon size={18} />,
-            checked: cam.id === state.camDeviceId,
-            onSelect: () => void controller.selectDevice("video", cam.id),
-          }));
+
   const items: MenuItem[] = [
-    ...cameras,
-    ...(compact ? [{ ...transcribe, icon: <Captions size={18} /> }] : []),
     ...(canShare
       ? [
           {
@@ -108,34 +124,46 @@ export function ControlPill({
     { label: t.stats, icon: <Activity size={18} />, checked: showStats, onSelect: onToggleStats },
   ];
 
+  const camButton = (
+    <IconButton
+      label={camOn ? t.camOff : t.camOn}
+      variant={camGranted && !camOn ? "off" : null}
+      disabled={!camGranted}
+      mark={state.switching.video ? <Spinner size={11} /> : null}
+      onClick={() => controller.toggleCam()}
+    >
+      {camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
+    </IconButton>
+  );
+
   return (
     <div className="pill" onPointerEnter={() => onHover(true)} onPointerLeave={() => onHover(false)}>
-      <IconButton
-        label={micOn ? t.micOff : t.micOn}
-        variant={micGranted && !micOn ? "off" : null}
-        disabled={!micGranted}
-        onClick={() => controller.toggleMic()}
-      >
-        {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-      </IconButton>
-      <IconButton
-        label={camOn ? t.camOff : t.camOn}
-        variant={camGranted && !camOn ? "off" : null}
-        disabled={!camGranted}
-        onClick={() => controller.toggleCam()}
-      >
-        {camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
-      </IconButton>
-      {!compact && (
+      <DeviceMenu label={t.micOptions} sections={micSections} footer={[speech]} {...menu("mic")}>
         <IconButton
-          label={transcribe.label}
-          variant={state.transcribeOn ? "active" : null}
-          pressed={state.transcribeOn}
-          disabled={transcribe.disabled}
-          onClick={transcribe.onSelect}
+          label={micOn ? t.micOff : t.micOn}
+          variant={micGranted && !micOn ? "off" : null}
+          disabled={!micGranted}
+          mark={
+            state.switching.audio ? <Spinner size={11} />
+            : state.speakerOff ? <VolumeOff size={11} />
+            : state.transcribeOn ? <Captions size={11} />
+            : null
+          }
+          onClick={() => controller.toggleMic()}
         >
-          <Captions size={20} />
+          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
         </IconButton>
+      </DeviceMenu>
+      {camGranted && state.cams.length > 1 ? (
+        <DeviceMenu
+          label={t.camOptions}
+          sections={[{ title: t.camera, items: devices(state.cams, state.camDeviceId, state.switching.video, (id) => void controller.selectDevice("video", id)) }]}
+          {...menu("cam")}
+        >
+          {camButton}
+        </DeviceMenu>
+      ) : (
+        camButton
       )}
       <IconButton
         label={t.chat}
@@ -146,7 +174,7 @@ export function ControlPill({
       >
         <MessageSquare size={20} />
       </IconButton>
-      <MoreMenu items={items} open={menuOpen} onOpenChange={setMenu} />
+      <MoreMenu items={items} {...menu("more")} />
       <IconButton label={t.hangUp} variant="danger" className="hang-up" onClick={() => controller.hangUp()}>
         <PhoneOff size={20} />
       </IconButton>

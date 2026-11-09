@@ -1,18 +1,19 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
-import { CopyLink } from "../components/copy-link.slint";
 import { LangSwitch } from "lang-switch.slint";
 import { DeviceRow, DeviceItem } from "device-row.slint";
 import { Preview } from "preview.slint";
 
-// The column beside the preview: the link to share, devices, language and the join button.
+// The column beside the preview: devices, language and the join button. The link to share shows once in the room.
 component SetupPanel {
-    in property <string> room-url;
     in property <string> lang;
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <string> speaker-label;
     in property <[DeviceItem]> cams;
     in property <string> cam-id;
     in property <string> cam-label;
@@ -21,6 +22,7 @@ component SetupPanel {
     in property <string> mic-status;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-speaker(string);
     callback pick-cam(string);
     callback join();
 
@@ -34,17 +36,6 @@ component SetupPanel {
             font-weight: 650;
         }
 
-        VerticalLayout {
-            spacing: 8px;
-            Text {
-                text: @tr("Share this link with the person you want to call");
-                color: Theme.muted;
-                font-size: Theme.font-size-small;
-                wrap: word-wrap;
-            }
-            CopyLink { url: root.room-url; }
-        }
-
         DeviceRow {
             icon: Icons.mic;
             name: @tr("Microphone");
@@ -53,6 +44,16 @@ component SetupPanel {
             selected-label: root.mic-label;
             status: root.mic-status;
             picked(id) => { root.pick-mic(id); }
+        }
+
+        // Not on a phone, where the call's sound follows its audio routes
+        if root.speakers.length > 0: DeviceRow {
+            icon: Icons.volume-2;
+            name: @tr("Speaker");
+            devices: root.speakers;
+            selected: root.speaker-id;
+            selected-label: root.speaker-label;
+            picked(id) => { root.pick-speaker(id); }
         }
 
         DeviceRow {
@@ -111,11 +112,13 @@ component SetupPanel {
 
 // Pre-join screen, like the web's Setup: preview and panel side by side, stacked when the window is narrow.
 export component SetupScreen inherits Rectangle {
-    in property <string> room-url;
     in property <string> lang;
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <string> speaker-label;
     in property <bool> mic-on;
     in property <float> mic-level;
     in property <string> mic-status;
@@ -131,6 +134,7 @@ export component SetupScreen inherits Rectangle {
     in property <bool> portrait;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-speaker(string);
     callback pick-cam(string);
     callback toggle-mic();
     callback toggle-cam();
@@ -176,11 +180,13 @@ export component SetupScreen inherits Rectangle {
             alignment: center;
             width: panel-width;
             SetupPanel {
-                room-url: root.room-url;
                 lang: root.lang;
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                speakers: root.speakers;
+                speaker-id: root.speaker-id;
+                speaker-label: root.speaker-label;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -189,6 +195,7 @@ export component SetupScreen inherits Rectangle {
                 cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-speaker(id) => { root.pick-speaker(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
@@ -197,18 +204,19 @@ export component SetupScreen inherits Rectangle {
 
     if !wide: VerticalLayout {
         alignment: center;
-        spacing: 24px;
+        spacing: 16px;
         padding: 24px;
         padding-top: 88px;
+        padding-bottom: 16px;
         opacity: shown ? 1 : 0;
         animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
         HorizontalLayout {
             alignment: center;
             Preview {
-                // Short enough that the panel still fits under it
+                // Whatever height the panel leaves, under the Back button's 88px and the layout's gaps
                 property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
-                height: min((root.width - 48px) / ar, max(0px, root.height - 610px));
+                height: min((root.width - 48px) / ar, max(0px, root.height - 88px - 16px - 16px - panel.preferred-height));
                 width: self.height * ar;
                 visible: self.height > 120px;
                 mic-on: root.mic-on;
@@ -227,13 +235,15 @@ export component SetupScreen inherits Rectangle {
         }
         HorizontalLayout {
             alignment: center;
-            SetupPanel {
+            panel := SetupPanel {
                 width: panel-width;
-                room-url: root.room-url;
                 lang: root.lang;
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                speakers: root.speakers;
+                speaker-id: root.speaker-id;
+                speaker-label: root.speaker-label;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -242,6 +252,7 @@ export component SetupScreen inherits Rectangle {
                 cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-speaker(id) => { root.pick-speaker(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }

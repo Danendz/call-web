@@ -25,7 +25,7 @@ interface PeerCallbacks {
  */
 export class PeerSession {
   readonly pc: RTCPeerConnection;
-  private readonly videoSender: RTCRtpSender;
+  private readonly senders: Record<"audio" | "video", RTCRtpSender>;
   private makingOffer = false;
   private ignoreOffer = false;
   private signalQueue: Promise<void> = Promise.resolve();
@@ -53,11 +53,11 @@ export class PeerSession {
     const pc = this.pc;
 
     for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
-    if (localStream.getAudioTracks().length === 0) pc.addTransceiver("audio", { direction: "sendrecv" });
-    // Always have a video sender, so screen share works even when joined without a camera.
-    this.videoSender =
-      pc.getSenders().find((s) => s.track?.kind === "video") ??
-      pc.addTransceiver("video", { direction: "sendrecv", streams: [localStream] }).sender;
+    // Always have both senders: screen share works without a camera, and a device picked later has one to go in.
+    const sender = (kind: "audio" | "video") =>
+      pc.getSenders().find((s) => s.track?.kind === kind) ??
+      pc.addTransceiver(kind, { direction: "sendrecv", streams: [localStream] }).sender;
+    this.senders = { audio: sender("audio"), video: sender("video") };
 
     pc.ontrack = ({ track, streams }) => {
       const id = streams[0]?.id ?? "";
@@ -129,9 +129,9 @@ export class PeerSession {
     return this.screenStream.id;
   }
 
-  /** Swaps in another camera without renegotiating. */
-  async setCameraTrack(track: MediaStreamTrack | null): Promise<void> {
-    await this.videoSender.replaceTrack(track);
+  /** Swaps in another mic or camera without renegotiating. */
+  async setTrack(kind: "audio" | "video", track: MediaStreamTrack | null): Promise<void> {
+    await this.senders[kind].replaceTrack(track);
     // The bitrate cap can follow; the new picture shouldn't wait for it
     this.tuneSenders().catch((err) => console.warn("tuning senders failed", err));
   }

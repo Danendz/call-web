@@ -1,13 +1,24 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton, IconButtonKind } from "../components/icon-button.slint";
-import { DeviceItem } from "../setup/device-row.slint";
+import { DeviceItem, DeviceName } from "../setup/device-row.slint";
 import { MoreMenu } from "more-menu.slint";
+import { DeviceMenu } from "device-menu.slint";
+import { MenuHead, MenuItem } from "menu-panel.slint";
 
-// Floating call controls at the bottom of the stage, like the web's ControlPill.
+// Floating call controls at the bottom of the stage, like the web's ControlPill. The mic and camera chevrons hold
+// device choices, and speech to chat; the rest goes in ⋯.
 export component ControlPill inherits Rectangle {
     in property <bool> mic-on;
     in property <bool> has-mic;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    callback pick-mic(string);
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <bool> speaker-off;
+    callback pick-speaker(string);
+    callback toggle-speaker();
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <[DeviceItem]> cams;
@@ -27,6 +38,12 @@ export component ControlPill inherits Rectangle {
     // Smaller on a phone, like the web's narrow .pill
     in property <length> button-size: 48px;
     in property <length> gap: 10px;
+    // Menus open as bottom sheets, over the call screen at this place in the window
+    in property <bool> sheet;
+    in property <length> area-x;
+    in property <length> area-y;
+    in property <length> area-width;
+    in property <length> area-height;
     callback screenshot();
     callback toggle-share();
     // The pointer is over the pill: the controls stay up meanwhile
@@ -36,7 +53,6 @@ export component ControlPill inherits Rectangle {
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
-    callback next-cam();
     callback toggle-portrait();
     callback rotate();
     callback toggle-stats();
@@ -52,9 +68,10 @@ export component ControlPill inherits Rectangle {
     drop-shadow-offset-y: 10px;
     drop-shadow-color: Theme.shadow;
 
-    hover := TouchArea {
-        changed has-hover => { root.hovered(self.has-hover); }
-    }
+    // The controls stay up while the pointer is on the pill or its menu is open
+    property <bool> busy: hover.has-hover || mic.open || cam.open || more.open;
+    changed busy => { root.hovered(self.busy); }
+    hover := TouchArea { }
 
     row := HorizontalLayout {
         padding: root.gap < 10px ? 4px : 8px;
@@ -63,29 +80,77 @@ export component ControlPill inherits Rectangle {
 
         HorizontalLayout {
             spacing: root.gap;
-            IconButton {
+            mic := DeviceMenu {
                 size: root.button-size;
                 icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
                 label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
                 kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
                 enabled: has-mic;
+                // A muted speaker matters more than speech to chat
+                mark: speaker-off ? Icons.volume-off : transcribe-on ? Icons.captions : @image-url("");
                 clicked => { root.toggle-mic(); }
+                menu-label: @tr("Microphone and speaker");
+                footer-text: @tr("Speech to chat");
+                footer-icon: Icons.captions;
+                footer-checked: root.transcribe-on;
+                footer-enabled: root.has-mic;
+                footer-activated => { root.toggle-transcribe(); }
+                sheet: root.sheet;
+                area-x: root.area-x;
+                area-y: root.area-y;
+                area-width: root.area-width;
+                area-height: root.area-height;
+
+                if root.has-mic: MenuHead { text: @tr("Microphone").to-uppercase(); }
+                for m in root.mics: MenuItem {
+                    text: DeviceName.of(m.label, @tr("Microphone"));
+                    checked: m.id == root.mic-id;
+                    activated => { root.pick-mic(m.id); }
+                }
+                MenuHead {
+                    text: @tr("Speaker").to-uppercase();
+                    toggle-text: @tr("Mute speaker");
+                    toggle-icon: Icons.volume-off;
+                    toggle-on: root.speaker-off;
+                    toggled => { root.toggle-speaker(); }
+                }
+                for s in root.speakers: MenuItem {
+                    text: DeviceName.of(s.label, @tr("Speaker"));
+                    checked: s.id == root.speaker-id;
+                    activated => { root.pick-speaker(s.id); }
+                }
+                // Where a phone plays the call, its mic coming along: "speaker", "earpiece", "bluetooth", "headset"; none
+                // on desktop
+                for id in root.outputs: MenuItem {
+                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone
+                        : id == "headset" ? Icons.headphones : Icons.volume-2;
+                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece")
+                        : id == "headset" ? @tr("Headset") : @tr("Speaker");
+                    checked: id == root.output;
+                    activated => { root.pick-output(id); }
+                }
             }
-            IconButton {
+            cam := DeviceMenu {
                 size: root.button-size;
                 icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
                 label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
                 kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
                 enabled: cam-granted;
                 clicked => { root.toggle-cam(); }
-            }
-            IconButton {
-                size: root.button-size;
-                icon: Icons.captions;
-                label: @tr("Speech to chat");
-                kind: transcribe-on ? IconButtonKind.active : IconButtonKind.normal;
-                enabled: has-mic;
-                clicked => { root.toggle-transcribe(); }
+                has-menu: root.cam-granted && root.cams.length > 1;
+                menu-label: @tr("Choose camera");
+                sheet: root.sheet;
+                area-x: root.area-x;
+                area-y: root.area-y;
+                area-width: root.area-width;
+                area-height: root.area-height;
+
+                MenuHead { text: @tr("Camera").to-uppercase(); }
+                for c in root.cams: MenuItem {
+                    text: DeviceName.of(c.label, @tr("Camera"));
+                    checked: c.id == root.cam-id;
+                    activated => { root.pick-cam(c.id); }
+                }
             }
             IconButton {
                 size: root.button-size;
@@ -95,10 +160,13 @@ export component ControlPill inherits Rectangle {
                 badge: chat-open ? 0 : unread;
                 clicked => { root.toggle-chat(); }
             }
-            MoreMenu {
+            more := MoreMenu {
                 size: root.button-size;
-                cams: root.cams;
-                cam-id: root.cam-id;
+                sheet: root.sheet;
+                area-x: root.area-x;
+                area-y: root.area-y;
+                area-width: root.area-width;
+                area-height: root.area-height;
                 cam-granted: root.cam-granted;
                 portrait: root.portrait;
                 can-rotate: root.can-rotate;
@@ -106,13 +174,8 @@ export component ControlPill inherits Rectangle {
                 can-screenshot: root.can-screenshot;
                 sharing: root.sharing;
                 can-share: root.can-share;
-                outputs: root.outputs;
-                output: root.output;
-                pick-output(id) => { root.pick-output(id); }
                 screenshot => { root.screenshot(); }
                 toggle-share => { root.toggle-share(); }
-                pick-cam(id) => { root.pick-cam(id); }
-                next-cam => { root.next-cam(); }
                 toggle-portrait => { root.toggle-portrait(); }
                 rotate => { root.rotate(); }
                 toggle-stats => { root.toggle-stats(); }
