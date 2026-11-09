@@ -19,14 +19,24 @@ export component CopyLink inherits Rectangle {
         padding-left: 14px;
         spacing: 4px;
 
-        field := TextInput {
-            text: root.url;
-            read-only: true;
-            single-line: true;
-            color: Theme.muted;
-            font-size: Theme.font-size-small;
-            vertical-alignment: center;
-            accessible-label: @tr("Room link");
+        // A long link would size the field to all of its text and push Copy off screen; it's cut off instead
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0;
+            preferred-width: 0;
+            clip: true;
+
+            field := TextInput {
+                width: 100%;
+                height: 100%;
+                text: root.url;
+                read-only: true;
+                single-line: true;
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                vertical-alignment: center;
+                accessible-label: @tr("Room link");
+            }
         }
 
         Button {
