@@ -5,6 +5,7 @@ import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
 import { StartScreen, ModelState } from "start/start.slint";
+import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
@@ -55,6 +56,10 @@ export component AppWindow inherits Window {
     in property <bool> peer-cam-on: true;
     in property <StatsView> stats;
     in property <bool> force-relay;
+    // "Connection stats" in Settings, remembered between launches
+    in property <bool> show-stats;
+    callback set-show-stats(bool);
+    property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
     in property <string> subtitle;
@@ -170,16 +175,13 @@ export component AppWindow inherits Window {
             background-guide: root.background-guide;
             open-background-settings => { root.open-background-settings(); }
             dismiss-background-guide => { root.dismiss-background-guide(); }
-            touch: root.touch;
             model-state: root.model-state;
             model-progress: root.model-progress;
             model-size: root.model-size;
-            on-device: root.on-device;
+            settings-open: root.settings-open;
+            open-settings => { root.settings-open = true; }
             speech-prompt: root.speech-prompt;
             download-model => { root.download-model(); }
-            cancel-model-download => { root.cancel-model-download(); }
-            delete-model => { root.delete-model(); }
-            set-on-device(on) => { root.set-on-device(on); }
             dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
         }
 
@@ -256,6 +258,8 @@ export component AppWindow inherits Window {
             self-frame-rotation: root.self-frame-rotation;
             stats: root.stats;
             force-relay: root.force-relay;
+            show-stats: root.show-stats;
+            open-settings => { root.settings-open = true; }
             chat: root.chat;
             others-count: root.others-count;
             subtitle: root.subtitle;
@@ -311,6 +315,27 @@ export component AppWindow inherits Window {
                 text: @tr("New room");
                 icon: Icons.plus;
                 clicked => { root.new-room(); }
+            }
+        }
+
+        // Over whichever screen opened it; a phase change (the call ending) leaves it open
+        if root.settings-open: SettingsSheet {
+            sheet: root.touch || root.width < 900px;
+            show-stats: root.show-stats;
+            lang: root.lang;
+            model-state: root.model-state;
+            model-progress: root.model-progress;
+            model-size: root.model-size;
+            on-device: root.on-device;
+            set-show-stats(on) => { root.set-show-stats(on); }
+            set-lang(lang) => { root.set-lang(lang); }
+            download-model => { root.download-model(); }
+            cancel-download => { root.cancel-model-download(); }
+            delete-model => { root.delete-model(); }
+            set-on-device(on) => { root.set-on-device(on); }
+            closed => {
+                root.settings-open = false;
+                keys.focus();
             }
         }
     }

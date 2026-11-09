@@ -8,7 +8,6 @@ export component MoreMenu inherits IconButton {
     in property <bool> cam-granted;
     in property <bool> portrait;
     in property <bool> can-rotate;
-    in property <bool> stats-open;
     in property <bool> can-screenshot;
     in property <bool> sharing;
     in property <bool> can-share;
@@ -16,7 +15,7 @@ export component MoreMenu inherits IconButton {
     callback toggle-share();
     callback toggle-portrait();
     callback rotate();
-    callback toggle-stats();
+    callback open-settings();
     // A bottom sheet instead of a popover, on a phone or a narrow window
     in property <bool> sheet;
     // The call screen's place in the window, which the menu's popup covers
@@ -71,10 +70,9 @@ export component MoreMenu inherits IconButton {
                 activated => { panel.dismiss(); root.screenshot(); }
             }
             MenuItem {
-                icon: Icons.activity;
-                text: @tr("Connection stats");
-                checked: root.stats-open;
-                activated => { panel.dismiss(); root.toggle-stats(); }
+                icon: Icons.settings;
+                text: @tr("Settings");
+                activated => { panel.dismiss(); root.open-settings(); }
             }
         }
     }

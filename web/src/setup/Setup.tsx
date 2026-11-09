@@ -1,9 +1,10 @@
-import { Languages, Mic, MicOff, RectangleHorizontal, RectangleVertical, Video as VideoIcon, VideoOff, Volume2 } from "lucide-react";
+import { Languages, Mic, MicOff, RectangleHorizontal, RectangleVertical, Settings, Video as VideoIcon, VideoOff, Volume2 } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { isRearCamera } from "../call/media";
+import { SettingsSheet } from "../settings/SettingsSheet";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
@@ -21,6 +22,7 @@ export function Setup({ controller, state }: { controller: CallController; state
 
   const portrait = state.orientation === "portrait";
   const [aspect, setAspect] = useState<number | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Until the camera reports its frame size, assume it gives the shape we asked for
   useEffect(() => setAspect(null), [state.orientation]);
 
@@ -76,7 +78,12 @@ export function Setup({ controller, state }: { controller: CallController; state
       <div className="setup-panel">
         <div className="panel-head">
           <h1>{t.readyToJoin}</h1>
-          <DownloadApp />
+          <div className="panel-actions">
+            <DownloadApp />
+            <IconButton label={t.settings} onClick={() => setSettingsOpen(true)}>
+              <Settings size={18} />
+            </IconButton>
+          </div>
         </div>
 
         <div className="devices">
@@ -134,6 +141,8 @@ export function Setup({ controller, state }: { controller: CallController; state
           {joinLabel}
         </button>
       </div>
+
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} lang={state.lang} onLang={(l) => controller.setLang(l)} />
     </div>
   );
 }

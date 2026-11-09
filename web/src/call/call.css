@@ -595,55 +595,6 @@ button.menu-item:active:not(:disabled) {
   color: var(--accent-hover);
 }
 
-/* ---- bottom sheet: the pill's menus on narrow screens (SHEET_QUERY in useMediaQuery.ts) ---- */
-
-.sheet-dim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-/* vaul moves it: no transform or transition here */
-.sheet {
-  position: fixed;
-  z-index: 51;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 520px;
-  max-height: 80vh;
-  max-height: min(80dvh, 640px);
-  margin: 0 auto;
-  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
-  border: 1px solid var(--glass-border);
-  border-bottom: none;
-  border-radius: 20px 20px 0 0;
-  background: var(--glass-strong);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--shadow);
-  outline: none;
-}
-
-.sheet-grip {
-  display: flex;
-  flex: none;
-  justify-content: center;
-  padding: 10px 0 8px;
-}
-
-.sheet-grip span {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--muted);
-  opacity: 0.5;
-}
-
 /* ---- narrow screens ---- */
 
 @media (max-width: 899px) {

@@ -2,12 +2,14 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { LangSwitch } from "../setup/lang-switch.slint";
 
 // Where the on-device speech model stands, as the engine's ModelStatus
 export enum ModelState { missing, downloading, ready, failed }
 
 // An on/off switch, like the OS's own
 component Switch inherits Rectangle {
+    in property <string> label;
     in property <bool> checked;
     in property <bool> enabled: true;
     callback toggled();
@@ -19,6 +21,7 @@ component Switch inherits Rectangle {
     opacity: enabled ? 1 : 0.38;
     animate background { duration: Theme.fast; easing: Theme.ease; }
     accessible-role: switch;
+    accessible-label: label;
     accessible-checked: checked;
     accessible-enabled: enabled;
     accessible-action-default => { if (enabled) { root.toggled(); } }
@@ -65,75 +68,134 @@ component SettingRow inherits HorizontalLayout {
     @children
 }
 
-// The app's settings: a page of its own on a phone, a sheet over the start screen on a computer. Laid out like the
-// OS's settings (a heading per section, grouped rows) in the app's own colors.
-export component SettingsScreen inherits Rectangle {
-    in property <bool> touch;
+// A group of rows, like the OS's settings
+component Group inherits Rectangle {
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface-2;
+    VerticalLayout {
+        @children
+    }
+}
+
+// A section's heading over its group
+component Heading inherits Text {
+    color: Theme.muted;
+    font-size: Theme.font-size-small;
+    font-weight: 600;
+}
+
+// The app's settings over whatever screen is up, like the web's SettingsSheet: from the bottom on a phone or a
+// narrow window, from the right as a side panel otherwise. A tap on the dim, Esc or Back close it.
+export component SettingsSheet inherits Rectangle {
+    // From the bottom instead of the right
+    in property <bool> sheet;
+    in property <bool> show-stats;
+    in property <string> lang;
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
+    callback set-show-stats(bool);
+    callback set-lang(string);
     callback download-model();
     callback cancel-download();
     callback delete-model();
     callback set-on-device(bool);
-    callback close();
-    property <bool> shown: false;
-    init => {
-        shown = true;
-        keys.focus();
+    // The panel is gone: the owner removes it
+    callback closed();
+
+    property <bool> shown;
+    property <bool> closing;
+    init => { keys.focus(); }
+    // Opens a tick after the first frame: set in init, there would be nothing to animate from
+    enter-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            self.running = false;
+            root.shown = true;
+        }
     }
 
-    background: touch ? Theme.bg : shown ? #00000099 : #00000000;
-    animate background { duration: Theme.med; easing: Theme.ease; }
+    // Slides the panel away, then closes
+    public function dismiss() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        shown = false;
+        exit-timer.running = true;
+    }
 
-    // Back on a phone, Escape on a computer
+    exit-timer := Timer {
+        interval: Theme.sheet;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.closed();
+        }
+    }
+
     keys := FocusScope {
+        width: 0;
+        height: 0;
         key-pressed(event) => {
             if (event.text == Key.Escape || event.text == Key.Back) {
-                root.close();
+                root.dismiss();
                 return accept;
             }
             reject
         }
     }
 
-    // Clicking outside the sheet closes it
-    TouchArea {
-        clicked => { if (!root.touch) { root.close(); } }
+    Rectangle {
+        background: Theme.sheet-dim;
+        opacity: root.shown ? 1 : 0;
+        animate opacity { duration: Theme.sheet; easing: Theme.ease-sheet; }
+        TouchArea {
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.dismiss();
+                }
+            }
+        }
     }
 
-    sheet := Rectangle {
-        width: touch ? parent.width : min(520px, parent.width - 32px);
-        height: touch ? parent.height : content.preferred-height;
-        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
-        opacity: shown ? 1 : 0;
-        border-radius: touch ? 0 : Theme.radius-lg;
-        border-width: touch ? 0 : 1px;
+    panel := Rectangle {
+        width: root.sheet ? min(root.width, 520px) : min(root.width, 380px);
+        // Tall enough for everything, up to most of the window; the rows scroll past that
+        height: root.sheet ? min(column.preferred-height, root.height * 0.9) : root.height;
+        x: root.sheet ? (root.width - self.width) / 2 : root.shown ? root.width - self.width : root.width;
+        y: !root.sheet ? 0 : root.shown ? root.height - self.height : root.height;
+        animate x, y { duration: Theme.sheet; easing: Theme.ease-sheet; }
+        border-radius: 0;
+        border-top-left-radius: Theme.radius-lg;
+        border-top-right-radius: root.sheet ? Theme.radius-lg : 0;
+        border-bottom-left-radius: root.sheet ? 0 : Theme.radius-lg;
+        border-width: 1px;
         border-color: Theme.glass-border;
-        background: touch ? Theme.bg : Theme.surface;
-        drop-shadow-blur: touch ? 0 : 30px;
-        drop-shadow-offset-y: 10px;
+        background: Theme.surface;
+        drop-shadow-blur: 30px;
         drop-shadow-color: Theme.shadow;
-        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+        accessible-role: AccessibleRole.groupbox;
+        accessible-label: @tr("Settings");
 
-        // Swallows clicks so they don't reach the backdrop
+        // Under the sheet's bottom edge, so its spring shows no gap
+        if root.sheet: Rectangle {
+            y: parent.height - 1px;
+            height: 80px;
+            background: Theme.surface;
+        }
+
+        // Swallows presses that miss a control, so they don't reach the dim
         TouchArea { }
 
-        content := VerticalLayout {
-            alignment: start;
-            padding: touch ? 8px : 22px;
-            spacing: 18px;
-
-            // A phone's page has a back arrow before its title; a sheet has a close button after it
+        column := VerticalLayout {
             HorizontalLayout {
+                padding: 16px;
+                padding-bottom: 8px;
                 spacing: 8px;
-                if root.touch: IconButton {
-                    icon: Icons.arrow-left;
-                    label: @tr("Back");
-                    transparent: true;
-                    clicked => { root.close(); }
-                }
                 Text {
                     text: @tr("Settings");
                     color: Theme.text;
@@ -142,33 +204,59 @@ export component SettingsScreen inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
-                if !root.touch: IconButton {
+                IconButton {
                     icon: Icons.x;
                     label: @tr("Close");
                     size: 36px;
                     transparent: true;
-                    clicked => { root.close(); }
+                    clicked => { root.dismiss(); }
                 }
             }
 
-            VerticalLayout {
-                padding-left: touch ? 8px : 0;
-                padding-right: touch ? 8px : 0;
-                spacing: 8px;
+            Flickable {
+                preferred-height: content.preferred-height;
+                content-height: content.preferred-height;
+                vertical-stretch: 1;
 
-                Text {
-                    text: @tr("Speech to chat");
-                    color: Theme.muted;
-                    font-size: Theme.font-size-small;
-                    font-weight: 600;
-                }
+                content := VerticalLayout {
+                    width: parent.width;
+                    alignment: start;
+                    padding: 16px;
+                    padding-top: 8px;
+                    spacing: 8px;
 
-                Rectangle {
-                    border-radius: Theme.radius;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    background: Theme.surface-2;
-                    VerticalLayout {
+                    Group {
+                        SettingRow {
+                            title: @tr("Connection stats");
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    label: @tr("Connection stats");
+                                    checked: root.show-stats;
+                                    toggled => { root.set-show-stats(!root.show-stats); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        SettingRow {
+                            title: @tr("I speak");
+                            VerticalLayout {
+                                alignment: center;
+                                LangSwitch {
+                                    lang: root.lang;
+                                    picked(lang) => { root.set-lang(lang); }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 10px; }
+                    Heading { text: @tr("Speech to chat"); }
+
+                    Group {
                         SettingRow {
                             title: @tr("On-device recognition");
                             detail: root.model-state == ModelState.ready ? @tr("Downloaded · {}", root.model-size)
@@ -233,19 +321,20 @@ export component SettingsScreen inherits Rectangle {
                             VerticalLayout {
                                 alignment: center;
                                 Switch {
+                                    label: @tr("Recognize on this device");
                                     checked: root.on-device;
                                     toggled => { root.set-on-device(!root.on-device); }
                                 }
                             }
                         }
                     }
-                }
 
-                Text {
-                    text: @tr("Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device.");
-                    color: Theme.muted;
-                    font-size: Theme.font-size-small;
-                    wrap: word-wrap;
+                    Text {
+                        text: @tr("Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device.");
+                        color: Theme.muted;
+                        font-size: Theme.font-size-small;
+                        wrap: word-wrap;
+                    }
                 }
             }
         }

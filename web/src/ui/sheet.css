@@ -1,0 +1,69 @@
+/* A panel over a dimmed screen: from the bottom (narrow screens, SHEET_QUERY in useMediaQuery.ts) or the right */
+
+.sheet-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* vaul moves it: no transform or transition here */
+.sheet {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  outline: none;
+}
+
+.sheet.bottom {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  max-height: min(80dvh, 640px);
+  margin: 0 auto;
+  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+}
+
+.sheet.right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 100vw);
+  padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
+  border-right: none;
+  border-radius: 20px 0 0 20px;
+}
+
+.sheet-grip {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 10px 0 8px;
+}
+
+.sheet-grip span {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0.5;
+}
+
+.sheet-title {
+  flex: none;
+  margin: 0;
+  padding: 4px 12px 12px;
+  font-size: 18px;
+  font-weight: 600;
+}

@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from "react";
-import { Sheet } from "./Sheet";
-import { SHEET_QUERY, useMediaQuery } from "./useMediaQuery";
+import { Sheet } from "../ui/Sheet";
+import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import { useDismiss } from "./useDismiss";
 
 /**

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChatPanel } from "../chat/ChatPanel";
+import { SettingsSheet } from "../settings/SettingsSheet";
+import { useShowStats } from "../settings/stats";
 import { CopyLink } from "../ui/CopyLink";
 import { useT, type Strings } from "../ui/i18n";
 import "./call.css";
@@ -15,13 +17,14 @@ import { StatsOverlay } from "./StatsOverlay";
 import { Subtitle } from "./Subtitle";
 import { useAutoHide } from "./useAutoHide";
 import { useCorners } from "./useDragCorner";
-import { STACKED_QUERY, useMediaQuery } from "./useMediaQuery";
+import { STACKED_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import { useVisualViewport } from "./useVisualViewport";
 
 export function CallView({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
   const t = useT();
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
-  const [showStats, setShowStats] = useState(state.forceRelay);
+  const showStats = useShowStats();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   // The feed the user tapped onto the stage; null for the default (their screen, else them)
   const [picked, setPicked] = useState<FeedKey | null>(null);
@@ -54,7 +57,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const connected = state.phase === "in-call" && !!state.remoteStream;
   const remoteScreen = connected ? state.remoteScreen : null;
   const compact = stacked && chatOpen;
-  const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !hoveringPill && !compact);
+  const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !settingsOpen && !hoveringPill && !compact);
 
   const onPointerDown = (e: React.PointerEvent) => {
     // On touch, tapping the bare video toggles the controls, like in phone call apps
@@ -155,7 +158,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         </div>
         <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
         <StatsOverlay
-          open={showStats}
+          // While relay is forced the stats stay up: their switch is the way back
+          open={showStats || state.forceRelay}
           stats={state.stats}
           tryingDirect={state.tryingDirect}
           forceRelay={state.forceRelay}
@@ -167,13 +171,12 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           state={state}
           chatOpen={chatOpen}
           unread={unread}
-          showStats={showStats}
           canRotate={connected}
           onRotate={() => setRemoteRotation((r) => (r + 90) % 360)}
           canScreenshot={canScreenshot}
           onScreenshot={takeScreenshot}
           onToggleChat={() => setChatOpen((v) => !v)}
-          onToggleStats={() => setShowStats((v) => !v)}
+          onOpenSettings={() => setSettingsOpen(true)}
           onMenuChange={setMenuOpen}
           onHover={setHoveringPill}
         />
@@ -188,6 +191,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         onSend={(t) => controller.sendChat(t)}
         onClose={() => setChatOpen(false)}
       />
+
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} lang={state.lang} onLang={(l) => controller.setLang(l)} />
     </div>
   );
 }
