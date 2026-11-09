@@ -1,7 +1,8 @@
 //! A picture of the call, like the web's `screenshot.ts`: the stage's video at its full resolution, your tile in its
-//! corner, and a small date stamp, saved as a JPEG in `Pictures/Call Danya/`. Drawn with Skia, which the renderer
-//! already links, from the frames the window is showing.
+//! corner, and a small date stamp, saved as a JPEG in `Pictures/Call Danya/` (on Android through the gallery, which is
+//! the only way in there). Drawn with Skia, which the renderer already links, from the frames the window is showing.
 
+#[cfg(not(target_os = "android"))]
 use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Local};
@@ -28,18 +29,38 @@ pub struct Picture {
     pub lang: Lang,
 }
 
-/// Draws and saves; returns where it went. Slow enough (encoding a JPEG) to keep off the UI thread.
-pub fn save(picture: &Picture) -> Result<PathBuf, String> {
+/// Draws and saves; returns where it went: a file path, or on Android the gallery's URI. Slow enough (encoding a
+/// JPEG) to keep off the UI thread.
+pub fn save(picture: &Picture) -> Result<String, String> {
     let jpeg = draw(picture).ok_or("couldn't draw the picture")?;
+    store(&Local::now().format("call-%Y%m%d-%H%M").to_string(), jpeg.as_bytes())
+}
+
+#[cfg(not(target_os = "android"))]
+fn store(stem: &str, jpeg: &[u8]) -> Result<String, String> {
     let dir = pictures_dir().ok_or("no Pictures folder")?.join("Call Danya");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = free_name(&dir, &Local::now().format("call-%Y%m%d-%H%M").to_string());
-    std::fs::write(&path, jpeg.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(path)
+    let path = free_name(&dir, stem);
+    std::fs::write(&path, jpeg).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The gallery numbers a name that's taken by itself.
+#[cfg(target_os = "android")]
+fn store(stem: &str, jpeg: &[u8]) -> Result<String, String> {
+    crate::android::save_picture(stem, jpeg).ok_or_else(|| "the gallery didn't take it".to_owned())
+}
+
+/// Opens the picture in the phone's photo viewer.
+#[cfg(target_os = "android")]
+pub fn show(saved: &str) {
+    crate::android::open_picture(saved);
 }
 
 /// Shows the picture selected in Finder or Explorer.
-pub fn show_in_folder(path: &Path) {
+#[cfg(not(target_os = "android"))]
+pub fn show(saved: &str) {
+    let path = Path::new(saved);
     let opened = if cfg!(target_os = "macos") {
         std::process::Command::new("open").arg("-R").arg(path).spawn()
     } else if cfg!(target_os = "windows") {
@@ -52,12 +73,14 @@ pub fn show_in_folder(path: &Path) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn pictures_dir() -> Option<PathBuf> {
     let home = std::env::var_os(if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" })?;
     Some(PathBuf::from(home).join("Pictures"))
 }
 
 /// call-20261107-1554.jpg, then -2, -3… when two land in the same minute.
+#[cfg(not(target_os = "android"))]
 fn free_name(dir: &Path, stem: &str) -> PathBuf {
     let mut path = dir.join(format!("{stem}.jpg"));
     let mut n = 2;
