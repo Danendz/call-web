@@ -69,11 +69,12 @@ jobs:
         with: { workspaces: native, shared-key: check }
       - run: cargo fmt --check
       # The Rust cache keeps sherpa-onnx-sys's build-script result and its folders, but not the library files in them;
-      # the build script only checks the folder, so remove it to make it download again
+      # the build script only checks the folder, so remove it to make it download again. `cargo clean -p` cleans only
+      # the dev profile unless given `--release`
       - shell: bash
         run: |
           find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . ||
-            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; }
+            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; cargo clean -p sherpa-onnx-sys --release; }
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
@@ -107,7 +108,7 @@ jobs:
       - shell: bash
         run: |
           find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . ||
-            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; }
+            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; cargo clean -p sherpa-onnx-sys --release; }
       - run: cargo build --release --locked
       - if: runner.os == 'macOS'
         run: packaging/macos/bundle.sh
@@ -187,7 +188,7 @@ jobs:
       - shell: bash
         run: |
           find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . ||
-            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; }
+            { rm -rf target/sherpa-onnx-prebuilt; cargo clean -p sherpa-onnx-sys; cargo clean -p sherpa-onnx-sys --release; }
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 8.0.x }
       # Same version as the velopack crate in app/Cargo.toml
