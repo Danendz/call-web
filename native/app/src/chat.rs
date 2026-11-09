@@ -107,10 +107,8 @@ fn has_other_script(text: &str, lang: Lang) -> bool {
         return han > 0;
     }
     // All-caps words are abbreviations like OK or USB, which a Chinese reader knows
-    let words = text
-        .split(|c: char| !c.is_ascii_alphabetic())
-        .filter(|w| w.chars().any(|c| c.is_ascii_lowercase()))
-        .count();
+    let words =
+        text.split(|c: char| !c.is_ascii_alphabetic()).filter(|w| w.chars().any(|c| c.is_ascii_lowercase())).count();
     words > 0 && words as f64 / (words + han) as f64 >= 0.3
 }
 
@@ -168,6 +166,9 @@ mod tests {
     #[test]
     fn a_stray_abbreviation_in_chinese_stays_as_written() {
         assert_eq!(readable(&message("them", "OK 好的", "zh"), "me", Lang::Zh), ("OK 好的", None));
-        assert_eq!(readable(&message("them", "我今天用了 Zoom 开会", "zh"), "me", Lang::Zh), ("我今天用了 Zoom 开会", None));
+        assert_eq!(
+            readable(&message("them", "我今天用了 Zoom 开会", "zh"), "me", Lang::Zh),
+            ("我今天用了 Zoom 开会", None)
+        );
     }
 }
