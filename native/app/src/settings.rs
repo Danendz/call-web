@@ -32,6 +32,9 @@ pub struct Settings {
     /// The first launch's question about downloading the speech model was answered
     #[serde(default)]
     pub speech_prompt_seen: bool,
+    /// "Connection stats" in Settings: the overlay shows in every call
+    #[serde(default)]
+    pub show_stats: bool,
 }
 
 fn yes() -> bool {
@@ -55,6 +58,7 @@ impl Default for Settings {
             background_guide_seen: false,
             on_device_speech: true,
             speech_prompt_seen: false,
+            show_stats: false,
         }
     }
 }

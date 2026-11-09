@@ -1,5 +1,4 @@
 import {
-  Activity,
   Camera,
   Captions,
   MessageSquare,
@@ -10,6 +9,7 @@ import {
   RotateCw,
   ScreenShare,
   ScreenShareOff,
+  Settings,
   Video as VideoIcon,
   VideoOff,
   VolumeOff,
@@ -31,13 +31,12 @@ export function ControlPill({
   state,
   chatOpen,
   unread,
-  showStats,
   canRotate,
   onRotate,
   canScreenshot,
   onScreenshot,
   onToggleChat,
-  onToggleStats,
+  onOpenSettings,
   onMenuChange,
   onHover,
 }: {
@@ -45,13 +44,12 @@ export function ControlPill({
   state: CallState;
   chatOpen: boolean;
   unread: number;
-  showStats: boolean;
   canRotate: boolean;
   onRotate: () => void;
   canScreenshot: boolean;
   onScreenshot: () => void;
   onToggleChat: () => void;
-  onToggleStats: () => void;
+  onOpenSettings: () => void;
   onMenuChange: (open: boolean) => void;
   onHover: (hovering: boolean) => void;
 }) {
@@ -121,7 +119,7 @@ export function ControlPill({
     },
     { label: t.rotateVideo, icon: <RotateCw size={18} />, disabled: !canRotate, onSelect: onRotate },
     { label: t.screenshot, icon: <Camera size={18} />, disabled: !canScreenshot, onSelect: onScreenshot },
-    { label: t.stats, icon: <Activity size={18} />, checked: showStats, onSelect: onToggleStats },
+    { label: t.settings, icon: <Settings size={18} />, onSelect: onOpenSettings },
   ];
 
   const camButton = (

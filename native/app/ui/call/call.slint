@@ -54,6 +54,8 @@ export component CallScreen inherits Rectangle {
     in property <int> self-frame-rotation;
     in property <StatsView> stats;
     in property <bool> force-relay;
+    // "Connection stats" in Settings
+    in property <bool> show-stats;
     in property <[ChatRow]> chat;
     // The other person's messages so far; what the chat hasn't shown yet is the unread badge
     in property <int> others-count;
@@ -92,10 +94,10 @@ export component CallScreen inherits Rectangle {
     callback corner-moved(string, string);
     callback show-shot();
     callback hang-up();
+    callback open-settings();
 
     // Screen-only choices, reset for each new person like the web's
     property <int> user-rotation: 0;
-    property <bool> stats-open: force-relay;
     changed connected => { if (!connected) { user-rotation = 0; } }
 
     // Open from the start on a wide window, like the web's (min-width: 900px)
@@ -393,7 +395,8 @@ export component CallScreen inherits Rectangle {
             // Clear of the pill below it
             limit-width: parent.width - 28px;
             limit-height: parent.height - self.y - 100px;
-            open: root.stats-open && root.connected && !root.pip;
+            // While relay is forced the stats stay up: their switch is the way back
+            open: (root.show-stats || root.force-relay) && root.connected && !root.pip;
             stats: root.stats;
             force-relay: root.force-relay;
             set-force-relay(relay) => { root.set-force-relay(relay); }
@@ -430,7 +433,6 @@ export component CallScreen inherits Rectangle {
             cam-id: root.cam-id;
             portrait: root.portrait;
             can-rotate: root.connected;
-            stats-open: root.stats-open;
             can-screenshot: root.connected && (feeds.main-feed == "screen" ? root.screen-video.width > 0
                 : feeds.main-feed == "peer" ? root.peer-cam-on && root.peer-video.width > 0
                 : root.cam-on && root.self-video.width > 0);
@@ -458,7 +460,7 @@ export component CallScreen inherits Rectangle {
             pick-cam(id) => { root.pick-cam(id); }
             toggle-portrait => { root.set-portrait(!root.portrait); }
             rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
-            toggle-stats => { root.stats-open = !root.stats-open; }
+            open-settings => { root.open-settings(); }
             hang-up => { root.hang-up(); }
         }
     }

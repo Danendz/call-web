@@ -3,7 +3,7 @@ import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
-import { SettingsScreen, ModelState } from "settings.slint";
+import { ModelState } from "../settings/settings.slint";
 import { SpeechPrompt } from "speech-prompt.slint";
 
 export { ModelState }
@@ -21,20 +21,17 @@ export component StartScreen inherits Rectangle {
     in property <string> background-guide;
     callback open-background-settings();
     callback dismiss-background-guide();
-    in property <bool> touch;
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
-    in property <bool> on-device;
+    // Settings are open over this screen
+    in property <bool> settings-open;
+    callback open-settings();
     // The first launch's question about downloading the speech model
     in property <bool> speech-prompt;
     callback download-model();
-    callback cancel-model-download();
-    callback delete-model();
-    callback set-on-device(bool);
     callback dismiss-speech-prompt();
     property <bool> asking: false;
-    property <bool> settings-open: false;
     property <bool> shown: false;
     init => { shown = true; }
 
@@ -171,7 +168,7 @@ export component StartScreen inherits Rectangle {
         icon: Icons.settings;
         label: @tr("Settings");
         transparent: true;
-        clicked => { settings-open = true; }
+        clicked => { root.open-settings(); }
     }
 
     if asking: JoinDialog {
@@ -179,20 +176,7 @@ export component StartScreen inherits Rectangle {
         close => { asking = false; }
     }
 
-    if settings-open: SettingsScreen {
-        touch: root.touch;
-        model-state: root.model-state;
-        model-progress: root.model-progress;
-        model-size: root.model-size;
-        on-device: root.on-device;
-        download-model => { root.download-model(); }
-        cancel-download => { root.cancel-model-download(); }
-        delete-model => { root.delete-model(); }
-        set-on-device(on) => { root.set-on-device(on); }
-        close => { settings-open = false; }
-    }
-
-    if root.speech-prompt && !settings-open: SpeechPrompt {
+    if root.speech-prompt && !root.settings-open: SpeechPrompt {
         model-size: root.model-size;
         download => {
             root.download-model();

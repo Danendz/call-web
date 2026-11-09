@@ -25,7 +25,6 @@ export component ControlPill inherits Rectangle {
     in property <string> cam-id;
     in property <bool> portrait;
     in property <bool> can-rotate;
-    in property <bool> stats-open;
     in property <bool> transcribe-on;
     in property <bool> chat-open;
     in property <int> unread;
@@ -55,7 +54,7 @@ export component ControlPill inherits Rectangle {
     callback pick-cam(string);
     callback toggle-portrait();
     callback rotate();
-    callback toggle-stats();
+    callback open-settings();
     callback hang-up();
 
     width: row.preferred-width;
@@ -170,7 +169,6 @@ export component ControlPill inherits Rectangle {
                 cam-granted: root.cam-granted;
                 portrait: root.portrait;
                 can-rotate: root.can-rotate;
-                stats-open: root.stats-open;
                 can-screenshot: root.can-screenshot;
                 sharing: root.sharing;
                 can-share: root.can-share;
@@ -178,7 +176,7 @@ export component ControlPill inherits Rectangle {
                 toggle-share => { root.toggle-share(); }
                 toggle-portrait => { root.toggle-portrait(); }
                 rotate => { root.rotate(); }
-                toggle-stats => { root.toggle-stats(); }
+                open-settings => { root.open-settings(); }
             }
         }
         IconButton {

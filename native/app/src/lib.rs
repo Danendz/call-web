@@ -305,6 +305,19 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetOnDevice(on));
         }
     });
+    ui.set_show_stats(settings.borrow().show_stats);
+    ui.on_set_show_stats({
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |on| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_show_stats(on);
+            }
+            let mut settings = settings.borrow_mut();
+            settings.show_stats = on;
+            settings.save();
+        }
+    });
     ui.on_set_portrait({
         let engine = engine.clone();
         let settings = settings.clone();
