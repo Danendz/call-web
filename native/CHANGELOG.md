@@ -3,6 +3,30 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.2.2 — 2026-11-09
+
+Clearer voice, and switching devices during a call.
+
+### New
+
+- Noise suppression removes fans, keyboard and other background noise from your voice; switch it off in Settings (off by default on Android)
+- Pick the mic, camera and speaker during a call, and mute the speaker
+- Android: the call plays through a wired or USB headset when one is plugged in
+- Settings open as a sheet, with the connection stats in it
+- The ⋯ menu opens as a bottom sheet on narrow windows
+
+### Changed
+
+- Voice holds up better on a lossy connection: each audio packet also carries the one before it
+- The room link shows only once you're in the room
+
+### Fixed
+
+- Screenshots on Android are saved to the gallery
+- Messages mixing Chinese and English are translated
+- The copy button stays visible when the room link is long
+- The chosen mic and camera are the ones actually used
+
 ## 0.2.1 — 2026-11-08
 
 Chinese text on more Android phones.
