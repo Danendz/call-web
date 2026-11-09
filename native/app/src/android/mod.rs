@@ -23,7 +23,7 @@ const ACTION_HANG_UP: jint = 2;
 const ACTION_INTERRUPTED: jint = 3;
 const ACTION_RESUMED: jint = 4;
 /// Indexed by Shim.kt's route numbers
-const ROUTES: [&str; 3] = ["speaker", "earpiece", "bluetooth"];
+const ROUTES: [&str; 4] = ["speaker", "earpiece", "bluetooth", "headset"];
 
 /// What Rust needs to call into Java from its own threads: Shim's class must be found on the main thread, whose
 /// class loader knows the app's classes.

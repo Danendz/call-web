@@ -18,6 +18,7 @@ When a feature here is finished, mark it `[x]` in the same PR that ships it.
 - [x] Rotate the other person's video, switch camera
 - [x] Call timer and screenshot with date stamp
 - [x] Screen share alongside the camera, draggable tiles
+- [x] Switch mic, camera and speaker during a call from the control pill (bottom sheets on narrow screens), mute the speaker with the other person seeing it, speech to chat in the mic menu (Web + Native; Android picks the route, a headset bringing its own mic)
 
 ## Phase 1 — Call quality (Web + Native)
 

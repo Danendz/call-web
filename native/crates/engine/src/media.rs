@@ -49,8 +49,9 @@ impl Media {
         &self.factory
     }
 
+    /// None on Android, where the mic follows the call's audio route (a headset brings its own; `Shim.kt`).
     pub fn mics(&self) -> Vec<Device> {
-        if !self.platform_audio {
+        if !self.platform_audio || cfg!(target_os = "android") {
             return vec![];
         }
         (0..u16::try_from(self.factory.recording_devices()).unwrap_or(0))

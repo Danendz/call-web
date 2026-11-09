@@ -35,6 +35,8 @@ object Shim {
     private const val ROUTE_SPEAKER = 0
     private const val ROUTE_EARPIECE = 1
     private const val ROUTE_BLUETOOTH = 2
+    // A wired or USB headset; its mic comes with it, as Bluetooth's does
+    private const val ROUTE_HEADSET = 3
 
     private val main = Handler(Looper.getMainLooper())
     var inCall = false
@@ -233,12 +235,17 @@ object Shim {
         var bits = 1 shl ROUTE_SPEAKER
         if (outputs.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }) bits = bits or (1 shl ROUTE_EARPIECE)
         if (outputs.any { isBluetooth(it.type) }) bits = bits or (1 shl ROUTE_BLUETOOTH)
+        if (outputs.any { isHeadset(it.type) }) bits = bits or (1 shl ROUTE_HEADSET)
         return bits
     }
 
     private fun isBluetooth(type: Int) =
         type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+
+    private fun isHeadset(type: Int) =
+        type == AudioDeviceInfo.TYPE_WIRED_HEADSET || type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+            type == AudioDeviceInfo.TYPE_USB_HEADSET
 
     // A headset that comes along takes the call, as on a phone call, unless a route was picked; the speaker takes it
     // back when it goes
@@ -248,6 +255,7 @@ object Shim {
         val next = when {
             picked && bits and (1 shl route) != 0 -> route
             bits and (1 shl ROUTE_BLUETOOTH) != 0 -> ROUTE_BLUETOOTH
+            bits and (1 shl ROUTE_HEADSET) != 0 -> ROUTE_HEADSET
             else -> ROUTE_SPEAKER
         }
         applyRoute(appContext, next)
@@ -260,11 +268,14 @@ object Shim {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val type = when (next) {
                 ROUTE_EARPIECE -> AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                ROUTE_BLUETOOTH -> -1
                 else -> AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
             }
             val device = audio.availableCommunicationDevices.firstOrNull {
-                if (type == -1) isBluetooth(it.type) else it.type == type
+                when (next) {
+                    ROUTE_BLUETOOTH -> isBluetooth(it.type)
+                    ROUTE_HEADSET -> isHeadset(it.type)
+                    else -> it.type == type
+                }
             }
             if (device != null) audio.setCommunicationDevice(device)
         } else {
@@ -283,6 +294,7 @@ object Shim {
             audio.startBluetoothSco()
             audio.isBluetoothScoOn = true
         } else {
+            // Off the speaker, a plugged-in headset takes over from the earpiece by itself
             audio.stopBluetoothSco()
             audio.isBluetoothScoOn = false
             audio.isSpeakerphoneOn = next == ROUTE_SPEAKER

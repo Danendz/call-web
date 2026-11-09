@@ -119,10 +119,13 @@ export component ControlPill inherits Rectangle {
                     checked: s.id == root.speaker-id;
                     activated => { root.pick-speaker(s.id); }
                 }
-                // Where a phone plays the call: "speaker", "earpiece", "bluetooth"; none on desktop
+                // Where a phone plays the call, its mic coming along: "speaker", "earpiece", "bluetooth", "headset"; none
+                // on desktop
                 for id in root.outputs: MenuItem {
-                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
-                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");
+                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone
+                        : id == "headset" ? Icons.headphones : Icons.volume-2;
+                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece")
+                        : id == "headset" ? @tr("Headset") : @tr("Speaker");
                     checked: id == root.output;
                     activated => { root.pick-output(id); }
                 }
