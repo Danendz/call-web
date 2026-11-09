@@ -1,5 +1,8 @@
 import type { ChatMessage, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
+import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
+import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
+  BROWSER_AUDIO,
   getDisplayMedia,
   getLocalMedia,
   getTrack,
@@ -126,6 +129,12 @@ export class CallController {
   private mediaReady: Promise<void> | null = null;
   private switchingDevice = false;
   private pendingDevices = new Map<MediaKind, string>();
+  // The mic after noise suppression: what's sent and transcribed. The raw mic stays in localStream, for the level
+  // meter, the picker and muting.
+  private denoised: Denoised | null = null;
+  private micVersion = 0;
+  // The next mic switch closes the old one first, so the browser's audio processing follows the new constraints
+  private reopenMic = false;
   private statsTimer?: number;
   private statsCounters: Parameters<typeof sampleStats>[1] = null;
   private peerScreenshotTimer?: number;
@@ -144,6 +153,8 @@ export class CallController {
       (msg) => this.onMessage(msg),
       (socket) => this.set({ socket }),
     );
+    if (getNoiseSuppression()) preloadDenoise();
+    onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
   }
 
   subscribe = (listener: () => void) => {
@@ -158,7 +169,7 @@ export class CallController {
     const { transcribeOn, micOn, phase, localStream, lang } = this.state;
     // Only while someone is there to read it, and never while muted
     const speaking = transcribeOn && micOn && phase === "in-call";
-    this.transcriber.sync((speaking && localStream?.getAudioTracks()[0]) || null, lang);
+    this.transcriber.sync((speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null, lang);
     for (const l of this.listeners) l();
   }
 
@@ -176,6 +187,7 @@ export class CallController {
     this.camTrack = stream.getVideoTracks()[0] ?? null;
     if (this.camTrack) this.camTrack.enabled = this.state.camOn;
     this.set({ localStream: stream, micAccess: audio, camAccess: video, ...selectedDevices(stream) });
+    void this.useMic(stream.getAudioTracks()[0] ?? null);
     navigator.mediaDevices?.addEventListener("devicechange", this.refreshDevices);
     await this.refreshDevices();
   }
@@ -212,6 +224,10 @@ export class CallController {
   private async swapDevice(stream: MediaStream, kind: MediaKind, deviceId: string): Promise<void> {
     saveDevicePref(kind, deviceId);
     const old = stream.getTracks().filter((t) => t.kind === kind);
+    if (kind === "audio" && this.reopenMic) {
+      this.reopenMic = false;
+      old.forEach((t) => t.stop());
+    }
     // The new device opens while the old one still runs, so there's no gap. A phone that can't hold two cameras at
     // once says it's busy: stop the old one and ask again. A device that's gone falls back to the default.
     let got = await getTrack(kind, deviceId, true);
@@ -227,7 +243,8 @@ export class CallController {
     }
     if (got.track) got.track.enabled = kind === "audio" ? this.state.micOn : this.state.camOn;
     if (kind === "video") this.camTrack = got.track;
-    await this.peer?.setTrack(kind, got.track);
+    if (kind === "audio") await this.useMic(got.track);
+    else await this.peer?.setTrack(kind, got.track);
     // The same stream keeps playing with the new track, so the <video> showing it doesn't reload
     old.forEach((t) => {
       stream.removeTrack(t);
@@ -240,6 +257,36 @@ export class CallController {
       ...selectedDevices(stream),
     });
     if (kind === "video") this.sendMedia();
+  }
+
+  /**
+   * Sends and transcribes `mic` through noise suppression when it's on, or as it is. A newer mic (or setting) that
+   * comes along while the model loads wins.
+   */
+  private async useMic(mic: MediaStreamTrack | null): Promise<void> {
+    const version = ++this.micVersion;
+    const on = !!mic && getNoiseSuppression();
+    const next = mic && on ? await denoise(mic) : null;
+    if (version !== this.micVersion) {
+      next?.stop();
+      return;
+    }
+    // This browser can't run the model: its own noise suppression back on, rather than none
+    if (mic && on && !next) void mic.applyConstraints(BROWSER_AUDIO).catch(() => {});
+    const old = this.denoised;
+    this.denoised = next;
+    await this.peer?.setTrack("audio", next?.track ?? mic);
+    old?.stop();
+    this.set({});
+  }
+
+  /** The switch in Settings: the mic reopens with the browser's noise suppression off or on, then goes through ours or not. */
+  private noiseSuppressionChanged(): void {
+    if (getNoiseSuppression()) preloadDenoise();
+    const id = this.state.micDeviceId;
+    if (!this.state.localStream?.getAudioTracks().length || !id) return;
+    this.reopenMic = true;
+    void this.selectDevice("audio", id);
   }
 
   private refreshDevices = async () => {
@@ -443,6 +490,11 @@ export class CallController {
       },
     );
     if (this.remoteScreenId) this.peer.setRemoteScreen(this.remoteScreenId);
+    if (this.denoised) {
+      // Started before anyone clicked (the setup screen), its audio may still be suspended
+      this.denoised.resume();
+      void this.peer.setTrack("audio", this.denoised.track);
+    }
     this.sendMedia();
     if (this.screen) void this.peer.setScreen(this.screen.getVideoTracks()[0], this.screen.getAudioTracks()[0] ?? null);
     this.statsCounters = null;
@@ -514,6 +566,9 @@ export class CallController {
     this.screen = null;
     this.remoteScreenId = null;
     this.state.localStream?.getTracks().forEach((t) => t.stop());
+    this.micVersion++;
+    this.denoised?.stop();
+    this.denoised = null;
     clearTimeout(this.peerScreenshotTimer);
     this.set({
       localStream: null,

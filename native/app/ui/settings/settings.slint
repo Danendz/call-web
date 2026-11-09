@@ -92,12 +92,14 @@ export component SettingsSheet inherits Rectangle {
     // From the bottom instead of the right
     in property <bool> sheet;
     in property <bool> show-stats;
+    in property <bool> noise-suppression;
     in property <string> lang;
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
     callback set-show-stats(bool);
+    callback set-noise-suppression(bool);
     callback set-lang(string);
     callback download-model();
     callback cancel-download();
@@ -234,6 +236,22 @@ export component SettingsSheet inherits Rectangle {
                                     label: @tr("Connection stats");
                                     checked: root.show-stats;
                                     toggled => { root.set-show-stats(!root.show-stats); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        SettingRow {
+                            title: @tr("Noise suppression");
+                            detail: @tr("May slow down games or other heavy apps while you share your screen.");
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    label: @tr("Noise suppression");
+                                    checked: root.noise-suppression;
+                                    toggled => { root.set-noise-suppression(!root.noise-suppression); }
                                 }
                             }
                         }

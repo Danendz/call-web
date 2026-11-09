@@ -318,6 +318,7 @@ impl Controller {
                     signaling.send(ClientMessage::Screenshot);
                 }
             }
+            Command::SetNoiseSuppression(on) => self.media.set_noise_suppression(on),
             Command::SetForceRelay(relay) => {
                 self.state.force_relay = relay;
                 if let Some(peer) = &self.peer {

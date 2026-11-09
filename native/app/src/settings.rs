@@ -35,10 +35,17 @@ pub struct Settings {
     /// "Connection stats" in Settings: the overlay shows in every call
     #[serde(default)]
     pub show_stats: bool,
+    /// DeepFilterNet on the mic. Off on a phone, where it costs battery and competes with a shared screen
+    #[serde(default = "desktop")]
+    pub noise_suppression: bool,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn desktop() -> bool {
+    !cfg!(target_os = "android")
 }
 
 fn upright() -> bool {
@@ -59,6 +66,7 @@ impl Default for Settings {
             on_device_speech: true,
             speech_prompt_seen: false,
             show_stats: false,
+            noise_suppression: desktop(),
         }
     }
 }

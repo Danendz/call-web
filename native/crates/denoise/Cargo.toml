@@ -1,0 +1,18 @@
+[package]
+name = "denoise"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# DeepFilterNet3 on tract, with the model embedded: pure Rust, so the same code runs natively and as WASM
+deep-filter-rt = "0.2"
+ndarray = "0.17"
+
+# Denormals turn the model's quiet passages into a CPU spike; audio threads flush them to zero
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+no_denormals = "0.3"
+
+[lints]
+workspace = true

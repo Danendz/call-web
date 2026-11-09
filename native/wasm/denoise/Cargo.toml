@@ -1,0 +1,33 @@
+# The `denoise` crate as WASM for the web app's AudioWorklet. Its own workspace so desktop builds don't make a native
+# library of it. `npm run denoise:wasm` builds it (with the flags it needs) into `web/src/call/denoise/`.
+[workspace]
+
+[package]
+name = "denoise-wasm"
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+denoise = { path = "../../crates/denoise" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+strip = "symbols"
+panic = "abort"
+
+# Small everywhere but the math the model runs on every frame
+[profile.release.package."*"]
+opt-level = "z"
+
+[profile.release.package.tract-linalg]
+opt-level = 3
+
+[profile.release.package.tract-core]
+opt-level = 3

@@ -36,6 +36,18 @@
   font-size: 15px;
 }
 
+/* A line under the label, for what the control alone doesn't say */
+.settings-label:has(> .settings-detail) {
+  padding: 10px 12px 10px 0;
+}
+
+.settings-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .settings-row select {
   min-height: 46px;
   padding-left: 8px;

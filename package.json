@@ -9,10 +9,11 @@
     "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "dev:web": "vite",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsx scripts/precompress.ts && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "fixtures": "tsx scripts/fixtures.ts"
+    "fixtures": "tsx scripts/fixtures.ts",
+    "denoise:wasm": "tsx scripts/denoise-wasm.ts"
   },
   "dependencies": {
     "vaul": "1.1.2",

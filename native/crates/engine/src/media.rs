@@ -1,10 +1,15 @@
 //! The WebRTC factory and the devices behind it. Audio goes through WebRTC's platform audio device: it captures the
 //! picked mic, plays the other person through the picked speaker, and runs WebRTC's echo canceller, noise
-//! suppression and gain control on the mic, like a browser does with the web app's constraints.
+//! suppression and gain control on the mic, like a browser does with the web app's constraints. With noise
+//! suppression switched on, DeepFilterNet replaces WebRTC's own after the other two.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use libwebrtc::audio_track::RtcAudioTrack;
 use libwebrtc::peer_connection_factory::PeerConnectionFactory;
 use libwebrtc::peer_connection_factory::native::PeerConnectionFactoryExt;
+use webrtc_sys::capture_processor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
@@ -16,6 +21,7 @@ pub struct Device {
 pub struct Media {
     factory: PeerConnectionFactory,
     platform_audio: bool,
+    denoise: Arc<Denoise>,
     /// WebRTC shuts the audio device down once the last peer connection is gone, and on Android LiveKit's proxy
     /// never starts it again: the next call crashed starting audio. A connection that never connects keeps it up.
     #[cfg(target_os = "android")]
@@ -40,6 +46,7 @@ impl Media {
         Self {
             factory,
             platform_audio,
+            denoise: Arc::default(),
             #[cfg(target_os = "android")]
             _keep_audio,
         }
@@ -104,10 +111,73 @@ impl Media {
         picked
     }
 
+    /// DeepFilterNet on the mic instead of WebRTC's noise suppression, or back. Live: the next 10 ms frame follows. The
+    /// model loads the first time, off this thread; WebRTC's stays on until it has, and if it can't.
+    pub fn set_noise_suppression(&self, on: bool) {
+        let denoise = &self.denoise;
+        denoise.on.store(on, Ordering::Relaxed);
+        if on && denoise.model.load(Ordering::Relaxed) == MODEL_NONE {
+            denoise.model.store(MODEL_LOADING, Ordering::Relaxed);
+            let denoise = denoise.clone();
+            std::thread::spawn(move || {
+                let loaded = denoise::Denoiser::new()
+                    .inspect_err(|e| tracing::warn!("noise suppression model didn't load: {e}"))
+                    .ok();
+                let model = if loaded.is_some() { MODEL_READY } else { MODEL_FAILED };
+                if let Some(denoiser) = loaded {
+                    capture_processor::set_capture_processor(Some(processor(denoiser, denoise.on.clone())));
+                }
+                denoise.model.store(model, Ordering::Relaxed);
+                denoise.apply();
+            });
+        }
+        denoise.apply();
+    }
+
     /// Captures from the selected mic once a peer connection sends it.
     pub fn mic_track(&self) -> Option<RtcAudioTrack> {
         self.platform_audio.then(|| self.factory.create_device_audio_track("mic"))
     }
+}
+
+const MODEL_NONE: u8 = 0;
+const MODEL_LOADING: u8 = 1;
+const MODEL_READY: u8 = 2;
+const MODEL_FAILED: u8 = 3;
+
+#[derive(Default)]
+struct Denoise {
+    /// The setting; the processor reads it on the audio thread
+    on: Arc<AtomicBool>,
+    model: AtomicU8,
+}
+
+impl Denoise {
+    /// WebRTC's noise suppression is off only while DeepFilterNet runs in its place.
+    fn apply(&self) {
+        let ours = self.on.load(Ordering::Relaxed) && self.model.load(Ordering::Relaxed) == MODEL_READY;
+        capture_processor::set_builtin_noise_suppression(!ours);
+    }
+}
+
+/// Runs on WebRTC's audio thread, after its echo canceller and gain control. Frames at a rate other than the model's
+/// (WebRTC processes at 48 kHz when the mic gives it that, as desktop and phone mics do) pass through.
+fn processor(mut denoiser: denoise::Denoiser, on: Arc<AtomicBool>) -> capture_processor::CaptureProcessor {
+    let mut warned = false;
+    Box::new(move |frame, rate| {
+        if !on.load(Ordering::Relaxed) {
+            return;
+        }
+        if rate != denoise::SAMPLE_RATE {
+            if !warned {
+                tracing::warn!("noise suppression skipped: the mic is processed at {rate} Hz");
+                warned = true;
+            }
+            return;
+        }
+        // WebRTC's floats are in the 16-bit range
+        denoiser.process(frame, 32768.0);
+    })
 }
 
 impl Drop for Media {

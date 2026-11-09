@@ -19,6 +19,10 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tracing = "0.1"
 url = "2"
 libwebrtc = "0.4"
+# The hook into the mic's audio after WebRTC's processing; patched in `native/Cargo.toml`
+webrtc-sys = "0.3.53"
+# DeepFilterNet3 noise suppression on that audio
+denoise = { path = "../denoise" }
 # The setup screen's mic level; WebRTC captures nothing until a call
 cpal = "0.18.2"
 # On-device speech recognition (SenseVoice). Static on desktop; Android only has its shared build, whose .so files
