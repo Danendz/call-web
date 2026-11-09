@@ -68,8 +68,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: check }
       - run: cargo fmt --check
-      # The build cache keeps sherpa-onnx-sys's build-script result but not the library it downloaded; rerun it if that's gone
-      - run: test -d target/sherpa-onnx-prebuilt || cargo clean -p sherpa-onnx-sys
+      # The build cache keeps sherpa-onnx-sys's build-script result but empties the folder with the library it downloaded
+      - run: ls target/sherpa-onnx-prebuilt/*/lib/libsherpa-onnx-c-api.a >/dev/null 2>&1 || cargo clean -p sherpa-onnx-sys
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
