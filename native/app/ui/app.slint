@@ -25,6 +25,12 @@ export component AppWindow inherits Window {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <string> speaker-label;
+    // We muted the other person; they muted us
+    in property <bool> speaker-off;
+    in property <bool> peer-speaker-off;
     in property <float> mic-level;
     in property <bool> cam-on: true;
     in property <CamAccess> cam-access;
@@ -108,6 +114,8 @@ export component AppWindow inherits Window {
     callback home();
     callback toggle-mic();
     callback pick-mic(string);
+    callback pick-speaker(string);
+    callback toggle-speaker();
     callback toggle-cam();
     callback pick-cam(string);
     callback set-portrait(bool);
@@ -178,6 +186,10 @@ export component AppWindow inherits Window {
             mics: root.mics;
             mic-id: root.mic-id;
             mic-label: root.mic-label;
+            speakers: root.speakers;
+            speaker-id: root.speaker-id;
+            speaker-label: root.speaker-label;
+            pick-speaker(id) => { root.pick-speaker(id); }
             mic-on: root.mic-on;
             mic-level: root.mic-level;
             mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
@@ -213,6 +225,12 @@ export component AppWindow inherits Window {
             mics: root.mics;
             mic-id: root.mic-id;
             pick-mic(id) => { root.pick-mic(id); }
+            speakers: root.speakers;
+            speaker-id: root.speaker-id;
+            speaker-off: root.speaker-off;
+            peer-speaker-off: root.peer-speaker-off;
+            pick-speaker(id) => { root.pick-speaker(id); }
+            toggle-speaker => { root.toggle-speaker(); }
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cams: root.cams;

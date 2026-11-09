@@ -292,3 +292,9 @@ msgstr "麦克风和扬声器"
 
 msgid "Choose camera"
 msgstr "选择摄像头"
+
+msgid "Mute speaker"
+msgstr "静音扬声器"
+
+msgid "They muted your sound"
+msgstr "对方已将你静音"

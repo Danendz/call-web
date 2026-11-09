@@ -133,6 +133,9 @@ pub fn run() -> anyhow::Result<()> {
         if let Some(mic) = settings.mic.clone() {
             engine.send(Command::SelectMic(mic));
         }
+        if let Some(speaker) = settings.speaker.clone() {
+            engine.send(Command::SelectSpeaker(speaker));
+        }
         if let Some(cam) = settings.cam.clone() {
             engine.send(Command::SelectCam(cam));
         }
@@ -153,6 +156,7 @@ pub fn run() -> anyhow::Result<()> {
     ui.on_hang_up(send(Command::HangUp));
     ui.on_home(send(Command::Home));
     ui.on_toggle_mic(send(Command::ToggleMic));
+    ui.on_toggle_speaker(send(Command::ToggleSpeaker));
     ui.on_toggle_cam(send(Command::ToggleCam));
     ui.on_open_link({
         let engine = engine.clone();
@@ -263,6 +267,7 @@ pub fn run() -> anyhow::Result<()> {
         }
     };
     ui.on_pick_mic(remember(|s, id| s.mic = Some(id), Command::SelectMic));
+    ui.on_pick_speaker(remember(|s, id| s.speaker = Some(id), Command::SelectSpeaker));
     ui.on_pick_cam(remember(|s, id| s.cam = Some(id), Command::SelectCam));
     ui.on_set_lang(remember(
         |s, code| s.lang = Some(parse_lang(&code)),

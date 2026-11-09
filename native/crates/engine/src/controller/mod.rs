@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use libwebrtc::audio_track::RtcAudioTrack;
 use libwebrtc::media_stream_track::MediaStreamTrack;
 use protocol::{ClientMessage, IceServerConfig, Lang, MAX_CHAT_LENGTH};
 use tokio::sync::mpsc;
@@ -64,6 +65,8 @@ struct Controller {
     meter: Option<Meter>,
     /// Our side of the call: the mic track and the stream id it's sent in, kept across peers
     mic: Option<MediaStreamTrack>,
+    /// The other person's voice and screen sound, muted together by [`Command::ToggleSpeaker`]
+    remote_audio: Vec<RtcAudioTrack>,
     camera: LocalCamera,
     remote: RemoteVideos,
     screen: LocalScreen,
@@ -120,6 +123,10 @@ impl Controller {
             call_started: None,
             mic_on: true,
             mics: media.mics(),
+            speakers: media.speakers(),
+            speaker_id: None,
+            speaker_off: false,
+            remote_speaker_off: false,
             mic_id: None,
             remote_cam_on: true,
             remote_video: false,
@@ -155,6 +162,7 @@ impl Controller {
             internal_tx,
             internal_rx,
             transcriber: Transcriber::new(speech_tx),
+            remote_audio: Vec::new(),
             speech_rx,
             model_dir,
             model_cancel: None,
@@ -242,6 +250,20 @@ impl Controller {
                     tracing::warn!("couldn't pick mic {id:?} (in a call: {})", self.mic.is_some());
                 }
             }
+            Command::SelectSpeaker(id) => {
+                if self.media.select_speaker(&id) {
+                    self.state.speaker_id = Some(id);
+                } else {
+                    tracing::warn!("couldn't pick speaker {id:?}");
+                }
+            }
+            Command::ToggleSpeaker => {
+                self.state.speaker_off = !self.state.speaker_off;
+                for track in &self.remote_audio {
+                    track.set_enabled(!self.state.speaker_off);
+                }
+                self.send_media();
+            }
             Command::ToggleCam => {
                 self.camera.on = !self.camera.on;
                 // The light goes off at once; the other side hears about it after the sync below
@@ -311,6 +333,7 @@ impl Controller {
         self.state.room_id = Some(id);
         self.state.phase = Phase::Setup;
         self.state.mics = self.media.mics();
+        self.state.speakers = self.media.speakers();
     }
 
     fn join(&mut self) {
@@ -339,6 +362,8 @@ impl Controller {
         self.seat = Seat::default();
         self.state.reconnecting = false;
         self.state.remote_cam_on = true;
+        self.state.remote_speaker_off = false;
+        self.state.speaker_off = false;
     }
 
     fn signal_event(&mut self, event: SignalEvent) {

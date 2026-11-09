@@ -52,9 +52,11 @@ pub enum PeerEvent {
         stream_id: String,
         track: RtcVideoTrack,
     },
-    /// Their voice; it plays by itself, this is for taking its echo out of speech to chat
+    /// Their voice, or their screen's sound. It plays by itself; this is for muting it, and taking the voice's echo
+    /// out of speech to chat
     RemoteAudio {
         track: RtcAudioTrack,
+        voice: bool,
     },
     Stats(Box<CallStats>),
 }
@@ -254,11 +256,11 @@ impl Session {
                     self.emit(PeerEvent::RemoteVideo { stream_id, track });
                 }
                 // Their voice comes first (its transceiver is the first one); a later one is their screen's sound
-                MediaStreamTrack::Audio(track) if !self.voice_seen => {
+                MediaStreamTrack::Audio(track) => {
+                    let voice = !self.voice_seen;
                     self.voice_seen = true;
-                    self.emit(PeerEvent::RemoteAudio { track });
+                    self.emit(PeerEvent::RemoteAudio { track, voice });
                 }
-                MediaStreamTrack::Audio(_) => {}
             },
             Input::RestartIce => self.restart_ice(),
             Input::Screen(track) => self.set_screen(track),

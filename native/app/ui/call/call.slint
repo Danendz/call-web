@@ -28,6 +28,12 @@ export component CallScreen inherits Rectangle {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     callback pick-mic(string);
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <bool> speaker-off;
+    in property <bool> peer-speaker-off;
+    callback pick-speaker(string);
+    callback toggle-speaker();
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <[DeviceItem]> cams;
@@ -215,6 +221,7 @@ export component CallScreen inherits Rectangle {
             has-screen: root.connected && root.remote-screen;
             has-self: root.cam-granted;
             peer-cam-on: root.peer-cam-on;
+            peer-speaker-off: root.peer-speaker-off;
             self-cam-on: root.cam-on && root.self-video.width > 0;
             pill-space: root.idle ? 20px : 96px;
             only-main: root.pip;
@@ -412,6 +419,11 @@ export component CallScreen inherits Rectangle {
             mics: root.mics;
             mic-id: root.mic-id;
             pick-mic(id) => { root.pick-mic(id); }
+            speakers: root.speakers;
+            speaker-id: root.speaker-id;
+            speaker-off: root.speaker-off;
+            pick-speaker(id) => { root.pick-speaker(id); }
+            toggle-speaker => { root.toggle-speaker(); }
             cam-on: root.cam-on;
             cam-granted: root.cam-granted;
             cams: root.cams;

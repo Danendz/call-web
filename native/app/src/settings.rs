@@ -11,6 +11,8 @@ pub struct Settings {
     pub lang: Option<Lang>,
     /// The picked mic's id, applied when it's plugged in
     pub mic: Option<String>,
+    #[serde(default)]
+    pub speaker: Option<String>,
     pub cam: Option<String>,
     /// Send 9:16 video instead of 16:9; a phone is held upright, so it starts in portrait
     #[serde(default = "upright")]
@@ -45,6 +47,7 @@ impl Default for Settings {
         Self {
             lang: None,
             mic: None,
+            speaker: None,
             cam: None,
             portrait: upright(),
             transcribe: false,

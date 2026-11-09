@@ -14,6 +14,11 @@ export component ControlPill inherits Rectangle {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     callback pick-mic(string);
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <bool> speaker-off;
+    callback pick-speaker(string);
+    callback toggle-speaker();
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <[DeviceItem]> cams;
@@ -81,7 +86,8 @@ export component ControlPill inherits Rectangle {
                 label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
                 kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
                 enabled: has-mic;
-                mark: transcribe-on ? Icons.captions : @image-url("");
+                // A muted speaker matters more than speech to chat
+                mark: speaker-off ? Icons.volume-off : transcribe-on ? Icons.captions : @image-url("");
                 clicked => { root.toggle-mic(); }
                 menu-label: @tr("Microphone and speaker");
                 footer-text: @tr("Speech to chat");
@@ -101,8 +107,19 @@ export component ControlPill inherits Rectangle {
                     checked: m.id == root.mic-id;
                     activated => { root.pick-mic(m.id); }
                 }
+                MenuHead {
+                    text: @tr("Speaker").to-uppercase();
+                    toggle-text: @tr("Mute speaker");
+                    toggle-icon: Icons.volume-off;
+                    toggle-on: root.speaker-off;
+                    toggled => { root.toggle-speaker(); }
+                }
+                for s in root.speakers: MenuItem {
+                    text: DeviceName.of(s.label, @tr("Speaker"));
+                    checked: s.id == root.speaker-id;
+                    activated => { root.pick-speaker(s.id); }
+                }
                 // Where a phone plays the call: "speaker", "earpiece", "bluetooth"; none on desktop
-                if root.outputs.length > 0: MenuHead { text: @tr("Speaker").to-uppercase(); }
                 for id in root.outputs: MenuItem {
                     icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
                     text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");

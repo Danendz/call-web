@@ -11,6 +11,9 @@ component SetupPanel {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <string> speaker-label;
     in property <[DeviceItem]> cams;
     in property <string> cam-id;
     in property <string> cam-label;
@@ -19,6 +22,7 @@ component SetupPanel {
     in property <string> mic-status;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-speaker(string);
     callback pick-cam(string);
     callback join();
 
@@ -40,6 +44,16 @@ component SetupPanel {
             selected-label: root.mic-label;
             status: root.mic-status;
             picked(id) => { root.pick-mic(id); }
+        }
+
+        // Not on a phone, where the call's sound follows its audio routes
+        if root.speakers.length > 0: DeviceRow {
+            icon: Icons.volume-2;
+            name: @tr("Speaker");
+            devices: root.speakers;
+            selected: root.speaker-id;
+            selected-label: root.speaker-label;
+            picked(id) => { root.pick-speaker(id); }
         }
 
         DeviceRow {
@@ -102,6 +116,9 @@ export component SetupScreen inherits Rectangle {
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
+    in property <[DeviceItem]> speakers;
+    in property <string> speaker-id;
+    in property <string> speaker-label;
     in property <bool> mic-on;
     in property <float> mic-level;
     in property <string> mic-status;
@@ -117,6 +134,7 @@ export component SetupScreen inherits Rectangle {
     in property <bool> portrait;
     callback set-lang(string);
     callback pick-mic(string);
+    callback pick-speaker(string);
     callback pick-cam(string);
     callback toggle-mic();
     callback toggle-cam();
@@ -166,6 +184,9 @@ export component SetupScreen inherits Rectangle {
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                speakers: root.speakers;
+                speaker-id: root.speaker-id;
+                speaker-label: root.speaker-label;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -174,6 +195,7 @@ export component SetupScreen inherits Rectangle {
                 cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-speaker(id) => { root.pick-speaker(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
@@ -219,6 +241,9 @@ export component SetupScreen inherits Rectangle {
                 mics: root.mics;
                 mic-id: root.mic-id;
                 mic-label: root.mic-label;
+                speakers: root.speakers;
+                speaker-id: root.speaker-id;
+                speaker-label: root.speaker-label;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -227,6 +252,7 @@ export component SetupScreen inherits Rectangle {
                 cam-pending: root.cam-pending;
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
+                pick-speaker(id) => { root.pick-speaker(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }

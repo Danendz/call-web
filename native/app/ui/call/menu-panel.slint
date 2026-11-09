@@ -53,21 +53,69 @@ export component MenuItem inherits Rectangle {
     }
 }
 
-// A section's title in a pill menu, like the web's .menu-head
+// A section's title in a pill menu, like the web's .menu-head, with an optional toggle chip beside it that leaves
+// the menu open to show its new state
 export component MenuHead inherits Rectangle {
     in property <string> text;
+    in property <string> toggle-text;
+    in property <image> toggle-icon;
+    in property <bool> toggle-on;
+    callback toggled();
     height: 36px;
-    accessible-role: none;
-    Text {
-        x: 12px;
-        width: parent.width - 18px;
-        text: root.text;
-        vertical-alignment: center;
-        color: Theme.muted;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        overflow: elide;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 6px;
+        spacing: 8px;
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+            color: Theme.muted;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            overflow: elide;
+            horizontal-stretch: 1;
+            accessible-role: none;
+        }
+        if root.toggle-text != "": VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 28px;
+                border-radius: self.height / 2;
+                border-width: root.toggle-on ? 0 : 1px;
+                border-color: Theme.glass-border;
+                background: root.toggle-on ? Theme.danger-soft : chip.has-hover ? Theme.menu-hover : transparent;
+                accessible-role: button;
+                accessible-label: root.toggle-text;
+                accessible-checked: root.toggle-on;
+                accessible-action-default => { root.toggled(); }
+                animate background { duration: Theme.fast; easing: Theme.ease; }
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 6px;
+                    Image {
+                        source: root.toggle-icon;
+                        colorize: root.toggle-on ? Theme.danger-text : Theme.text;
+                        width: 14px;
+                        height: 14px;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    Text {
+                        text: root.toggle-text;
+                        color: root.toggle-on ? Theme.danger-text : Theme.text;
+                        font-size: 12px;
+                        font-weight: 500;
+                        vertical-alignment: center;
+                    }
+                }
+                chip := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.toggled(); }
+                }
+            }
+        }
     }
 }
 
@@ -168,7 +216,9 @@ export component MenuPanel inherits Rectangle {
     panel := Rectangle {
         property <length> rest: root.height - self.height;
         width: root.sheet ? min(root.width, 520px) : root.popover-width;
-        height: min(body.preferred-height, root.sheet ? min(root.height * 0.8, 640px) : root.anchor-top - 32px);
+        // A popover stops at the web's .menu max-height, min(70vh, 520px); a long list scrolls inside it
+        height: min(body.preferred-height,
+            root.sheet ? min(root.height * 0.8, 640px) : min(root.anchor-top - 32px, root.height * 0.7, 520px));
         x: root.sheet ? (root.width - self.width) / 2
             : max(8px, min(root.width - self.width - 8px, root.align-left ? root.anchor-left - 8px : root.anchor-right + 8px - self.width));
         y: !root.sheet ? root.anchor-top - self.height - 16px : root.shown ? self.rest + root.drag : root.height;

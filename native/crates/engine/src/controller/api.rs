@@ -58,6 +58,13 @@ pub struct State {
     pub mic_on: bool,
     pub mics: Vec<Device>,
     pub mic_id: Option<String>,
+    /// Where the call plays; empty on Android, which has its audio routes instead
+    pub speakers: Vec<Device>,
+    pub speaker_id: Option<String>,
+    /// We muted the other person, for this call only: every call starts with sound
+    pub speaker_off: bool,
+    /// They muted us (from their `media` messages)
+    pub remote_speaker_off: bool,
     /// The other person's camera is on (from their `media` messages).
     pub remote_cam_on: bool,
     /// Their camera's track has arrived; frames go to the sink as [`crate::Feed::Peer`]
@@ -103,6 +110,10 @@ pub enum Command {
     ToggleMic,
     /// Any time: in a call capture restarts on the new mic, which the same track then sends
     SelectMic(String),
+    /// Any time: in a call playout restarts on the new speaker
+    SelectSpeaker(String),
+    /// Mutes the other person here, and tells them
+    ToggleSpeaker,
     ToggleCam,
     /// Any time: the new camera feeds the same track, so a call needs no renegotiation
     SelectCam(String),

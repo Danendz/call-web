@@ -32,6 +32,8 @@ component Feed inherits Rectangle {
     in property <int> rotation;
     in property <bool> off;
     in property <string> label;
+    // Why a small red mark sits in the corner (they muted your sound); none while empty
+    in property <string> mark;
     callback picked();
     callback dropped(string);
     callback touched();
@@ -76,6 +78,23 @@ component Feed inherits Rectangle {
     CamOff {
         shown: root.off;
         icon-size: main ? 36px : 20px;
+    }
+    // Like the web's .feed-mark
+    if root.mark != "": Rectangle {
+        x: 8px;
+        y: parent.height - self.height - 8px;
+        width: 28px;
+        height: 28px;
+        border-radius: self.height / 2;
+        background: Theme.glass;
+        accessible-role: image;
+        accessible-label: root.mark;
+        Image {
+            source: Icons.volume-off;
+            colorize: Theme.danger-text;
+            width: 16px;
+            height: 16px;
+        }
     }
 
     if !main && !hidden: TouchArea {
@@ -131,6 +150,7 @@ export component Feeds inherits Rectangle {
     in property <bool> has-self;
     in property <bool> has-screen;
     in property <bool> peer-cam-on;
+    in property <bool> peer-speaker-off;
     in property <bool> self-cam-on;
     // Room the control pill takes at the bottom of the stage; less while the controls are hidden
     in property <length> pill-space: 96px;
@@ -202,6 +222,7 @@ export component Feeds inherits Rectangle {
         hidden: !has-peer || peer-hidden || (only-main && main != "peer");
         off: !peer-cam-on || peer-video.width == 0;
         label: @tr("Their camera");
+        mark: root.peer-speaker-off ? @tr("They muted your sound") : "";
         home-x: self.main ? 0 : tile-x(corner-peer, tile-w(peer-aspect));
         home-y: self.main ? 0 : tile-y(corner-peer, tile-h(peer-aspect), peer-stack);
         home-width: self.main ? root.width : tile-w(peer-aspect);

@@ -67,14 +67,16 @@ impl Controller {
             ServerMessage::PeerLeft => {
                 self.drop_peer();
                 self.state.remote_cam_on = true;
+                self.state.remote_speaker_off = false;
             }
             ServerMessage::Signal { payload } => {
                 if let Some(peer) = &self.peer {
                     peer.handle_signal(payload);
                 }
             }
-            ServerMessage::Media { cam_on, screen, .. } => {
+            ServerMessage::Media { cam_on, screen, speaker_off } => {
                 self.state.remote_cam_on = cam_on;
+                self.state.remote_speaker_off = speaker_off;
                 self.remote.set_screen(screen);
             }
             ServerMessage::Chat { message } => (self.on_chat)(ChatEvent::Added(message)),
@@ -133,6 +135,7 @@ impl Controller {
 
     pub(super) fn drop_peer(&mut self) {
         self.peer = None;
+        self.remote_audio.clear();
         self.transcriber.set_remote_audio(None);
         self.remote.drop_tracks();
         self.state.stats = None;
@@ -159,7 +162,11 @@ impl Controller {
         }
         if let Some(signaling) = &self.signaling {
             let screen = self.screen.sharing().then(|| self.screen.stream_id.clone());
-            signaling.send(ClientMessage::Media { cam_on: self.camera.sending(), screen, speaker_off: false });
+            signaling.send(ClientMessage::Media {
+                cam_on: self.camera.sending(),
+                screen,
+                speaker_off: self.state.speaker_off,
+            });
         }
     }
 
@@ -195,7 +202,13 @@ impl Controller {
                 }
             }
             PeerEvent::RemoteVideo { stream_id, track } => self.remote.add(stream_id, track),
-            PeerEvent::RemoteAudio { track } => self.transcriber.set_remote_audio(Some(track)),
+            PeerEvent::RemoteAudio { track, voice } => {
+                track.set_enabled(!self.state.speaker_off);
+                if voice {
+                    self.transcriber.set_remote_audio(Some(track.clone()));
+                }
+                self.remote_audio.push(track);
+            }
             PeerEvent::Stats(stats) => {
                 self.maybe_retry_direct(&stats);
                 self.state.trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);
