@@ -101,13 +101,11 @@ pub enum Command {
     /// Back to the start screen
     Home,
     ToggleMic,
-    /// Only before joining, as on the web: switching the mic mid-call would restart capture under the call.
+    /// Any time: in a call capture restarts on the new mic, which the same track then sends
     SelectMic(String),
     ToggleCam,
     /// Any time: the new camera feeds the same track, so a call needs no renegotiation
     SelectCam(String),
-    /// The next camera in the list: a phone's front and back, or a laptop's two
-    NextCam,
     SetPortrait(bool),
     SetForceRelay(bool),
     /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes

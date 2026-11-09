@@ -59,9 +59,21 @@ impl Media {
             .collect()
     }
 
-    /// Takes effect when recording next starts; false if the mic is gone.
+    /// False if the mic is gone. A call's capture restarts on it: the ADM won't change device while recording.
     pub fn select_mic(&self, id: &str) -> bool {
-        self.platform_audio && self.factory.set_recording_device_by_guid(id)
+        if !self.platform_audio {
+            return false;
+        }
+        let live = self.factory.recording_is_initialized();
+        if live && !self.factory.stop_recording() {
+            tracing::warn!("couldn't stop recording to switch mic");
+        }
+        let picked = self.factory.set_recording_device_by_guid(id);
+        // Back on, on the new mic or the old one
+        if live && !(self.factory.init_recording() && self.factory.start_recording()) {
+            tracing::warn!("couldn't restart recording after switching mic");
+        }
+        picked
     }
 
     /// Captures from the selected mic once a peer connection sends it.

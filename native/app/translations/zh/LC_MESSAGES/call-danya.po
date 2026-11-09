@@ -239,9 +239,6 @@ msgstr "停止共享"
 msgid "Swap videos"
 msgstr "切换画面"
 
-msgid "Switch camera"
-msgstr "切换摄像头"
-
 msgid "Tap to return to the call"
 msgstr "点按返回通话"
 
@@ -289,3 +286,9 @@ msgstr "等待对方加入…"
 
 msgid "You"
 msgstr "你"
+
+msgid "Microphone and speaker"
+msgstr "麦克风和扬声器"
+
+msgid "Choose camera"
+msgstr "选择摄像头"

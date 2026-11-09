@@ -154,7 +154,6 @@ pub fn run() -> anyhow::Result<()> {
     ui.on_home(send(Command::Home));
     ui.on_toggle_mic(send(Command::ToggleMic));
     ui.on_toggle_cam(send(Command::ToggleCam));
-    ui.on_next_cam(send(Command::NextCam));
     ui.on_open_link({
         let engine = engine.clone();
         move |link| match room::parse_room(&link) {

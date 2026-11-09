@@ -234,7 +234,7 @@ impl Controller {
                 }
             }
             Command::SelectMic(id) => {
-                if self.mic.is_none() && self.media.select_mic(&id) {
+                if self.media.select_mic(&id) {
                     self.state.mic_id = Some(id);
                     // Reopened on the new mic
                     self.meter = None;
@@ -249,7 +249,6 @@ impl Controller {
                 self.send_media();
             }
             Command::SelectCam(id) => self.camera.select(id),
-            Command::NextCam => self.camera.next(),
             Command::SetPortrait(portrait) => self.camera.set_portrait(portrait),
             Command::SendChat(text) => {
                 let text = text.trim();

@@ -1,0 +1,101 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+import { MenuPanel } from "menu-panel.slint";
+
+// A pill button with a chevron beside it that opens a menu above, like the web's DeviceMenu: the button keeps its
+// one-tap job (mute), the chevron holds the choices behind it (which device). Picking leaves the menu open, so the
+// check shows the switch. The children are the menu's rows.
+export component DeviceMenu inherits Rectangle {
+    // The button
+    in property <image> icon;
+    in property <string> label;
+    in property <IconButtonKind> kind;
+    in property <bool> enabled: true;
+    in property <length> size: 48px;
+    in property <image> mark;
+    callback clicked();
+    // Without a menu it's the plain button: one camera has nothing to choose
+    in property <bool> has-menu: true;
+    // The chevron's name, also the menu's
+    in property <string> menu-label;
+    in property <string> footer-text;
+    in property <image> footer-icon;
+    in property <bool> footer-checked;
+    in property <bool> footer-enabled: true;
+    callback footer-activated();
+    // A bottom sheet instead of a popover, over the call screen at this place in the window
+    in property <bool> sheet;
+    in property <length> area-x;
+    in property <length> area-y;
+    in property <length> area-width;
+    in property <length> area-height;
+    out property <bool> open: menu.is-open;
+
+    changed has-menu => {
+        if (!has-menu) {
+            menu.close();
+        }
+    }
+
+    width: row.preferred-width;
+    height: row.preferred-height;
+    border-radius: self.height / 2;
+    background: has-menu ? Theme.split : transparent;
+
+    row := HorizontalLayout {
+        IconButton {
+            icon: root.icon;
+            label: root.label;
+            kind: root.kind;
+            enabled: root.enabled;
+            size: root.size;
+            mark: root.mark;
+            clicked => { root.clicked(); }
+        }
+        if root.has-menu: Rectangle {
+            width: root.size < 48px ? 22px : 26px;
+            accessible-role: button;
+            accessible-label: root.menu-label;
+            accessible-action-default => { menu.show(); }
+            Image {
+                // Off center toward the button, like the web's padding-right
+                x: (parent.width - 4px - self.width) / 2;
+                source: Icons.chevron-up;
+                colorize: touch.has-hover || menu.is-open ? Theme.text : Theme.muted;
+                width: 16px;
+                height: 16px;
+                animate colorize { duration: Theme.fast; easing: Theme.ease; }
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { menu.show(); }
+            }
+        }
+    }
+
+    menu := PopupWindow {
+        // Over the whole call screen: the panel places itself, and a press outside it closes it
+        x: root.area-x - root.absolute-position.x;
+        y: root.area-y - root.absolute-position.y;
+        width: root.area-width;
+        height: root.area-height;
+        close-policy: no-auto-close;
+
+        MenuPanel {
+            sheet: root.sheet;
+            label: root.menu-label;
+            align-left: true;
+            anchor-left: root.absolute-position.x - root.area-x;
+            anchor-top: root.absolute-position.y - root.area-y;
+            popover-width: 268px;
+            footer-text: root.footer-text;
+            footer-icon: root.footer-icon;
+            footer-checked: root.footer-checked;
+            footer-enabled: root.footer-enabled;
+            footer-activated => { root.footer-activated(); }
+            closed => { menu.close(); }
+            @children
+        }
+    }
+}

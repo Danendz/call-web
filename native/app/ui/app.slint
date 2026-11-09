@@ -110,7 +110,6 @@ export component AppWindow inherits Window {
     callback pick-mic(string);
     callback toggle-cam();
     callback pick-cam(string);
-    callback next-cam();
     callback set-portrait(bool);
     callback set-force-relay(bool);
     callback toggle-transcribe();
@@ -211,6 +210,9 @@ export component AppWindow inherits Window {
             elapsed: root.elapsed;
             mic-on: root.mic-on;
             has-mic: root.mics.length > 0;
+            mics: root.mics;
+            mic-id: root.mic-id;
+            pick-mic(id) => { root.pick-mic(id); }
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cams: root.cams;
@@ -258,7 +260,6 @@ export component AppWindow inherits Window {
             toggle-mic => { root.toggle-mic(); }
             toggle-cam => { root.toggle-cam(); }
             pick-cam(id) => { root.pick-cam(id); }
-            next-cam => { root.next-cam(); }
             set-portrait(p) => { root.set-portrait(p); }
             set-force-relay(r) => { root.set-force-relay(r); }
             hang-up => { root.hang-up(); }

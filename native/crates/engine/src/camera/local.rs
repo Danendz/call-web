@@ -94,13 +94,6 @@ impl LocalCamera {
         }
     }
 
-    pub(crate) fn next(&mut self) {
-        let current = self.devices.iter().position(|d| Some(&d.id) == self.id.as_ref()).unwrap_or(0);
-        if let Some(next) = self.devices.get(current + 1).or(self.devices.first()) {
-            self.select(next.id.clone());
-        }
-    }
-
     pub(crate) fn set_portrait(&mut self, portrait: bool) {
         self.portrait = portrait;
         self.output.set_portrait(portrait);

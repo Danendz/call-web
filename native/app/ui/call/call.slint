@@ -25,6 +25,9 @@ export component CallScreen inherits Rectangle {
     in property <string> elapsed;
     in property <bool> mic-on;
     in property <bool> has-mic;
+    in property <[DeviceItem]> mics;
+    in property <string> mic-id;
+    callback pick-mic(string);
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <[DeviceItem]> cams;
@@ -71,7 +74,6 @@ export component CallScreen inherits Rectangle {
     callback toggle-mic();
     callback toggle-cam();
     callback pick-cam(string);
-    callback next-cam();
     callback set-portrait(bool);
     callback set-force-relay(bool);
     callback toggle-transcribe();
@@ -407,6 +409,9 @@ export component CallScreen inherits Rectangle {
             hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;
             has-mic: root.has-mic;
+            mics: root.mics;
+            mic-id: root.mic-id;
+            pick-mic(id) => { root.pick-mic(id); }
             cam-on: root.cam-on;
             cam-granted: root.cam-granted;
             cams: root.cams;
@@ -439,7 +444,6 @@ export component CallScreen inherits Rectangle {
             toggle-mic => { root.toggle-mic(); }
             toggle-cam => { root.toggle-cam(); }
             pick-cam(id) => { root.pick-cam(id); }
-            next-cam => { root.next-cam(); }
             toggle-portrait => { root.set-portrait(!root.portrait); }
             rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
             toggle-stats => { root.stats-open = !root.stats-open; }

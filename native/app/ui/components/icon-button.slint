@@ -14,6 +14,8 @@ export component IconButton inherits Rectangle {
     in property <bool> transparent;
     // Unread count in a red dot at the corner; hidden at 0
     in property <int> badge;
+    // A small icon at the bottom corner, like the web's .mark: what's on behind the button
+    in property <image> mark;
     callback clicked();
 
     property <color> base: kind == IconButtonKind.active ? Theme.text
@@ -76,6 +78,27 @@ export component IconButton inherits Rectangle {
             color: #fff;
             font-size: 11px;
             font-weight: 700;
+        }
+    }
+
+    if mark.width > 0: Rectangle {
+        x: parent.width - self.width + 2px;
+        y: parent.height - self.height + 2px;
+        width: 19px;
+        height: 19px;
+        border-radius: self.height / 2;
+        border-width: 2px;
+        border-color: Theme.surface;
+        background: Theme.text;
+        property <bool> shown: false;
+        init => { shown = true; }
+        transform-scale: shown ? 1 : 0.4;
+        animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
+        Image {
+            source: root.mark;
+            colorize: Theme.bg;
+            width: 11px;
+            height: 11px;
         }
     }
 }

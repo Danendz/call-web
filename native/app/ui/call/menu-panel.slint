@@ -1,10 +1,81 @@
 import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+
+// A row in a pill menu, with a check on the picked one
+export component MenuItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback activated();
+
+    height: 44px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover && enabled ? Theme.menu-hover : transparent;
+    opacity: enabled ? 1 : 0.38;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-checked: checked;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (enabled) { activated(); } }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        if root.icon.width > 0: Image {
+            source: root.icon;
+            colorize: Theme.text;
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.text;
+            color: Theme.text;
+            font-weight: 500;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Image {
+            source: Icons.check;
+            colorize: Theme.accent-hover;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            opacity: checked ? 1 : 0;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
+
+// A section's title in a pill menu, like the web's .menu-head
+export component MenuHead inherits Rectangle {
+    in property <string> text;
+    height: 36px;
+    accessible-role: none;
+    Text {
+        x: 12px;
+        width: parent.width - 18px;
+        text: root.text;
+        vertical-alignment: center;
+        color: Theme.muted;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        overflow: elide;
+    }
+}
 
 // A pill menu's panel. It fills its PopupWindow, which covers the whole window: a popover above its button, or
 // on a phone or a narrow window a bottom sheet that feels like the web's (vaul): it follows a drag down, closes
 // past a quarter of its height or on a flick, springs back otherwise and only gives a little when pulled up. A tap
 // on the dim, Esc or Back close it too. The list scrolls when it doesn't fit; a drag down only moves the sheet
-// once the list is at its top.
+// once the list is at its top. A footer row stays in view under the list.
 export component MenuPanel inherits Rectangle {
     in property <bool> sheet;
     in property <string> label;
@@ -12,6 +83,15 @@ export component MenuPanel inherits Rectangle {
     in property <length> anchor-right;
     in property <length> anchor-top;
     in property <length> popover-width: 236px;
+    // A popover opens from the button's left edge instead, at this x, like the web's split menus
+    in property <bool> align-left;
+    in property <length> anchor-left;
+    // A row pinned under the list, in view while the list scrolls; none while the text is empty
+    in property <string> footer-text;
+    in property <image> footer-icon;
+    in property <bool> footer-checked;
+    in property <bool> footer-enabled: true;
+    callback footer-activated();
     // The panel is gone: the owner closes the popup
     callback closed();
 
@@ -89,7 +169,8 @@ export component MenuPanel inherits Rectangle {
         property <length> rest: root.height - self.height;
         width: root.sheet ? min(root.width, 520px) : root.popover-width;
         height: min(body.preferred-height, root.sheet ? min(root.height * 0.8, 640px) : root.anchor-top - 32px);
-        x: root.sheet ? (root.width - self.width) / 2 : root.anchor-right + 8px - self.width;
+        x: root.sheet ? (root.width - self.width) / 2
+            : max(8px, min(root.width - self.width - 8px, root.align-left ? root.anchor-left - 8px : root.anchor-right + 8px - self.width));
         y: !root.sheet ? root.anchor-top - self.height - 16px : root.shown ? self.rest + root.drag : root.height;
         animate y {
             duration: root.sheet && !root.dragging ? Theme.sheet : 0ms;
@@ -98,7 +179,7 @@ export component MenuPanel inherits Rectangle {
         // A popover springs open from the button, like the web's .menu.open
         opacity: root.sheet || root.shown ? 1 : 0;
         transform-scale: root.sheet || root.shown ? 1 : 0.94;
-        transform-origin: { x: self.width, y: self.height };
+        transform-origin: { x: root.align-left ? 0 : self.width, y: self.height };
         animate opacity { duration: Theme.med; easing: Theme.ease; }
         animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
         border-radius: root.sheet ? 0 : Theme.radius;
@@ -106,8 +187,8 @@ export component MenuPanel inherits Rectangle {
         border-top-right-radius: root.sheet ? Theme.radius-lg : Theme.radius;
         border-width: 1px;
         border-color: Theme.glass-border;
-        // Glass without blur shows the pill through a sheet over it, so a sheet is solid
-        background: root.sheet ? Theme.surface : Theme.glass;
+        // Solid: glass without blur lets what's behind read through the rows
+        background: Theme.surface;
         drop-shadow-blur: 30px;
         drop-shadow-offset-y: 10px;
         drop-shadow-color: Theme.shadow;
@@ -181,6 +262,21 @@ export component MenuPanel inherits Rectangle {
                     items := VerticalLayout {
                         width: list.width;
                         @children
+                    }
+                }
+                if root.footer-text != "": VerticalLayout {
+                    padding-top: 6px;
+                    spacing: 6px;
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.glass-border;
+                    }
+                    MenuItem {
+                        icon: root.footer-icon;
+                        text: root.footer-text;
+                        checked: root.footer-checked;
+                        enabled: root.footer-enabled;
+                        activated => { root.footer-activated(); }
                     }
                 }
             }

@@ -1,64 +1,10 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { DeviceItem, DeviceName } from "../setup/device-row.slint";
-import { MenuPanel } from "menu-panel.slint";
+import { MenuPanel, MenuItem } from "menu-panel.slint";
 
-component MenuItem inherits Rectangle {
-    in property <image> icon;
-    in property <string> text;
-    in property <bool> checked;
-    in property <bool> enabled: true;
-    callback activated();
-
-    height: 44px;
-    border-radius: Theme.radius-sm;
-    background: touch.has-hover && enabled ? Theme.menu-hover : transparent;
-    opacity: enabled ? 1 : 0.38;
-    accessible-role: button;
-    accessible-label: text;
-    accessible-checked: checked;
-    accessible-enabled: enabled;
-    accessible-action-default => { if (enabled) { activated(); } }
-
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 12px;
-        Image {
-            source: icon;
-            colorize: Theme.text;
-            width: 18px;
-            height: 18px;
-            y: (parent.height - self.height) / 2;
-        }
-        Text {
-            text: root.text;
-            color: Theme.text;
-            font-weight: 500;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
-        }
-        Image {
-            source: Icons.check;
-            colorize: Theme.accent-hover;
-            width: 16px;
-            height: 16px;
-            y: (parent.height - self.height) / 2;
-            opacity: checked ? 1 : 0;
-        }
-    }
-    touch := TouchArea {
-        enabled: root.enabled;
-        clicked => { root.activated(); }
-    }
-}
-
-// The pill's ⋯ button and its menu, like the web's MoreMenu. Two cameras are a flip, more are listed to pick from.
+// The pill's ⋯ button and its menu, like the web's MoreMenu.
 export component MoreMenu inherits IconButton {
-    in property <[DeviceItem]> cams;
-    in property <string> cam-id;
     in property <bool> cam-granted;
     in property <bool> portrait;
     in property <bool> can-rotate;
@@ -66,14 +12,8 @@ export component MoreMenu inherits IconButton {
     in property <bool> can-screenshot;
     in property <bool> sharing;
     in property <bool> can-share;
-    // Where the call's sound plays on a phone: "speaker", "earpiece", "bluetooth"; empty on desktop
-    in property <[string]> outputs;
-    in property <string> output;
-    callback pick-output(string);
     callback screenshot();
     callback toggle-share();
-    callback pick-cam(string);
-    callback next-cam();
     callback toggle-portrait();
     callback rotate();
     callback toggle-stats();
@@ -105,25 +45,6 @@ export component MoreMenu inherits IconButton {
             anchor-top: root.absolute-position.y - root.area-y;
             closed => { menu.close(); }
 
-            for id in root.outputs: MenuItem {
-                icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone : Icons.volume-2;
-                text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece") : @tr("Speaker");
-                checked: id == root.output;
-                activated => { panel.dismiss(); root.pick-output(id); }
-            }
-            if cam-granted && cams.length == 2: MenuItem {
-                icon: Icons.switch-camera;
-                text: @tr("Switch camera");
-                activated => { panel.dismiss(); root.next-cam(); }
-            }
-            if cam-granted && cams.length > 2: VerticalLayout {
-                for cam in cams: MenuItem {
-                    icon: Icons.video;
-                    text: DeviceName.of(cam.label, @tr("Camera"));
-                    checked: cam.id == root.cam-id;
-                    activated => { root.pick-cam(cam.id); panel.dismiss(); }
-                }
-            }
             MenuItem {
                 icon: root.sharing ? Icons.screen-share-off : Icons.screen-share;
                 text: root.sharing ? @tr("Stop sharing") : @tr("Share screen");
