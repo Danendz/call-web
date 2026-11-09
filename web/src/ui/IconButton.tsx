@@ -9,6 +9,7 @@ export function IconButton({
   pressed,
   expanded,
   badge,
+  mark,
   disabled,
   className = "",
   onClick,
@@ -19,6 +20,8 @@ export function IconButton({
   pressed?: boolean;
   expanded?: boolean;
   badge?: number;
+  /** A small icon on the corner: a state the button's own icon doesn't show. */
+  mark?: ReactNode;
   disabled?: boolean;
   className?: string;
   onClick: () => void;
@@ -39,6 +42,11 @@ export function IconButton({
       {badge ? (
         <span className="badge" key={badge} aria-hidden>
           {badge > 9 ? "9+" : badge}
+        </span>
+      ) : null}
+      {mark && !badge ? (
+        <span className="mark" aria-hidden>
+          {mark}
         </span>
       ) : null}
     </button>

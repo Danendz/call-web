@@ -42,6 +42,7 @@ export const clientMessages = [
   { type: "screenshot" },
   { type: "media", camOn: true, screen: null },
   { type: "media", camOn: false, screen: "{6f1c2c9e-0000-4000-8000-000000000000}" },
+  { type: "media", camOn: true, screen: null, speakerOff: true },
 ] satisfies ClientMessage[];
 
 export const serverMessages = [
@@ -76,6 +77,7 @@ export const serverMessages = [
   { type: "pong" },
   { type: "screenshot" },
   { type: "media", camOn: true, screen: "s1" },
+  { type: "media", camOn: true, screen: null, speakerOff: true },
   { type: "error", message: "bad message" },
 ] satisfies ServerMessage[];
 

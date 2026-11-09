@@ -145,10 +145,10 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
       case "media": {
-        const { camOn, screen } = msg;
+        const { camOn, screen, speakerOff = false } = msg;
         const validScreen = screen === null || (typeof screen === "string" && screen.length <= MAX_STREAM_ID_LENGTH);
-        if (typeof camOn === "boolean" && validScreen && mediaPerMember(clientId)) {
-          relayToPeer(roomId, clientId, { type: "media", camOn, screen });
+        if (typeof camOn === "boolean" && validScreen && typeof speakerOff === "boolean" && mediaPerMember(clientId)) {
+          relayToPeer(roomId, clientId, { type: "media", camOn, screen, speakerOff });
         }
         break;
       }

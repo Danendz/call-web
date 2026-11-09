@@ -1,13 +1,19 @@
 import { Check, Ellipsis } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
+import { Spinner } from "../ui/Spinner";
+import { useDismiss } from "./useDismiss";
 
 export interface MenuItem {
+  /** For lists of devices, whose names can repeat. */
+  id?: string;
   label: string;
   icon: ReactNode;
   /** A toggle that's on gets a check mark. */
   checked?: boolean;
+  /** On its way: a spinner where the check mark goes. */
+  busy?: boolean;
   disabled?: boolean;
   onSelect: () => void;
 }
@@ -16,22 +22,7 @@ export interface MenuItem {
 export function MoreMenu({ items, open, onOpenChange }: { items: MenuItem[]; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onOpenChange(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onOpenChange]);
+  useDismiss(ref, open, () => onOpenChange(false));
 
   return (
     <div className="more" ref={ref}>
@@ -40,24 +31,30 @@ export function MoreMenu({ items, open, onOpenChange }: { items: MenuItem[]; ope
       </IconButton>
       <div className={`menu ${open ? "open" : ""}`} role="menu" aria-hidden={!open}>
         {items.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={item.checked ?? false}
-            className="menu-item"
-            disabled={item.disabled}
-            onClick={() => {
-              item.onSelect();
-              onOpenChange(false);
-            }}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-            {item.checked && <Check size={16} className="check" />}
-          </button>
+          <MenuButton key={item.label} item={item} onDone={() => onOpenChange(false)} />
         ))}
       </div>
     </div>
+  );
+}
+
+/** One row of a popover menu; it closes the menu once picked. */
+export function MenuButton({ item, onDone }: { item: MenuItem; onDone: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={item.checked ?? false}
+      className="menu-item"
+      disabled={item.disabled}
+      onClick={() => {
+        item.onSelect();
+        onDone();
+      }}
+    >
+      {item.icon}
+      <span>{item.label}</span>
+      {item.busy ? <Spinner size={16} /> : item.checked && <Check size={16} className="check" />}
+    </button>
   );
 }

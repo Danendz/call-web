@@ -73,7 +73,7 @@ impl Controller {
                     peer.handle_signal(payload);
                 }
             }
-            ServerMessage::Media { cam_on, screen } => {
+            ServerMessage::Media { cam_on, screen, .. } => {
                 self.state.remote_cam_on = cam_on;
                 self.remote.set_screen(screen);
             }
@@ -159,7 +159,7 @@ impl Controller {
         }
         if let Some(signaling) = &self.signaling {
             let screen = self.screen.sharing().then(|| self.screen.stream_id.clone());
-            signaling.send(ClientMessage::Media { cam_on: self.camera.sending(), screen });
+            signaling.send(ClientMessage::Media { cam_on: self.camera.sending(), screen, speaker_off: false });
         }
     }
 

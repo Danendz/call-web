@@ -126,6 +126,9 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           remoteScreen={remoteScreen}
           camOn={camOn}
           remoteCamOn={state.remoteCamOn}
+          speakerOff={state.speakerOff}
+          speakerId={state.speakerDeviceId}
+          remoteSpeakerOff={state.remoteSpeakerOff}
           layout={layout}
           corners={corners}
           remoteRotation={remoteRotation}
@@ -162,7 +165,6 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         <ControlPill
           controller={controller}
           state={state}
-          compact={compact}
           chatOpen={chatOpen}
           unread={unread}
           showStats={showStats}

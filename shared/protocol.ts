@@ -59,11 +59,13 @@ export type ClientMessage =
 
 // What you're sending, which the video tracks alone can't say: a camera turned off still sends black frames, and a
 // stopped share leaves its track in place. `screen` is the id of the stream your shared screen arrives in, null
-// when not sharing. Sent on every change and whenever the peer connection is (re)made.
+// when not sharing. `speakerOff`: you muted the other person's sound, so they know you can't hear them; missing from
+// older builds, which means false. Sent on every change and whenever the peer connection is (re)made.
 export interface MediaMessage {
   type: "media";
   camOn: boolean;
   screen: string | null;
+  speakerOff?: boolean;
 }
 
 export type ServerMessage =

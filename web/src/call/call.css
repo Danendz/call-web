@@ -172,6 +172,21 @@ video.mirror {
   opacity: 1;
 }
 
+/* The other person muted you */
+.feed-mark {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  color: #ff8a85;
+  pointer-events: none;
+}
+
 /* ---- waiting for the other person ---- */
 
 .waiting {
@@ -415,6 +430,89 @@ video.mirror {
   position: relative;
 }
 
+/* A pill button with its chevron, joined into one capsule */
+.split {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+button.split-chevron {
+  flex: none;
+  width: 26px;
+  height: 48px;
+  min-height: 0;
+  padding: 0 4px 0 0;
+  border: none;
+  border-radius: 0 999px 999px 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+button.split-chevron:hover:not(:disabled),
+button.split-chevron[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.split .menu {
+  left: -8px;
+  right: auto;
+  width: 268px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  transform-origin: bottom left;
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 6px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-section + .menu-section {
+  margin-top: 4px;
+}
+
+button.menu-chip {
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+button.menu-chip.on {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: #ff8a85;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--glass-border);
+}
+
 .menu {
   position: absolute;
   right: -8px;
@@ -469,7 +567,11 @@ button.menu-item:active:not(:disabled) {
 
 .menu-item span {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-item .check {
@@ -493,6 +595,11 @@ button.menu-item:active:not(:disabled) {
 
   .pill .icon-btn {
     width: 46px;
+    height: 46px;
+  }
+
+  .pill .split-chevron {
+    width: 22px;
     height: 46px;
   }
 
@@ -541,6 +648,10 @@ button.menu-item:active:not(:disabled) {
 
   .call.chat-open .pill .icon-btn {
     width: 42px;
+    height: 42px;
+  }
+
+  .call.chat-open .pill .split-chevron {
     height: 42px;
   }
 

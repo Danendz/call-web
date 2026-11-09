@@ -57,6 +57,12 @@
       "type": "media",
       "camOn": false,
       "screen": "{6f1c2c9e-0000-4000-8000-000000000000}"
+    },
+    {
+      "type": "media",
+      "camOn": true,
+      "screen": null,
+      "speakerOff": true
     }
   ],
   "constants": {
@@ -184,6 +190,12 @@
       "type": "media",
       "camOn": true,
       "screen": "s1"
+    },
+    {
+      "type": "media",
+      "camOn": true,
+      "screen": null,
+      "speakerOff": true
     },
     {
       "type": "error",
