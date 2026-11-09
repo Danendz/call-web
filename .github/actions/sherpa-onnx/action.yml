@@ -1,0 +1,23 @@
+# Run after the Rust cache restores. The cache keeps sherpa-onnx-sys's build-script result and its folders, but not
+# the library files in them, and the build script only checks the folder: it skips the download and linking fails
+# ("could not find native static library sherpa-onnx-c-api"). When the library is missing, remove the folder and the
+# build-script result, so it downloads again. `cargo clean -p` cleans only the dev profile unless given `--release`.
+name: sherpa-onnx
+description: Make sherpa-onnx-sys download its library again when the Rust cache emptied it
+inputs:
+  target:
+    description: The Rust target triple, for a cross build (Android)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: native
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        find target/sherpa-onnx-prebuilt -name '*sherpa-onnx-c-api.*' -type f 2>/dev/null | grep -q . && exit 0
+        rm -rf target/sherpa-onnx-prebuilt
+        cargo clean -p sherpa-onnx-sys ${TARGET:+--target "$TARGET"}
+        cargo clean -p sherpa-onnx-sys --release ${TARGET:+--target "$TARGET"}
