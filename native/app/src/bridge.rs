@@ -78,6 +78,7 @@ impl Bridge {
         });
 
         ui.set_mic_on(state.mic_on);
+        ui.set_has_mic(state.has_mic);
         // Nothing picked means the system default, which the OS lists first
         let mic = picked(&state.mics, state.mic_id.as_ref());
         ui.set_mic_id(mic.map(|d| d.id.as_str()).unwrap_or_default().into());

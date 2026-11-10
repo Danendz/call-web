@@ -56,6 +56,8 @@ pub struct State {
     /// When the call with the other person began, on this machine's clock; None while alone.
     pub call_started: Option<Instant>,
     pub mic_on: bool,
+    /// A mic can be used, even where there's no list to pick from (Android)
+    pub has_mic: bool,
     pub mics: Vec<Device>,
     pub mic_id: Option<String>,
     /// Where the call plays; empty on Android, which has its audio routes instead

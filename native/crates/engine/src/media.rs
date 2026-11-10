@@ -67,6 +67,11 @@ impl Media {
             .collect()
     }
 
+    /// A mic can be captured. True on Android without a list: its one mic is the audio route's.
+    pub fn has_mic(&self) -> bool {
+        self.platform_audio && (cfg!(target_os = "android") || !self.mics().is_empty())
+    }
+
     /// False if the mic is gone. A call's capture restarts on it: the ADM won't change device while recording.
     pub fn select_mic(&self, id: &str) -> bool {
         if !self.platform_audio {

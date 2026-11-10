@@ -23,6 +23,8 @@ export component AppWindow inherits Window {
     in property <CallLink> link;
     in property <string> elapsed;
     in property <bool> mic-on: true;
+    // Android has a mic but no list of them: the mic follows the audio route
+    in property <bool> has-mic;
     in property <[DeviceItem]> mics;
     in property <string> mic-id;
     in property <string> mic-label;
@@ -199,7 +201,8 @@ export component AppWindow inherits Window {
             pick-speaker(id) => { root.pick-speaker(id); }
             mic-on: root.mic-on;
             mic-level: root.mic-level;
-            mic-status: root.mics.length == 0 ? @tr("Microphone: Not found") : "";
+            has-mic: root.has-mic;
+            mic-status: root.has-mic ? "" : @tr("Microphone: Not found");
             video: root.self-video;
             video-rotation: root.self-frame-rotation;
             cam-on: root.cam-on;
@@ -228,7 +231,7 @@ export component AppWindow inherits Window {
             link: root.link;
             elapsed: root.elapsed;
             mic-on: root.mic-on;
-            has-mic: root.mics.length > 0;
+            has-mic: root.has-mic;
             mics: root.mics;
             mic-id: root.mic-id;
             pick-mic(id) => { root.pick-mic(id); }

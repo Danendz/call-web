@@ -122,6 +122,7 @@ impl Controller {
             link: None,
             call_started: None,
             mic_on: true,
+            has_mic: media.has_mic(),
             mics: media.mics(),
             speakers: media.speakers(),
             speaker_id: None,
@@ -333,6 +334,7 @@ impl Controller {
         self.state.room_url = Some(room::room_url(&self.server, &id));
         self.state.room_id = Some(id);
         self.state.phase = Phase::Setup;
+        self.state.has_mic = self.media.has_mic();
         self.state.mics = self.media.mics();
         self.state.speakers = self.media.speakers();
     }
