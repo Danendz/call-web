@@ -8,12 +8,13 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use engine::{
-    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, ModelStatus, Pair, Path, Phase, SpeechNotice, State,
-    TranslatorEvent, VideoStats,
+    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, Model as SpeechModel, ModelStatus, Pair, Path, Phase,
+    SpeechNotice, State, TranslatorEvent, VideoStats,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::chat::{Chat, local_time};
+use crate::megabytes;
 use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState, StatsView};
 
 /// What the bridge keeps on the UI thread between states.
@@ -144,7 +145,16 @@ impl Bridge {
         let (translation, progress) = model_state(state.translation);
         ui.set_translation_state(translation);
         ui.set_translation_progress(progress);
-        ui.set_translation_size(format!("{} MB", Pair::into(state.lang).size().div_ceil(1_000_000)).into());
+        let translation_size = Pair::into(state.lang).size();
+        ui.set_translation_size(megabytes(translation_size).into());
+        let (live, progress) = model_state(state.live);
+        ui.set_live_state(live);
+        ui.set_live_progress(progress);
+        let (pack, progress) =
+            pack_state(&[(state.live, SpeechModel::Live.size()), (state.translation, translation_size)]);
+        ui.set_pack_state(pack);
+        ui.set_pack_progress(progress);
+        ui.set_pack_size(megabytes(SpeechModel::Live.size() + translation_size).into());
         *self.last.borrow_mut() = (state.phase, state.lang, state.translation);
         self.sync_translation(ui);
     }
@@ -157,6 +167,31 @@ fn model_state(status: ModelStatus) -> (ModelState, i32) {
         ModelStatus::Ready => (ModelState::Ready, 100),
         ModelStatus::Failed => (ModelState::Failed, 0),
     }
+}
+
+/// Downloads asked for together, with their sizes, as one: ready once all are, and while any downloads, how much of
+/// the whole is in
+fn pack_state(parts: &[(ModelStatus, u64)]) -> (ModelState, i32) {
+    if parts.iter().all(|(s, _)| *s == ModelStatus::Ready) {
+        return (ModelState::Ready, 100);
+    }
+    if parts.iter().any(|(s, _)| matches!(s, ModelStatus::Downloading(_))) {
+        let total: u64 = parts.iter().map(|(_, size)| size).sum();
+        let done: u64 = parts
+            .iter()
+            .map(|(s, size)| match s {
+                ModelStatus::Ready => size * 100,
+                ModelStatus::Downloading(percent) => size * u64::from(*percent),
+                _ => 0,
+            })
+            .sum();
+        let percent = done.checked_div(total).unwrap_or(0);
+        return (ModelState::Downloading, i32::try_from(percent).unwrap_or(100));
+    }
+    if parts.iter().any(|(s, _)| *s == ModelStatus::Failed) {
+        return (ModelState::Failed, 0);
+    }
+    (ModelState::Missing, 0)
 }
 
 fn picked<'a>(devices: &'a [Device], id: Option<&String>) -> Option<&'a Device> {

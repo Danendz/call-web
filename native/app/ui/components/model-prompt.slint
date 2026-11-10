@@ -2,8 +2,8 @@ import { Theme } from "../theme.slint";
 import { Icons } from "icons.slint";
 import { Button, ButtonKind } from "button.slint";
 
-// Asks before downloading a model too big to fetch without asking: speech recognition on the first launch, live
-// translation when a language is picked. Settings has both after that.
+// Asks before downloading a model too big to fetch without asking: live subtitles' models on the start screen, live
+// translation when a language is picked. Settings has each after that.
 export component ModelPrompt inherits Rectangle {
     in property <string> title;
     in property <string> body;

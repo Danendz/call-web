@@ -81,17 +81,30 @@ export component AppWindow inherits Window {
     // Counts screenshots that couldn't be saved, so each one shows its toast
     in property <int> shot-failures;
     in property <string> version;
-    // The on-device speech model, for settings and the first launch's question
+    // SenseVoice, the on-device speech model for when live subtitles are off, in Settings
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
-    in-out property <bool> speech-prompt;
     callback download-model();
     callback cancel-model-download();
     callback delete-model();
     callback set-on-device(bool);
-    callback dismiss-speech-prompt();
+    // The live speech model, which sends what you say as you say it
+    in property <ModelState> live-state;
+    in property <int> live-progress;
+    in property <string> live-size;
+    callback download-live();
+    callback cancel-live-download();
+    callback delete-live();
+    // Live speech and this language's translation together, asked for once on the start screen
+    in property <ModelState> pack-state;
+    in property <int> pack-progress;
+    in property <string> pack-size;
+    in-out property <bool> live-prompt;
+    callback download-pack();
+    callback dismiss-live-prompt();
+    property <bool> live-prompt-up: root.live-prompt && root.subtitles-on && root.pack-state != ModelState.ready;
     // The translation model live subtitles need in this language, and whether its offer was put off
     in property <ModelState> translation-state;
     in property <int> translation-progress;
@@ -194,12 +207,14 @@ export component AppWindow inherits Window {
             dismiss-background-guide => { root.dismiss-background-guide(); }
             model-state: root.model-state;
             model-progress: root.model-progress;
-            model-size: root.model-size;
+            pack-state: root.pack-state;
+            pack-progress: root.pack-progress;
+            pack-size: root.pack-size;
             settings-open: root.settings-open;
             open-settings => { root.settings-open = true; }
-            speech-prompt: root.speech-prompt;
-            download-model => { root.download-model(); }
-            dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
+            live-prompt: root.live-prompt-up;
+            download-pack => { root.download-pack(); }
+            dismiss-live-prompt => { root.dismiss-live-prompt(); }
         }
 
         if phase == AppPhase.setup: SetupScreen {
@@ -350,6 +365,12 @@ export component AppWindow inherits Window {
             translation-state: root.translation-state;
             translation-progress: root.translation-progress;
             translation-size: root.translation-size;
+            live-state: root.live-state;
+            live-progress: root.live-progress;
+            live-size: root.live-size;
+            download-live => { root.download-live(); }
+            cancel-live-download => { root.cancel-live-download(); }
+            delete-live => { root.delete-live(); }
             download-translation => { root.download-translation(); }
             delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }
@@ -367,8 +388,8 @@ export component AppWindow inherits Window {
         }
 
         // Offered while subtitles are on and it isn't downloaded, until put off; over Settings too, where the language
-        // that needs it was just picked. Not on top of the first launch's speech question.
-        if root.subtitles-on && !root.translation-dismissed && !root.speech-prompt
+        // that needs it was just picked. Not on top of the live subtitles question, which downloads it too.
+        if root.subtitles-on && !root.translation-dismissed && !root.live-prompt-up
             && (root.translation-state == ModelState.missing || root.translation-state == ModelState.failed): ModelPrompt {
             icon: Icons.languages;
             title: @tr("Translate live subtitles on this device?");

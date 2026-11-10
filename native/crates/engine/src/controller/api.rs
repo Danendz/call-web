@@ -14,7 +14,7 @@ use super::Controller;
 use crate::camera::CameraAccess;
 use crate::level::Level;
 use crate::media::Device;
-use crate::speech::{ModelStatus, SpeechNotice};
+use crate::speech::{Model, ModelStatus, SpeechNotice};
 use crate::stats::CallStats;
 use crate::video::VideoSink;
 
@@ -93,6 +93,10 @@ pub struct State {
     pub model: ModelStatus,
     /// Speech goes to the on-device model once it's ready, instead of the server
     pub on_device: bool,
+    /// The live model, where there's a data folder to keep it in
+    pub live: ModelStatus,
+    /// Live subtitles are on: once the live model is there, it recognizes your speech and sends it as you speak
+    pub live_subtitles: bool,
     /// The translation model for live subtitles in `lang`, where there's a data folder to keep it in
     pub translation: ModelStatus,
     /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
@@ -130,11 +134,12 @@ pub enum Command {
     /// Tells the other person a picture of the call was saved
     NotifyScreenshot,
     SetTranscribe(bool),
-    /// Downloads the on-device speech model, picking up where an earlier try stopped
-    DownloadModel,
-    CancelModelDownload,
-    DeleteModel,
+    /// Downloads an on-device speech model, picking up where an earlier try stopped
+    DownloadModel(Model),
+    CancelModelDownload(Model),
+    DeleteModel(Model),
     SetOnDevice(bool),
+    SetLiveSubtitles(bool),
     /// Downloads the translation model `lang` needs, picking up where an earlier try stopped
     DownloadTranslation,
     DeleteTranslation,
