@@ -39,6 +39,12 @@ fn speech_messages() {
 }
 
 #[test]
+fn user_messages() {
+    round_trip::<UserClientMessage>("userClientMessages");
+    round_trip::<UserServerMessage>("userServerMessages");
+}
+
+#[test]
 fn constants() {
     let c = &fixtures()["constants"];
     assert_eq!(c["MAX_CHAT_LENGTH"], MAX_CHAT_LENGTH);
@@ -47,6 +53,9 @@ fn constants() {
     assert_eq!(c["TRANSCRIBE_SAMPLE_RATE"], TRANSCRIBE_SAMPLE_RATE);
     assert_eq!(c["MAX_UTTERANCE_S"], MAX_UTTERANCE_S);
     assert_eq!(c["LANGS"], serde_json::to_value(Lang::ALL).unwrap());
+    assert_eq!(c["USERNAME_RE"], USERNAME_PATTERN, "update is_username along with the pattern");
+    assert_eq!(c["MIN_PASSWORD_LENGTH"], MIN_PASSWORD_LENGTH);
+    assert_eq!(c["MAX_PASSWORD_LENGTH"], MAX_PASSWORD_LENGTH);
 }
 
 #[test]

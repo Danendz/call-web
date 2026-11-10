@@ -5,6 +5,7 @@
 mod android;
 mod bridge;
 mod chat;
+mod friends;
 mod screenshot;
 mod settings;
 #[cfg(not(target_os = "android"))]
@@ -94,6 +95,7 @@ pub fn run() -> anyhow::Result<()> {
     let sink = video::SlintSink::new(ui.as_weak());
     let chat_weak = ui.as_weak();
     let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
+    let server_for_friends = server.clone();
     let engine = Rc::new(Engine::start(
         server,
         lang,
@@ -107,6 +109,9 @@ pub fn run() -> anyhow::Result<()> {
             let _ = chat_weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.chat(&ui, event)));
         },
     )?);
+
+    // Started after the engine, which it tells the session and answered calls
+    let friends = friends::start(&ui, &engine, server_for_friends)?;
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
     // mic level while the setup screen shows it
@@ -153,6 +158,14 @@ pub fn run() -> anyhow::Result<()> {
         move || engine.send(command.clone())
     };
     ui.on_new_room(send(Command::NewRoom));
+    ui.on_rejoin({
+        let engine = engine.clone();
+        move |room_id| {
+            // Picked from the Rooms list: the other person is waiting, so no setup screen
+            engine.send(Command::OpenRoom(room_id.into()));
+            engine.send(Command::Join);
+        }
+    });
     ui.on_join(send(Command::Join));
     ui.on_hang_up(send(Command::HangUp));
     ui.on_home(send(Command::Home));
@@ -349,6 +362,7 @@ pub fn run() -> anyhow::Result<()> {
     ui.run()?;
     // Dropping the engine leaves the room before the process ends
     drop(ui);
+    drop(friends);
     drop(engine);
     #[cfg(not(target_os = "android"))]
     if let Some(updater) = updater {

@@ -1,0 +1,262 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+import { Field } from "../components/field.slint";
+import { AccountText } from "../account/errors.slint";
+
+// presence: "online", "in-call" or "offline"
+export struct FriendRow { name: string, presence: string }
+export struct MissedRow { from: string, at: string }
+export struct RoomRow { room-id: string, with: string }
+
+component Card inherits Rectangle {
+    in property <string> title;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    VerticalLayout {
+        padding: 14px;
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 2px;
+        if root.title != "": Text {
+            text: root.title;
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            font-weight: 650;
+        }
+        @children
+    }
+}
+
+// A name on the left, controls on the right
+component Row inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> detail;
+    in property <color> dot: #00000000;
+    min-height: 52px;
+    spacing: 10px;
+    if root.dot != #00000000: VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background: root.dot;
+        }
+    }
+    HorizontalLayout {
+        horizontal-stretch: 1;
+        spacing: 10px;
+        Text {
+            text: root.name;
+            color: Theme.text;
+            font-weight: 550;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: root.detail;
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+    @children
+}
+
+// The signed-in start screen's friends: missed calls, rooms to rejoin, requests, friends with presence, and adding one.
+export component FriendsPanel inherits VerticalLayout {
+    in property <[FriendRow]> friends;
+    in property <[string]> incoming;
+    in property <[string]> outgoing;
+    in property <[MissedRow]> missed;
+    in property <[RoomRow]> rooms;
+    in property <bool> connected;
+    // Your ring is going out: no second one meanwhile
+    in property <bool> calling;
+    in property <string> error;
+    callback ring(string);
+    callback friend-action(string, string);
+    callback missed-seen();
+    callback rejoin(string);
+    callback clear-error();
+
+    property <string> more-for;
+    property <bool> sent;
+
+    spacing: 14px;
+
+    if !root.connected: Text {
+        text: @tr("Reconnecting…");
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+        horizontal-alignment: center;
+    }
+
+    if root.missed.length > 0: Card {
+        title: @tr("Missed calls");
+        for call in root.missed: Row {
+            name: call.from;
+            detail: call.at;
+        }
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: @tr("Clear");
+                height-hint: 36px;
+                font-size: Theme.font-size-small;
+                clicked => { root.missed-seen(); }
+            }
+        }
+    }
+
+    if root.rooms.length > 0: Card {
+        title: @tr("Rooms");
+        for room in root.rooms: Row {
+            name: @tr("{} is still in the call", room.with);
+            Button {
+                text: @tr("Rejoin");
+                kind: ButtonKind.primary;
+                height-hint: 38px;
+                clicked => { root.rejoin(room.room-id); }
+            }
+        }
+    }
+
+    if root.incoming.length > 0: Card {
+        title: @tr("Friend requests");
+        for name in root.incoming: Row {
+            name: name;
+            Button {
+                text: @tr("Accept");
+                kind: ButtonKind.primary;
+                height-hint: 38px;
+                clicked => { root.friend-action("accept", name); }
+            }
+            Button {
+                text: @tr("Decline");
+                height-hint: 38px;
+                clicked => { root.friend-action("remove", name); }
+            }
+        }
+    }
+
+    Card {
+        title: @tr("Friends");
+        if root.friends.length == 0: Text {
+            text: @tr("No friends yet. Add someone by their exact username.");
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            wrap: word-wrap;
+        }
+        for friend in root.friends: VerticalLayout {
+            Row {
+                name: friend.name;
+                detail: friend.presence == "online" ? @tr("Online") : friend.presence == "in-call" ? @tr("In a call") : @tr("Offline");
+                dot: friend.presence == "online" ? Theme.good : friend.presence == "in-call" ? Theme.ok : Theme.surface-3;
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.ellipsis;
+                        label: @tr("More for {}", friend.name);
+                        size: 36px;
+                        transparent: true;
+                        clicked => { root.more-for = root.more-for == friend.name ? "" : friend.name; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.phone;
+                        label: @tr("Call {}", friend.name);
+                        kind: IconButtonKind.active;
+                        size: 40px;
+                        enabled: !root.calling && root.connected;
+                        clicked => { root.ring(friend.name); }
+                    }
+                }
+            }
+            if root.more-for == friend.name: HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                padding-bottom: 8px;
+                Button {
+                    text: @tr("Remove");
+                    height-hint: 36px;
+                    font-size: Theme.font-size-small;
+                    clicked => {
+                        root.friend-action("remove", friend.name);
+                        root.more-for = "";
+                    }
+                }
+                Button {
+                    text: @tr("Block");
+                    kind: ButtonKind.danger;
+                    height-hint: 36px;
+                    font-size: Theme.font-size-small;
+                    clicked => {
+                        root.friend-action("block", friend.name);
+                        root.more-for = "";
+                    }
+                }
+            }
+        }
+        for name in root.outgoing: Row {
+            name: name;
+            detail: @tr("Waiting for them to accept");
+            Button {
+                text: @tr("Withdraw");
+                height-hint: 36px;
+                font-size: Theme.font-size-small;
+                clicked => { root.friend-action("remove", name); }
+            }
+        }
+
+        HorizontalLayout {
+            padding-top: 10px;
+            spacing: 8px;
+            add := Field {
+                horizontal-stretch: 1;
+                placeholder: @tr("Add a friend by username");
+                edited => {
+                    root.sent = false;
+                    root.clear-error();
+                }
+                accepted => { root.add-friend(); }
+            }
+            VerticalLayout {
+                alignment: end;
+                Button {
+                    text: @tr("Send");
+                    icon: Icons.user-plus;
+                    enabled: add.text != "";
+                    clicked => { root.add-friend(); }
+                }
+            }
+        }
+        if root.sent && root.error == "": Text {
+            text: @tr("If that username exists, they'll see your request.");
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            wrap: word-wrap;
+        }
+        if root.error != "": Text {
+            text: AccountText.error(root.error);
+            color: Theme.bad;
+            font-size: Theme.font-size-small;
+            wrap: word-wrap;
+        }
+    }
+
+    function add-friend() {
+        if (add.text == "") { return; }
+        root.friend-action("request", add.text);
+        add.clear();
+        root.sent = true;
+    }
+}

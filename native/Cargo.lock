@@ -1613,6 +1613,7 @@ dependencies = [
  "objc2-screen-capture-kit",
  "protocol",
  "rustls",
+ "serde",
  "serde_json",
  "sha2",
  "sherpa-onnx",

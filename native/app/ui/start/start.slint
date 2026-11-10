@@ -5,8 +5,9 @@ import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
 import { ModelState } from "../settings/settings.slint";
 import { SpeechPrompt } from "speech-prompt.slint";
+import { FriendsPanel, FriendRow, MissedRow, RoomRow } from "../friends/friends-panel.slint";
 
-export { ModelState }
+export { ModelState, FriendRow, MissedRow, RoomRow }
 
 // First screen: a desktop app has no address bar, so the room comes from here.
 export component StartScreen inherits Rectangle {
@@ -31,102 +32,156 @@ export component StartScreen inherits Rectangle {
     in property <bool> speech-prompt;
     callback download-model();
     callback dismiss-speech-prompt();
+    // "loading", "signed-out", "signed-in", or "off" when the server has no accounts
+    in property <string> account;
+    callback open-sign-in();
+    in property <[FriendRow]> friends;
+    in property <[string]> friend-requests;
+    in property <[string]> pending-requests;
+    in property <[MissedRow]> missed;
+    in property <[RoomRow]> open-rooms;
+    in property <bool> friends-connected;
+    in property <bool> calling;
+    in property <string> account-error;
+    callback ring(string);
+    callback friend-action(string, string);
+    callback missed-seen();
+    callback rejoin(string);
+    callback clear-account-error();
     property <bool> asking: false;
     property <bool> shown: false;
     init => { shown = true; }
 
-    VerticalLayout {
-        alignment: center;
-        spacing: 28px;
-        padding: 24px;
-        opacity: shown ? 1 : 0;
-        y: shown ? 0 : 10px;
-        animate opacity, y { duration: Theme.slow; easing: Theme.ease; }
+    // Signed in, the friends list can be taller than the window
+    Flickable {
+        content-height: max(main.preferred-height, self.height);
+        main := VerticalLayout {
+            width: parent.width;
+            height: max(self.preferred-height, root.height);
+            alignment: root.account == "signed-in" ? start : center;
+            spacing: 28px;
+            padding: 24px;
+            padding-top: root.account == "signed-in" ? 64px : 24px;
+            padding-bottom: 64px;
+            opacity: shown ? 1 : 0;
+            y: shown ? 0 : 10px;
+            animate opacity, y { duration: Theme.slow; easing: Theme.ease; }
 
-        HorizontalLayout {
-            alignment: center;
-            Rectangle {
-                width: 72px;
-                height: 72px;
-                border-radius: self.width / 2;
-                background: Theme.accent-soft;
-                Image {
-                    source: Icons.video;
-                    colorize: Theme.accent;
-                    width: 30px;
-                    height: 30px;
-                }
-            }
-        }
-        HorizontalLayout {
-            alignment: center;
-            spacing: 10px;
-            Button {
-                text: @tr("New room");
-                icon: Icons.plus;
-                kind: ButtonKind.primary;
-                height-hint: 52px;
-                font-size: 16px;
-                clicked => { root.new-room(); }
-            }
-            Button {
-                text: @tr("Join by link");
-                icon: Icons.link;
-                height-hint: 52px;
-                font-size: 16px;
-                clicked => { asking = true; }
-            }
-        }
-
-        // No API can change these settings, so the guide says where they are
-        if root.background-guide != "": HorizontalLayout {
-            alignment: center;
-            Rectangle {
-                width: min(440px, root.width - 48px);
-                height: guide.preferred-height;
-                border-radius: Theme.radius-lg;
-                border-width: 1px;
-                border-color: Theme.border;
-                background: Theme.surface;
-                guide := VerticalLayout {
-                    padding: 18px;
-                    spacing: 14px;
-                    HorizontalLayout {
-                        spacing: 12px;
-                        Image {
-                            source: Icons.battery-warning;
-                            colorize: Theme.accent;
-                            width: 20px;
-                            height: 20px;
-                        }
-                        Text {
-                            text: root.background-guide == "huawei"
-                                ? @tr("So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches.")
-                                : @tr("So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings.");
-                            color: Theme.text;
-                            font-size: 14px;
-                            wrap: word-wrap;
-                            horizontal-stretch: 1;
-                        }
-                    }
-                    HorizontalLayout {
-                        alignment: end;
-                        spacing: 10px;
-                        Button {
-                            text: @tr("Done");
-                            height-hint: 40px;
-                            clicked => { root.dismiss-background-guide(); }
-                        }
-                        Button {
-                            text: @tr("Open settings");
-                            kind: ButtonKind.primary;
-                            height-hint: 40px;
-                            clicked => { root.open-background-settings(); }
-                        }
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 72px;
+                    height: 72px;
+                    border-radius: self.width / 2;
+                    background: Theme.accent-soft;
+                    Image {
+                        source: Icons.video;
+                        colorize: Theme.accent;
+                        width: 30px;
+                        height: 30px;
                     }
                 }
             }
+            HorizontalLayout {
+                alignment: center;
+                spacing: 10px;
+                Button {
+                    text: @tr("New room");
+                    icon: Icons.plus;
+                    kind: ButtonKind.primary;
+                    height-hint: 52px;
+                    font-size: 16px;
+                    clicked => { root.new-room(); }
+                }
+                Button {
+                    text: @tr("Join by link");
+                    icon: Icons.link;
+                    height-hint: 52px;
+                    font-size: 16px;
+                    clicked => { asking = true; }
+                }
+            }
+
+            if root.account == "signed-out": HorizontalLayout {
+                alignment: center;
+                Button {
+                    text: @tr("Sign in");
+                    icon: Icons.key-round;
+                    clicked => { root.open-sign-in(); }
+                }
+            }
+
+            if root.account == "signed-in": HorizontalLayout {
+                alignment: center;
+                FriendsPanel {
+                    width: min(560px, root.width - 48px);
+                    friends: root.friends;
+                    incoming: root.friend-requests;
+                    outgoing: root.pending-requests;
+                    missed: root.missed;
+                    rooms: root.open-rooms;
+                    connected: root.friends-connected;
+                    calling: root.calling;
+                    error: root.account-error;
+                    ring(name) => { root.ring(name); }
+                    friend-action(action, name) => { root.friend-action(action, name); }
+                    missed-seen => { root.missed-seen(); }
+                    rejoin(id) => { root.rejoin(id); }
+                    clear-error => { root.clear-account-error(); }
+                }
+            }
+
+            // No API can change these settings, so the guide says where they are
+            if root.background-guide != "": HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: min(440px, root.width - 48px);
+                    height: guide.preferred-height;
+                    border-radius: Theme.radius-lg;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    guide := VerticalLayout {
+                        padding: 18px;
+                        spacing: 14px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Image {
+                                source: Icons.battery-warning;
+                                colorize: Theme.accent;
+                                width: 20px;
+                                height: 20px;
+                            }
+                            Text {
+                                text: root.background-guide == "huawei"
+                                    ? @tr("So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches.")
+                                    : @tr("So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings.");
+                                color: Theme.text;
+                                font-size: 14px;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: end;
+                            spacing: 10px;
+                            Button {
+                                text: @tr("Done");
+                                height-hint: 40px;
+                                clicked => { root.dismiss-background-guide(); }
+                            }
+                            Button {
+                                text: @tr("Open settings");
+                                kind: ButtonKind.primary;
+                                height-hint: 40px;
+                                clicked => { root.open-background-settings(); }
+                            }
+                        }
+                    }
+                }
+            }
         }
+
     }
 
     // Only here, never in a call: updating restarts the app

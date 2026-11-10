@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-use protocol::{ChatMessage, Lang, Translation};
+use protocol::{ChatMessage, FullReason, Lang, Translation};
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -83,6 +83,8 @@ pub struct State {
     pub cam_id: Option<String>,
     /// We send a 9:16 picture instead of 16:9
     pub portrait: bool,
+    /// Why the room can't be joined, in [`Phase::Full`]; None: two people are already in it
+    pub full_reason: Option<FullReason>,
     pub stats: Option<CallStats>,
     /// The other person just saved a picture of the call
     pub peer_screenshot: bool,
@@ -105,6 +107,8 @@ pub enum Command {
     /// A room id, or a link someone pasted, already checked with [`crate::room::parse_room`].
     OpenRoom(String),
     SetLang(Lang),
+    /// The signed-in account's token for the room socket (a private room needs it), or None once signed out
+    SetSession(Option<crate::friends::SessionToken>),
     Join,
     HangUp,
     /// Back to the start screen

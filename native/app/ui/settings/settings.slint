@@ -3,6 +3,7 @@ import { Icons } from "../components/icons.slint";
 import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { LangSwitch } from "../setup/lang-switch.slint";
+import { AccountSection } from "../account/account-section.slint";
 
 // Where the on-device speech model stands, as the engine's ModelStatus
 export enum ModelState { missing, downloading, ready, failed }
@@ -98,6 +99,21 @@ export component SettingsSheet inherits Rectangle {
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
+    // The account part, while signed in
+    in property <string> username;
+    in property <string> account-error;
+    in property <bool> account-busy;
+    in property <string> invite;
+    in property <int> invites-unused;
+    in property <int> invites-max;
+    in property <bool> password-changed;
+    in property <[string]> blocked;
+    callback new-invite();
+    callback change-password(string, string);
+    callback unblock(string);
+    callback sign-out();
+    callback delete-account(string);
+    callback clear-account-error();
     callback set-show-stats(bool);
     callback set-noise-suppression(bool);
     callback set-lang(string);
@@ -352,6 +368,27 @@ export component SettingsSheet inherits Rectangle {
                         color: Theme.muted;
                         font-size: Theme.font-size-small;
                         wrap: word-wrap;
+                    }
+
+                    if root.username != "": Rectangle { height: 10px; }
+                    if root.username != "": AccountSection {
+                        username: root.username;
+                        error: root.account-error;
+                        busy: root.account-busy;
+                        invite: root.invite;
+                        invites-unused: root.invites-unused;
+                        invites-max: root.invites-max;
+                        password-changed: root.password-changed;
+                        blocked: root.blocked;
+                        new-invite => { root.new-invite(); }
+                        change-password(current, next) => { root.change-password(current, next); }
+                        unblock(name) => { root.unblock(name); }
+                        sign-out => {
+                            root.sign-out();
+                            root.dismiss();
+                        }
+                        delete-account(password) => { root.delete-account(password); }
+                        clear-error => { root.clear-account-error(); }
                     }
                 }
             }

@@ -4,13 +4,16 @@ import { Theme } from "theme.slint";
 import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
-import { StartScreen, ModelState } from "start/start.slint";
+import { StartScreen, ModelState, FriendRow, MissedRow, RoomRow } from "start/start.slint";
+import { SignInDialog } from "account/sign-in-dialog.slint";
+import { RecoveryDialog } from "account/recovery-dialog.slint";
+import { CallOverlay } from "friends/call-overlay.slint";
 import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, ModelState }
+export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, FriendRow, MissedRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -118,6 +121,57 @@ export component AppWindow inherits Window {
         : cam-access == CamAccess.missing ? @tr("Camera: Not found")
         : "";
 
+    // The account and friends, from the friends thread. account: "loading", "signed-out", "signed-in", or "off"
+    // when the server has no accounts
+    in property <string> account: "loading";
+    in property <string> username;
+    in property <[FriendRow]> friends;
+    in property <[string]> friend-requests;
+    in property <[string]> pending-requests;
+    in property <[string]> blocked;
+    in property <[MissedRow]> missed;
+    in property <[RoomRow]> open-rooms;
+    in property <bool> friends-connected;
+    // Whom your ring is going to, who's calling you, and how your last ring ended (CallOverlay)
+    in property <string> calling;
+    in property <string> incoming-from;
+    // The call that incoming-from is about, for answering it
+    in property <string> incoming-call-id;
+    in property <string> call-notice-reason;
+    in property <string> call-notice-with;
+    in property <string> account-error;
+    in property <bool> account-busy;
+    in property <string> recovery-code;
+    in property <string> invite;
+    in property <int> invites-unused;
+    in property <int> invites-max;
+    in property <bool> password-changed;
+    in-out property <bool> sign-in-open;
+    // Why the room can't be joined: "", "time-limit", "not-invited" or "elsewhere"
+    in property <string> full-reason;
+    callback sign-in(string, string);
+    callback register(string, string, string);
+    callback recover(string, string, string);
+    callback sign-out();
+    callback recovery-saved();
+    callback clear-account-error();
+    callback friend-action(string, string);
+    callback ring(string);
+    callback cancel-ring();
+    callback answer(bool);
+    callback missed-seen();
+    callback dismiss-call-notice();
+    callback rejoin(string);
+    callback load-invites();
+    callback new-invite();
+    callback change-password(string, string);
+    callback delete-account(string);
+    changed settings-open => {
+        if (settings-open && account == "signed-in") {
+            load-invites();
+        }
+    }
+
     callback new-room();
     callback open-link(string) -> bool;
     callback set-lang(string);
@@ -188,6 +242,21 @@ export component AppWindow inherits Window {
             speech-prompt: root.speech-prompt;
             download-model => { root.download-model(); }
             dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
+            account: root.account;
+            open-sign-in => { root.sign-in-open = true; }
+            friends: root.friends;
+            friend-requests: root.friend-requests;
+            pending-requests: root.pending-requests;
+            missed: root.missed;
+            open-rooms: root.open-rooms;
+            friends-connected: root.friends-connected;
+            calling: root.calling != "";
+            account-error: root.account-error;
+            ring(name) => { root.ring(name); }
+            friend-action(action, name) => { root.friend-action(action, name); }
+            missed-seen => { root.missed-seen(); }
+            rejoin(id) => { root.rejoin(id); }
+            clear-account-error => { root.clear-account-error(); }
         }
 
         if phase == AppPhase.setup: SetupScreen {
@@ -297,10 +366,25 @@ export component AppWindow inherits Window {
         }
 
         if phase == AppPhase.full: Centered {
-            icon: Icons.users;
-            title: @tr("Room is full");
-            body: @tr("This room already has two people in it.");
-            Button {
+            icon: root.full-reason == "time-limit" ? Icons.timer
+                : root.full-reason == "not-invited" ? Icons.lock
+                : root.full-reason == "elsewhere" ? Icons.monitor-smartphone
+                : Icons.users;
+            title: root.full-reason == "time-limit" ? @tr("Time's up")
+                : root.full-reason == "not-invited" ? @tr("This is a private room")
+                : root.full-reason == "elsewhere" ? @tr("You joined from another device")
+                : @tr("Room is full");
+            body: root.full-reason == "time-limit" ? @tr("Calls without an account end after 2 hours. Start a new room to keep talking.")
+                : root.full-reason == "not-invited" ? @tr("Only the two people in this call can join it.")
+                : root.full-reason == "elsewhere" ? @tr("The call goes on there.")
+                : @tr("This room already has two people in it.");
+            if root.account == "signed-in": Button {
+                text: @tr("Back to friends");
+                icon: Icons.house;
+                kind: ButtonKind.primary;
+                clicked => { root.home(); }
+            }
+            if root.account != "signed-in": Button {
                 text: @tr("Start a new room");
                 icon: Icons.plus;
                 kind: ButtonKind.primary;
@@ -317,7 +401,12 @@ export component AppWindow inherits Window {
                 kind: ButtonKind.primary;
                 clicked => { root.join(); }
             }
-            Button {
+            if root.account == "signed-in": Button {
+                text: @tr("Back to friends");
+                icon: Icons.house;
+                clicked => { root.home(); }
+            }
+            if root.account != "signed-in": Button {
                 text: @tr("New room");
                 icon: Icons.plus;
                 clicked => { root.new-room(); }
@@ -341,10 +430,57 @@ export component AppWindow inherits Window {
             cancel-download => { root.cancel-model-download(); }
             delete-model => { root.delete-model(); }
             set-on-device(on) => { root.set-on-device(on); }
+            username: root.account == "signed-in" ? root.username : "";
+            account-error: root.account-error;
+            account-busy: root.account-busy;
+            invite: root.invite;
+            invites-unused: root.invites-unused;
+            invites-max: root.invites-max;
+            password-changed: root.password-changed;
+            blocked: root.blocked;
+            new-invite => { root.new-invite(); }
+            change-password(current, next) => { root.change-password(current, next); }
+            unblock(name) => { root.friend-action("unblock", name); }
+            sign-out => { root.sign-out(); }
+            delete-account(password) => { root.delete-account(password); }
+            clear-account-error => { root.clear-account-error(); }
             closed => {
                 root.settings-open = false;
                 keys.focus();
             }
+        }
+
+        if root.sign-in-open && root.account == "signed-out": SignInDialog {
+            error: root.account-error;
+            busy: root.account-busy;
+            sign-in(user, password) => { root.sign-in(user, password); }
+            register(user, password, invite) => { root.register(user, password, invite); }
+            recover(user, code, password) => { root.recover(user, code, password); }
+            clear-error => { root.clear-account-error(); }
+            close => {
+                root.sign-in-open = false;
+                root.clear-account-error();
+                keys.focus();
+            }
+        }
+
+        if root.recovery-code != "": RecoveryDialog {
+            code: root.recovery-code;
+            saved => { root.recovery-saved(); }
+        }
+
+        // Rings show over every screen, a call too; picture-in-picture is too small for them
+        if !root.pip: CallOverlay {
+            x: (parent.width - self.width) / 2;
+            y: parent.height - self.height - 20px;
+            parent-width: parent.width;
+            incoming-from: root.incoming-from;
+            calling: root.calling;
+            notice: root.call-notice-reason;
+            notice-with: root.call-notice-with;
+            answer(accept) => { root.answer(accept); }
+            cancel => { root.cancel-ring(); }
+            dismiss => { root.dismiss-call-notice(); }
         }
     }
 }

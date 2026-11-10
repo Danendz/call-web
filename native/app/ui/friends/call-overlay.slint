@@ -1,0 +1,115 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
+
+// A call coming in, your ring going out, or how it ended: a card at the bottom, over whatever screen is up.
+export component CallOverlay inherits Rectangle {
+    // Who's calling; "" when nobody
+    in property <string> incoming-from;
+    // Whom you're calling; "" when nobody
+    in property <string> calling;
+    // How your last ring ended (protocol's CallEndReason in kebab-case), and with whom; "" when nothing to say
+    in property <string> notice;
+    in property <string> notice-with;
+    callback answer(bool);
+    callback cancel();
+    callback dismiss();
+
+    property <string> notice-text: notice == "declined" ? @tr("{} declined", notice-with)
+        : notice == "busy" ? @tr("{} is in another call. They'll see a missed call.", notice-with)
+        : notice == "offline" ? @tr("{} isn't online. They'll see a missed call.", notice-with)
+        : notice == "timeout" ? @tr("{} didn't answer", notice-with)
+        : notice == "unavailable" ? @tr("Couldn't call {}", notice-with)
+        : "";
+    property <bool> showing: incoming-from != "" || calling != "" || notice-text != "";
+
+    visible: showing;
+    // Nothing in this rectangle but the card takes clicks
+    width: card.width;
+    height: card.height;
+
+    // Hides the notice after a while, like the web's
+    Timer {
+        interval: 6s;
+        running: root.incoming-from == "" && root.calling == "" && root.notice-text != "";
+        triggered => { root.dismiss(); }
+    }
+
+    card := Rectangle {
+        width: min(layout.preferred-width, root.parent-width - 32px);
+        height: layout.preferred-height;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.glass;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        accessible-role: AccessibleRole.groupbox;
+
+        TouchArea { }
+
+        layout := HorizontalLayout {
+            padding: 14px;
+            padding-left: 18px;
+            spacing: 14px;
+            if root.incoming-from != "" || root.calling != "": VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 22px;
+                    background: Theme.accent-soft;
+                    Image {
+                        source: Icons.phone;
+                        colorize: Theme.accent;
+                        width: 22px;
+                        height: 22px;
+                    }
+                }
+            }
+            Text {
+                text: root.incoming-from != "" ? @tr("{} is calling", root.incoming-from)
+                    : root.calling != "" ? @tr("Calling {}…", root.calling)
+                    : root.notice-text;
+                color: Theme.text;
+                font-weight: root.notice-text != "" && root.incoming-from == "" && root.calling == "" ? 400 : 650;
+                vertical-alignment: center;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+            }
+            if root.incoming-from != "": Button {
+                text: @tr("Decline");
+                icon: Icons.phone-off;
+                kind: ButtonKind.danger;
+                clicked => { root.answer(false); }
+            }
+            if root.incoming-from != "": Button {
+                text: @tr("Accept");
+                icon: Icons.phone;
+                kind: ButtonKind.primary;
+                clicked => { root.answer(true); }
+            }
+            if root.incoming-from == "" && root.calling != "": Button {
+                text: @tr("Cancel");
+                icon: Icons.phone-off;
+                kind: ButtonKind.danger;
+                clicked => { root.cancel(); }
+            }
+            if root.incoming-from == "" && root.calling == "": VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: Icons.x;
+                    label: @tr("Dismiss");
+                    size: 36px;
+                    transparent: true;
+                    clicked => { root.dismiss(); }
+                }
+            }
+        }
+    }
+
+    // The window's width, for the card's limit
+    in property <length> parent-width;
+}

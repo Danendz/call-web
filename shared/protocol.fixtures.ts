@@ -1,8 +1,9 @@
-// One example of every message shape in protocol.ts, with and without its optional fields. The native client's
+// One example of every message shape in protocol.ts (and the account constants in api.ts), with and without its optional fields. The native client's
 // Rust types are written by hand; `npm run fixtures` writes these to fixtures.json and a Rust test parses each
 // one, so a change to the messages or constants that the Rust side doesn't follow fails its tests. Typecheck keeps
 // these honest.
 
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, USERNAME_RE } from "./api.js";
 import {
   LANGS,
   MAX_CHAT_LENGTH,
@@ -25,6 +26,9 @@ export const constants = {
   LANGS,
   TRANSCRIBE_SAMPLE_RATE,
   MAX_UTTERANCE_S,
+  USERNAME_RE: USERNAME_RE.source,
+  MIN_PASSWORD_LENGTH,
+  MAX_PASSWORD_LENGTH,
 };
 
 const chatMessage = { id: "m1", from: "c1", text: "你好", ts: 1_700_000_000_000 };

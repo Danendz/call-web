@@ -91,10 +91,11 @@ impl Controller {
                     let _ = tx.send(Internal::PeerScreenshotShown);
                 });
             }
-            ServerMessage::Full { .. } => {
+            ServerMessage::Full { reason } => {
                 self.signaling = None;
                 self.drop_peer();
                 self.state.phase = Phase::Full;
+                self.state.full_reason = reason;
             }
             ServerMessage::Error { message } => tracing::warn!("server error: {message}"),
             // Chat and the rest arrive with the milestones that use them

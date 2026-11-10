@@ -1,6 +1,12 @@
-//! Messages exchanged over `/ws` and `/ws/speech`, mirroring `shared/protocol.ts` by hand. The TypeScript file is
+//! Messages exchanged over `/ws`, `/ws/speech` and `/ws/user`, and the `/api` bodies, mirroring `shared/protocol.ts` by hand. The TypeScript file is
 //! the source of truth: `tests/fixtures.rs` parses every example in `shared/protocol.fixtures.ts`, so a change
 //! there that isn't followed here fails the tests.
+
+mod api;
+mod user;
+
+pub use api::*;
+pub use user::*;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

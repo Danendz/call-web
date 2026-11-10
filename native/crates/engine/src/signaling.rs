@@ -43,9 +43,15 @@ pub struct Signaling {
 }
 
 impl Signaling {
-    pub fn connect(server: &Url, room_id: &str, events: mpsc::UnboundedSender<SignalEvent>) -> Self {
+    /// `session`: the signed-in account's token, which a private room needs.
+    pub fn connect(
+        server: &Url,
+        room_id: &str,
+        session: Option<String>,
+        events: mpsc::UnboundedSender<SignalEvent>,
+    ) -> Self {
         let (out, out_rx) = mpsc::unbounded_channel();
-        let socket = Socket { base: ws_url(server, room_id), identity: None, events, out: out_rx };
+        let socket = Socket { base: ws_url(server, room_id), session, identity: None, events, out: out_rx };
         tokio::spawn(socket.run());
         Self { out }
     }
@@ -65,16 +71,14 @@ impl Signaling {
 }
 
 fn ws_url(server: &Url, room_id: &str) -> Url {
-    let mut url = server.clone();
-    // Only http and https servers are accepted at startup, so this can't fail
-    let _ = url.set_scheme(if server.scheme() == "https" { "wss" } else { "ws" });
-    url.set_path("/ws");
-    url.query_pairs_mut().clear().append_pair("room", room_id);
+    let mut url = crate::ws::ws_url(server, "/ws");
+    url.query_pairs_mut().append_pair("room", room_id);
     url
 }
 
 struct Socket {
     base: Url,
+    session: Option<String>,
     identity: Option<(String, String)>,
     events: mpsc::UnboundedSender<SignalEvent>,
     out: mpsc::UnboundedReceiver<Outgoing>,
@@ -111,7 +115,14 @@ impl Socket {
             url.query_pairs_mut().append_pair("clientId", client_id).append_pair("token", token);
         }
         let config = WebSocketConfig::default().max_message_size(Some(MAX_MESSAGE_BYTES));
-        let connect = tokio_tungstenite::connect_async_with_config(url.as_str(), Some(config), false);
+        let request = match crate::ws::request(&url, self.session.as_deref()) {
+            Ok(request) => request,
+            Err(e) => {
+                tracing::warn!("signaling request: {e}");
+                return Ended::Stop;
+            }
+        };
+        let connect = tokio_tungstenite::connect_async_with_config(request, Some(config), false);
         let mut ws = match timeout(CONNECT_TIMEOUT, connect).await {
             Ok(Ok((ws, _))) => ws,
             Ok(Err(e)) => {
