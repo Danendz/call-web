@@ -29,9 +29,9 @@ pub struct Settings {
     /// Speech is recognized on this device once its model is downloaded, instead of on the server
     #[serde(default = "yes")]
     pub on_device_speech: bool,
-    /// The first launch's question about downloading the speech model was answered
+    /// The question about downloading live subtitles' models was answered
     #[serde(default)]
-    pub speech_prompt_seen: bool,
+    pub live_prompt_seen: bool,
     /// "Connection stats" in Settings: the overlay shows in every call
     #[serde(default)]
     pub show_stats: bool,
@@ -70,7 +70,7 @@ impl Default for Settings {
             corners: std::collections::BTreeMap::new(),
             background_guide_seen: false,
             on_device_speech: true,
-            speech_prompt_seen: false,
+            live_prompt_seen: false,
             show_stats: false,
             subtitles: true,
             noise_suppression: desktop(),

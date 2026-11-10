@@ -23,14 +23,16 @@ export component StartScreen inherits Rectangle {
     callback dismiss-background-guide();
     in property <ModelState> model-state;
     in property <int> model-progress;
-    in property <string> model-size;
+    in property <ModelState> pack-state;
+    in property <int> pack-progress;
+    in property <string> pack-size;
     // Settings are open over this screen
     in property <bool> settings-open;
     callback open-settings();
     // The first launch's question about downloading the speech model
-    in property <bool> speech-prompt;
-    callback download-model();
-    callback dismiss-speech-prompt();
+    in property <bool> live-prompt;
+    callback download-pack();
+    callback dismiss-live-prompt();
     property <bool> asking: false;
     property <bool> shown: false;
     init => { shown = true; }
@@ -141,7 +143,13 @@ export component StartScreen inherits Rectangle {
             font-size: Theme.font-size-small;
             vertical-alignment: center;
         }
-        if root.model-state == ModelState.downloading: Text {
+        if root.pack-state == ModelState.downloading: Text {
+            text: @tr("Downloading live subtitles… {}%", root.pack-progress);
+            color: Theme.muted;
+            font-size: Theme.font-size-small;
+            vertical-alignment: center;
+        }
+        if root.pack-state != ModelState.downloading && root.model-state == ModelState.downloading: Text {
             text: @tr("Downloading speech model… {}%", root.model-progress);
             color: Theme.muted;
             font-size: Theme.font-size-small;
@@ -176,14 +184,14 @@ export component StartScreen inherits Rectangle {
         close => { asking = false; }
     }
 
-    // Asked once, on the first launch
-    if root.speech-prompt && !root.settings-open: ModelPrompt {
-        title: @tr("Recognize speech on this device?");
-        body: @tr("Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings.", root.model-size);
+    // Asked once, while live subtitles are on
+    if root.live-prompt && !root.settings-open: ModelPrompt {
+        title: @tr("Download live subtitles?");
+        body: @tr("What you say shows to the other person as you say it, and what they say shows in your language right away, all worked out on this device. It needs a one-time {} download; you can also do it later in Settings.", root.pack-size);
         download => {
-            root.download-model();
-            root.dismiss-speech-prompt();
+            root.download-pack();
+            root.dismiss-live-prompt();
         }
-        dismiss => { root.dismiss-speech-prompt(); }
+        dismiss => { root.dismiss-live-prompt(); }
     }
 }

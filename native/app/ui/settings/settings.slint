@@ -102,6 +102,9 @@ export component SettingsSheet inherits Rectangle {
     in property <ModelState> translation-state;
     in property <int> translation-progress;
     in property <string> translation-size;
+    in property <ModelState> live-state;
+    in property <int> live-progress;
+    in property <string> live-size;
     callback set-show-stats(bool);
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
@@ -112,6 +115,9 @@ export component SettingsSheet inherits Rectangle {
     callback set-on-device(bool);
     callback download-translation();
     callback delete-translation();
+    callback download-live();
+    callback cancel-live-download();
+    callback delete-live();
     // The panel is gone: the owner removes it
     callback closed();
 
@@ -301,6 +307,45 @@ export component SettingsSheet inherits Rectangle {
                             background: Theme.border;
                         }
                         SettingRow {
+                            title: @tr("Live speech");
+                            detail: root.live-state == ModelState.ready ? @tr("Downloaded · {}", root.live-size)
+                                : root.live-state == ModelState.downloading ? @tr("Downloading… {}%", root.live-progress)
+                                : root.live-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
+                                : @tr("Not downloaded · {}", root.live-size);
+                            detail-color: root.live-state == ModelState.failed ? Theme.danger-text : Theme.muted;
+                            VerticalLayout {
+                                alignment: center;
+                                if root.live-state == ModelState.missing: Button {
+                                    text: @tr("Download");
+                                    icon: Icons.download;
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-live(); }
+                                }
+                                if root.live-state == ModelState.failed: Button {
+                                    text: @tr("Try again");
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-live(); }
+                                }
+                                if root.live-state == ModelState.downloading: Button {
+                                    text: @tr("Cancel");
+                                    height-hint: 38px;
+                                    clicked => { root.cancel-live-download(); }
+                                }
+                                if root.live-state == ModelState.ready: Button {
+                                    text: @tr("Delete");
+                                    kind: ButtonKind.danger;
+                                    height-hint: 38px;
+                                    clicked => { root.delete-live(); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        SettingRow {
                             title: @tr("Noise suppression");
                             detail: @tr("May slow down games or other heavy apps while you share your screen.");
                             VerticalLayout {
@@ -392,7 +437,9 @@ export component SettingsSheet inherits Rectangle {
                         }
                         if root.model-state == ModelState.ready: SettingRow {
                             title: @tr("Recognize on this device");
-                            detail: root.on-device ? "" : @tr("Speech goes to the server");
+                            // The live model recognizes speech instead, so what you say shows as you say it
+                            detail: root.subtitles-on && root.live-state == ModelState.ready ? @tr("Not used while live subtitles are on")
+                                : root.on-device ? "" : @tr("Speech goes to the server");
                             VerticalLayout {
                                 alignment: center;
                                 Switch {

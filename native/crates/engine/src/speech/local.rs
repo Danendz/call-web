@@ -10,7 +10,7 @@ use protocol::{Lang, TRANSCRIBE_SAMPLE_RATE};
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineSenseVoiceModelConfig};
 use tokio::sync::mpsc;
 
-use super::model::{MODEL, TOKENS};
+use super::model::{SENSE_VOICE, SENSE_VOICE_TOKENS};
 use super::{Out, Recognizer, SpeechEvent};
 
 // A phone has fewer big cores and is also encoding video; two decode an utterance in a fraction of its length
@@ -73,7 +73,7 @@ fn run(
             Out::End if open => {
                 open = false;
                 if let Some(text) = decode(loaded, &pcm) {
-                    let _ = events.send(SpeechEvent::Text(text));
+                    let _ = events.send(SpeechEvent::Text { text, live_id: None });
                 }
             }
             Out::Cancel => open = false,
@@ -91,7 +91,7 @@ fn load(dir: &Path, lang: Lang, loaded: &Loaded) -> Result<(), String> {
     let path = |name: &str| Some(dir.join(name).to_string_lossy().into_owned());
     let mut config = OfflineRecognizerConfig::default();
     config.model_config.sense_voice = OfflineSenseVoiceModelConfig {
-        model: path(MODEL.local),
+        model: path(SENSE_VOICE.local),
         language: Some(
             match lang {
                 Lang::Zh => "zh",
@@ -102,7 +102,7 @@ fn load(dir: &Path, lang: Lang, loaded: &Loaded) -> Result<(), String> {
         // Numbers and dates as digits, as someone would type them
         use_itn: true,
     };
-    config.model_config.tokens = path(TOKENS.local);
+    config.model_config.tokens = path(SENSE_VOICE_TOKENS.local);
     config.model_config.num_threads = THREADS;
     let started = Instant::now();
     let recognizer = OfflineRecognizer::create(&config).ok_or("sherpa-onnx couldn't create the recognizer")?;

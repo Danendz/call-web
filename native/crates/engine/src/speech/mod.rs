@@ -1,9 +1,11 @@
 //! Speech to chat: what you say becomes chat messages. The mic is opened apart from WebRTC's capture and run through
 //! WebRTC's audio processing with echo cancellation, fed the other person's decoded audio as the echo to remove, so
 //! their voice from your speakers isn't transcribed as yours. Then it's cut into utterances, which go to a
-//! [`Recognizer`]: the model on this device once it's downloaded and picked, otherwise the server's `/ws/speech`,
-//! streamed while you speak like the web's server path.
+//! [`Recognizer`]: with live subtitles, the streaming model on this device, which sends what you're saying as you say
+//! it; otherwise SenseVoice on this device once it's downloaded and picked, or the server's `/ws/speech`, streamed
+//! while you speak like the web's server path.
 
+mod live;
 mod local;
 mod model;
 mod socket;
@@ -24,9 +26,11 @@ use tokio::sync::mpsc;
 use url::Url;
 
 pub use crate::download::ModelStatus;
-pub use model::MODEL_SIZE;
+pub use live::{LiveModel, Utterance};
+pub use model::Model;
 pub(crate) use model::{delete as delete_model, dir as model_dir, download as download_model, is_ready as model_ready};
 
+use live::{Live, LoadedLive};
 use local::{Loaded, Local};
 use socket::SpeechSocket;
 use utterance::{CHUNK, Detector, Event};
@@ -49,8 +53,16 @@ pub enum SpeechNotice {
 /// What comes back from recognition, for the engine's thread.
 pub(crate) enum SpeechEvent {
     Server(SpeechServerMessage),
-    /// A line recognized on this device, to post as spoken
-    Text(String),
+    /// A line recognized on this device, to post as spoken; `live_id` when its live text went out
+    Text {
+        text: String,
+        live_id: Option<String>,
+    },
+    /// What's being said so far, to send as live text; empty drops it
+    Live {
+        id: String,
+        text: String,
+    },
     /// The on-device model didn't load; speech goes to the server instead
     LocalFailed,
 }
@@ -77,8 +89,15 @@ pub(crate) struct Params {
     pub lang: Lang,
     /// The mic's name, as for the level meter
     pub mic: Option<String>,
-    /// The on-device model's folder, when it's downloaded and picked
-    pub local: Option<PathBuf>,
+    /// The model on this device to use, when there is one
+    pub local: Option<OnDevice>,
+}
+
+/// Which model on this device recognizes speech, and its folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OnDevice {
+    SenseVoice(PathBuf),
+    Live(PathBuf),
 }
 
 pub(crate) struct Transcriber {
@@ -89,6 +108,7 @@ pub(crate) struct Transcriber {
     paused_until: Arc<AtomicU64>,
     unavailable: bool,
     loaded: Loaded,
+    loaded_live: LoadedLive,
     /// The model didn't load this launch: the server it is
     local_failed: bool,
 }
@@ -116,6 +136,7 @@ impl Transcriber {
             paused_until: Arc::default(),
             unavailable: false,
             loaded: Loaded::default(),
+            loaded_live: LoadedLive::default(),
             local_failed: false,
         }
     }
@@ -131,14 +152,24 @@ impl Transcriber {
         self.running = None;
         let Some(params) = params else { return };
         let (recognizer, paused_until): (Box<dyn Recognizer>, _) = match &params.local {
-            Some(dir) => match Local::start(dir.clone(), params.lang, self.loaded.clone(), self.events.clone()) {
-                // The server's quota doesn't apply here
-                Ok(local) => (Box::new(local), Arc::default()),
-                Err(e) => {
-                    tracing::warn!("on-device speech didn't start: {e}");
-                    return;
+            Some(on_device) => {
+                let started: Result<Box<dyn Recognizer>, String> = match on_device {
+                    OnDevice::SenseVoice(dir) => {
+                        Local::start(dir.clone(), params.lang, self.loaded.clone(), self.events.clone())
+                            .map(|r| Box::new(r) as Box<dyn Recognizer>)
+                    }
+                    OnDevice::Live(dir) => Live::start(dir.clone(), self.loaded_live.clone(), self.events.clone())
+                        .map(|r| Box::new(r) as Box<dyn Recognizer>),
+                };
+                match started {
+                    // The server's quota doesn't apply here
+                    Ok(recognizer) => (recognizer, Arc::default()),
+                    Err(e) => {
+                        tracing::warn!("on-device speech didn't start: {e}");
+                        return;
+                    }
                 }
-            },
+            }
             None => {
                 (Box::new(SpeechSocket::connect(params.url.clone(), self.events.clone())), self.paused_until.clone())
             }
@@ -160,9 +191,12 @@ impl Transcriber {
         self.running = None;
     }
 
-    /// Frees the loaded model (a few hundred MB), once the call is over or the model is gone.
+    /// Frees the loaded models (a few hundred MB), once the call is over or a model is gone.
     pub(crate) fn release(&mut self) {
         if let Ok(mut loaded) = self.loaded.lock() {
+            *loaded = None;
+        }
+        if let Ok(mut loaded) = self.loaded_live.lock() {
             *loaded = None;
         }
     }

@@ -29,7 +29,7 @@ use crate::remote::RemoteVideos;
 use crate::room;
 use crate::screen::{self, LocalScreen};
 use crate::signaling::{SignalEvent, Signaling, SocketStatus};
-use crate::speech::{ModelStatus, SpeechEvent, SpeechNotice, Transcriber};
+use crate::speech::{Model, ModelStatus, SpeechEvent, SpeechNotice, Transcriber};
 use crate::video::VideoSink;
 
 /// What the engine tells itself from other threads and timers.
@@ -40,10 +40,10 @@ enum Internal {
     SpeechResumed,
     /// The share stopped by itself: picker cancelled, window closed, the OS's "stop sharing"
     ScreenEnded,
-    /// The on-device speech model's download, in percent; each download is known by its cancel flag
-    ModelProgress(Arc<AtomicBool>, u8),
+    /// An on-device speech model's download, in percent; each download is known by its cancel flag
+    ModelProgress(Model, Arc<AtomicBool>, u8),
     /// The download ended: Ok(true) when the model is all there, Ok(false) when cancelled
-    ModelDownloaded(Arc<AtomicBool>, Result<bool, String>),
+    ModelDownloaded(Model, Arc<AtomicBool>, Result<bool, String>),
     /// The same for the translation model
     TranslationProgress(Arc<AtomicBool>, u8),
     TranslationDownloaded(Arc<AtomicBool>, Result<bool, String>),
@@ -78,11 +78,11 @@ struct Controller {
     internal_rx: mpsc::UnboundedReceiver<Internal>,
     transcriber: Transcriber,
     speech_rx: mpsc::UnboundedReceiver<SpeechEvent>,
-    /// The on-device speech model's folder; None where there's no data folder
-    model_dir: Option<PathBuf>,
-    /// Set to stop the download that's running
+    /// Set to stop the SenseVoice download that's running
     model_cancel: Option<Arc<AtomicBool>>,
-    /// Where the translation models are kept; None where there's no data folder
+    /// The same for the live model
+    live_cancel: Option<Arc<AtomicBool>>,
+    /// Where the models are kept; None where there's no data folder
     data_dir: Option<PathBuf>,
     translation_cancel: Option<Arc<AtomicBool>>,
     direct_retries: usize,
@@ -117,10 +117,9 @@ impl Controller {
         let media = Media::new();
         let camera = LocalCamera::new(media.factory(), sink.clone());
         let screen = LocalScreen::new(media.factory());
-        let model_dir = data_dir.as_deref().map(crate::speech::model_dir);
         let translation = translate::status(data_dir.as_deref(), lang);
-        let ready = model_dir.as_deref().is_some_and(crate::speech::model_ready);
-        let model = if ready { ModelStatus::Ready } else { ModelStatus::Missing };
+        let model = speech::status(data_dir.as_deref(), Model::SenseVoice);
+        let live = speech::status(data_dir.as_deref(), Model::Live);
         let state = State {
             phase: Phase::Start,
             lang,
@@ -154,6 +153,8 @@ impl Controller {
             speech_notice: None,
             model,
             on_device,
+            live,
+            live_subtitles: false,
             translation,
         };
         Self {
@@ -173,8 +174,8 @@ impl Controller {
             transcriber: Transcriber::new(speech_tx),
             remote_audio: Vec::new(),
             speech_rx,
-            model_dir,
             model_cancel: None,
+            live_cancel: None,
             data_dir,
             translation_cancel: None,
             direct_retries: 0,
@@ -210,12 +211,12 @@ impl Controller {
                             self.state.speech_notice = None;
                         }
                     }
-                    Internal::ModelProgress(download, percent) => {
-                        if self.is_current_download(&download) {
-                            self.state.model = ModelStatus::Downloading(percent);
-                        }
+                    Internal::ModelProgress(model, download, percent) => {
+                        self.model_progress(model, &download, percent)
                     }
-                    Internal::ModelDownloaded(download, result) => self.model_downloaded(&download, result),
+                    Internal::ModelDownloaded(model, download, result) => {
+                        self.model_downloaded(model, &download, result)
+                    }
                     Internal::TranslationProgress(download, percent) => {
                         if self.is_current_translation(&download) {
                             self.state.translation = ModelStatus::Downloading(percent);
@@ -302,14 +303,15 @@ impl Controller {
                 }
             }
             Command::SetTranscribe(on) => self.state.transcribe_on = on,
-            Command::DownloadModel => self.download_model(),
-            Command::CancelModelDownload => {
-                if let Some(cancel) = self.model_cancel.take() {
-                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            Command::DownloadModel(model) => self.download_model(model),
+            Command::CancelModelDownload(model) => self.cancel_model_download(model),
+            Command::DeleteModel(model) => self.delete_model(model),
+            Command::SetLiveSubtitles(on) => {
+                self.state.live_subtitles = on;
+                if !on {
+                    self.transcriber.release();
                 }
-                self.state.model = ModelStatus::Missing;
             }
-            Command::DeleteModel => self.delete_model(),
             Command::DownloadTranslation => self.download_translation(),
             Command::DeleteTranslation => self.delete_translation(),
             Command::SetOnDevice(on) => {
