@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Lang, LiveMessage } from "../../../shared/protocol";
-import { readable } from "../chat/readable";
+import { hasOtherScript, readable } from "../chat/readable";
+import { useQuickTranslations } from "../translate/translator";
 
 const MAX_LINES = 4;
 // After this long without a change a line fades; lines change in order, so in silence they go one by one
@@ -10,7 +11,7 @@ const KEPT = MAX_LINES + 4;
 
 interface Line {
   key: string;
-  // What showed when the line came: their words, or the live text
+  // What showed when the line came: their words or live text, translated on this device when it can be
   first: string;
   text: string;
   mine: boolean;
@@ -55,16 +56,30 @@ export function Subtitles({
   }
   if (live && live.id !== current.current?.id) current.current = { id: live.id, key: `live-${live.id}-${now}` };
 
-  const lines: Line[] = [];
+  // Their lines as said, and what's shown once translated
+  const said: { key: string; source: string; text: string; mine: boolean }[] = [];
   for (const m of messages) {
     if (!m.spoken || read.current.has(m.id)) continue;
-    const mine = m.from === myId;
     const key = finished.current.get(m.id) ?? m.id;
-    const text = readable(m, myId, lang).text;
-    lines.push({ key, first: m.text, text, mine, translated: text !== m.text });
+    said.push({ key, source: m.text, text: readable(m, myId, lang).text, mine: m.from === myId });
   }
   if (live && current.current && !chatOpen) {
-    lines.push({ key: current.current.key, first: live.text, text: live.text, mine: false, translated: false });
+    said.push({ key: current.current.key, source: live.text, text: live.text, mine: false });
+  }
+
+  // The other language, translated here as it comes. Each line keeps its last translation until the new one is in,
+  // so growing live text doesn't flash the original; one with none yet waits the few ms it takes.
+  const foreign = said.filter((l) => !l.mine && hasOtherScript(l.source, lang)).map((l) => l.source);
+  const quick = useQuickTranslations(foreign.slice(-KEPT), lang, true);
+  const lastQuick = useRef(new Map<string, string>());
+  const lines: Line[] = [];
+  for (const l of said) {
+    const needed = quick && !l.mine && hasOtherScript(l.source, lang);
+    const q = needed ? (quick.get(l.source) ?? lastQuick.current.get(l.key)) : undefined;
+    if (needed && q === undefined) continue;
+    if (q !== undefined) lastQuick.current.set(l.key, q);
+    const first = q ?? l.source;
+    lines.push({ key: l.key, first, text: l.text, mine: l.mine, translated: l.text !== l.source && l.text !== first });
   }
   const kept = lines.slice(-KEPT);
 
@@ -75,6 +90,7 @@ export function Subtitles({
     if (seen?.text !== l.text) changed.current.set(l.key, { text: l.text, at: now });
   }
   for (const key of changed.current.keys()) if (!kept.some((l) => l.key === key)) changed.current.delete(key);
+  for (const key of lastQuick.current.keys()) if (!said.some((l) => l.key === key)) lastQuick.current.delete(key);
   const fresh = kept.filter((l) => (changed.current.get(l.key)?.at ?? 0) + IDLE_MS > now);
   // Hidden while chat is open, where the same lines are
   const shown = new Set(chatOpen ? [] : fresh.slice(-MAX_LINES).map((l) => l.key));

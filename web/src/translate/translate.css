@@ -1,0 +1,41 @@
+/* Offers the live translation model: glass over the video in a call, the same card on the setup screen */
+.translation-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  text-align: left;
+  animation: rise var(--med) var(--ease);
+}
+
+.translation-offer p {
+  margin: 0;
+}
+
+.translation-offer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.translation-offer-actions button,
+.model-action {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.model-progress {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}

@@ -13,7 +13,8 @@ export function readable(m: ChatMessage, myId: string | null, lang: Lang): { tex
 const HAN = /[㐀-䶿一-鿿豈-﫿]|[\u{20000}-\u{2ffff}]/gu;
 const LATIN_WORD = /[A-Za-z]+/g;
 
-function hasOtherScript(text: string, lang: Lang): boolean {
+/** Whether `text` is (partly) in the other language, so a reader of `lang` needs it translated. */
+export function hasOtherScript(text: string, lang: Lang): boolean {
   const han = text.match(HAN)?.length ?? 0;
   if (lang === "en") return han > 0;
   // All-caps words are abbreviations like OK or USB, which a Chinese reader knows

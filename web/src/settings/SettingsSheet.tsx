@@ -1,6 +1,7 @@
-import { Activity, AudioLines, Captions, Languages } from "lucide-react";
+import { Activity, AudioLines, Captions, Languages, Subtitles } from "lucide-react";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
+import { ModelAction } from "../translate/ModelAction";
 import { useT } from "../ui/i18n";
 import { Sheet } from "../ui/Sheet";
 import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
@@ -44,6 +45,14 @@ export function SettingsSheet({
           <span className="settings-label">{t.liveSubtitles}</span>
           <input type="checkbox" role="switch" checked={subtitles} onChange={(e) => setSubtitles(e.target.checked)} />
         </label>
+        {/* The model for the language picked below, so it follows "I speak" */}
+        <div className="settings-row">
+          <span className="row-icon" aria-hidden>
+            <Subtitles size={18} />
+          </span>
+          <span className="settings-label">{t.liveTranslation}</span>
+          <ModelAction lang={lang} />
+        </div>
         <label className="settings-row">
           <span className="row-icon" aria-hidden>
             <AudioLines size={18} />
