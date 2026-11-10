@@ -212,6 +212,12 @@ export component AppWindow inherits Window {
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(event) => {
+            // The phone's Back closes the sign-in dialog first; Escape too, on desktop
+            if ((event.text == Key.Back || event.text == Key.Escape) && root.sign-in-open && root.account == "signed-out") {
+                root.sign-in-open = false;
+                root.clear-account-error();
+                return accept;
+            }
             if (event.text == Key.Back && root.phase == AppPhase.setup) {
                 root.home();
                 return accept;

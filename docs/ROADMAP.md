@@ -51,7 +51,7 @@ Accounts live next to anonymous room links, which keep working. Stored in Postgr
 - [x] **Server.** Invite-only accounts (username and scrypt password, recovery code shown once), sessions as a cookie on the web and a bearer token on native, friend requests, block, delete account. `/ws/user` carries friends with presence and rings every open client of a friend for 45 s; unanswered or offline becomes a missed call. An answered call gets a private room only the two accounts can join; one who left can rejoin from the Rooms list while the other is still inside. Anonymous link rooms get tighter limits than a signed-in user's: sockets, rooms, chat and speech rate, an hour of audio a day per IP, a 2 h call.
 - [x] **Web.** Sign in, create account, recovery, account sheet (invite codes, password, blocked, delete), friends page with presence, requests, missed calls and Rooms, incoming and outgoing call overlay with a ring tone.
 - [~] **Native desktop.** Built: sign in, create account and recovery, friends on the start screen with presence, requests, missed calls and Rooms, the call overlay, account controls in Settings, and the session token kept in its own file in app data (sent on the room socket for private rooms). Left: a ring tone for incoming calls.
-- [ ] **Android.** Phone layouts of the native screens. A ring only reaches an open app: no push service works in China without a vendor SDK.
+- [~] **Android.** Built: the same screens fit a phone (the call card stacks its buttons, Back closes the sign-in dialog). Left: a ring only reaches the app while it's open; ringing a phone in the background needs a notification from a foreground service, since no push service works in China without a vendor SDK (with A3).
 
 ## Phase 3 — Native only
 
