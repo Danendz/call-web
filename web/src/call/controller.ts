@@ -1,4 +1,4 @@
-import type { ChatMessage, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
+import type { ChatMessage, FullReason, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
@@ -74,6 +74,8 @@ export interface CallState {
   callStartedAt: number | null;
   /** The other person just saved a screenshot of the call. */
   peerScreenshot: boolean;
+  /** Why the room can't be joined, in phase "full"; undefined: two people are already in it. */
+  fullReason?: FullReason;
 }
 
 const initialState: CallState = {
@@ -115,7 +117,9 @@ const PEER_SCREENSHOT_SHOWN_MS = 3_000;
 
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
 export class CallController {
-  private state: CallState = initialState;
+  // The language may have been changed on another page since this module loaded
+  private state: CallState = { ...initialState, lang: loadLang() };
+  private disposed = false;
   private listeners = new Set<() => void>();
   private signaling: Signaling;
   private peer: PeerSession | null = null;
@@ -147,6 +151,8 @@ export class CallController {
     onNotice: (speechNotice) => this.set({ speechNotice }),
   });
 
+  private stopNoiseListener: () => void;
+
   constructor(private roomId: string) {
     this.signaling = new Signaling(
       roomId,
@@ -154,7 +160,14 @@ export class CallController {
       (socket) => this.set({ socket }),
     );
     if (getNoiseSuppression()) preloadDenoise();
-    onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+    this.stopNoiseListener = onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+  }
+
+  /** The page moved away from this room: leave it and let go of camera and mic. */
+  dispose(): void {
+    this.disposed = true;
+    this.stopNoiseListener();
+    this.teardown(true);
   }
 
   subscribe = (listener: () => void) => {
@@ -183,6 +196,8 @@ export class CallController {
     this.state.localStream?.getTracks().forEach((t) => t.stop());
     this.set({ localStream: null, micAccess: "pending", camAccess: "pending" });
     const { stream, audio, video } = await getLocalMedia(loadDevicePref("audio"), loadDevicePref("video"));
+    // The page left this room while the browser was asking: don't keep the camera on for nothing
+    if (this.disposed) return stream.getTracks().forEach((t) => t.stop());
     stream.getAudioTracks().forEach((t) => (t.enabled = this.state.micOn));
     this.camTrack = stream.getVideoTracks()[0] ?? null;
     if (this.camTrack) this.camTrack.enabled = this.state.camOn;
@@ -458,7 +473,7 @@ export class CallController {
         break;
       case "full":
         this.teardown(false);
-        this.set({ phase: "full" });
+        this.set({ phase: "full", fullReason: msg.reason });
         break;
       case "screenshot":
         clearTimeout(this.peerScreenshotTimer);

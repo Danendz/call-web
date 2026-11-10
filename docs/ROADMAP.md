@@ -44,6 +44,15 @@ Target Windows and macOS first. Lives in `native/` as a Cargo workspace in this 
 - [ ] **M5 — Overlay, notifications and desktop features.** See Phase 3.
 - [x] **M6 — Distribution.** Installers, signing, updates from our own server (GitHub can be slow or blocked in China), no Google services in the binary. Built: Velopack per-user installers and delta updates, from the Railway `releases` bucket through `call.danendz.com/updates`; a version bump merged to `main` and pushed to `release/<version>` publishes a release; updates download quietly and install on quit or from an "Update" button on the start screen. Signing at no cost: Windows unsigned, macOS with a self-signed certificate so permissions survive updates (paid signing only if the app ever goes beyond personal use). No Google service hosts in the release binary (checked with `strings`).
 
+## Phase 2b — Accounts, friends and call requests (Web + Native)
+
+Accounts live next to anonymous room links, which keep working. Stored in Postgres on Railway; rings, presence and rooms stay in memory.
+
+- [x] **Server.** Invite-only accounts (username and scrypt password, recovery code shown once), sessions as a cookie on the web and a bearer token on native, friend requests, block, delete account. `/ws/user` carries friends with presence and rings every open client of a friend for 45 s; unanswered or offline becomes a missed call. An answered call gets a private room only the two accounts can join; one who left can rejoin from the Rooms list while the other is still inside. Anonymous link rooms get tighter limits than a signed-in user's: sockets, rooms, chat and speech rate, an hour of audio a day per IP, a 2 h call.
+- [x] **Web.** Sign in, create account, recovery, account sheet (invite codes, password, blocked, delete), friends page with presence, requests, missed calls and Rooms, incoming and outgoing call overlay with a ring tone.
+- [ ] **Native desktop.** The same screens in Slint, the session token kept in app data, `/ws/user` with reconnect.
+- [ ] **Android.** Phone layouts of the native screens. A ring only reaches an open app: no push service works in China without a vendor SDK.
+
 ## Phase 3 — Native only
 
 ### Don't miss messages while gaming
