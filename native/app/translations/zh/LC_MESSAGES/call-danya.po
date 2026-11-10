@@ -140,6 +140,9 @@ msgstr "新房间"
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
 
+msgid "Live subtitles"
+msgstr "实时字幕"
+
 msgid "Noise suppression"
 msgstr "降噪"
 

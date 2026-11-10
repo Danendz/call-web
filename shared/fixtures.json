@@ -40,6 +40,24 @@
       "spoken": true
     },
     {
+      "type": "chat",
+      "text": "你好。",
+      "spoken": true,
+      "liveId": "l1"
+    },
+    {
+      "type": "chat-live",
+      "id": "l1",
+      "text": "你好",
+      "lang": "zh"
+    },
+    {
+      "type": "chat-live",
+      "id": "l1",
+      "text": "",
+      "lang": "zh"
+    },
+    {
       "type": "leave"
     },
     {
@@ -67,6 +85,8 @@
   ],
   "constants": {
     "MAX_CHAT_LENGTH": 2000,
+    "MAX_LIVE_LENGTH": 500,
+    "MAX_LIVE_ID_LENGTH": 64,
     "MAX_STREAM_ID_LENGTH": 64,
     "ROOM_ID_RE": "^[A-Za-z0-9_-]{6,32}$",
     "LANGS": [
@@ -170,6 +190,17 @@
       }
     },
     {
+      "type": "chat",
+      "message": {
+        "id": "m1",
+        "from": "c1",
+        "text": "你好",
+        "ts": 1700000000000,
+        "spoken": true,
+        "liveId": "l1"
+      }
+    },
+    {
       "type": "chat-translation",
       "id": "m1",
       "translation": {
@@ -179,6 +210,12 @@
           "en": "Hello"
         }
       }
+    },
+    {
+      "type": "chat-live",
+      "id": "l1",
+      "text": "can you",
+      "lang": "en"
     },
     {
       "type": "pong"

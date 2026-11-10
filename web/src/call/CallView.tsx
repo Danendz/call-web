@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChatPanel } from "../chat/ChatPanel";
 import { SettingsSheet } from "../settings/SettingsSheet";
 import { useShowStats } from "../settings/stats";
+import { useSubtitles } from "../settings/subtitles";
 import { CopyLink } from "../ui/CopyLink";
 import { useT, type Strings } from "../ui/i18n";
 import "./call.css";
@@ -14,7 +15,7 @@ import { arrangeFeeds, DEFAULT_CORNERS, Feeds, type FeedKey } from "./Feeds";
 import { isRearCamera } from "./media";
 import { captureCall, saveImage, screenshotName, type Shot } from "./screenshot";
 import { StatsOverlay } from "./StatsOverlay";
-import { Subtitle } from "./Subtitle";
+import { Subtitles } from "./Subtitles";
 import { useAutoHide } from "./useAutoHide";
 import { useCorners } from "./useDragCorner";
 import { STACKED_QUERY, useMediaQuery } from "../ui/useMediaQuery";
@@ -24,6 +25,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const t = useT();
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const showStats = useShowStats();
+  const subtitles = useSubtitles();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   // The feed the user tapped onto the stage; null for the default (their screen, else them)
@@ -156,7 +158,9 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           <Fade className="notice muted" text={state.peerScreenshot ? t.peerScreenshot : null} />
           <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
         </div>
-        <Subtitle messages={state.chat} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
+        {subtitles && (
+          <Subtitles messages={state.chat} live={state.live} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
+        )}
         <StatsOverlay
           // While relay is forced the stats stay up: their switch is the way back
           open={showStats || state.forceRelay}

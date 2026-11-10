@@ -1,4 +1,4 @@
-//! The chat's rows and the subtitle, kept on the UI thread. Messages come in as [`ChatEvent`]s and update the list in
+//! The chat's rows and the subtitles, kept on the UI thread. Messages come in as [`ChatEvent`]s and update the list in
 //! place: a new message appends a row, a translation rewrites one. What a row says depends on your language, so a
 //! language change rewrites them all.
 
@@ -7,6 +7,7 @@ use engine::{ChatEvent, ChatMessage, Lang};
 use slint::{Model, ModelRc, SharedString, VecModel};
 use std::rc::Rc;
 
+use crate::subtitles::Subtitles;
 use crate::ui::{AppWindow, ChatRow};
 
 pub struct Chat {
@@ -14,15 +15,14 @@ pub struct Chat {
     messages: Vec<ChatMessage>,
     my_id: String,
     lang: Lang,
-    /// The message the subtitle shows, to follow its translation
-    subtitle_id: Option<String>,
+    subtitles: Subtitles,
 }
 
 impl Chat {
     pub fn new(ui: &AppWindow, lang: Lang) -> Self {
         let rows = Rc::new(VecModel::default());
         ui.set_chat(ModelRc::from(rows.clone()));
-        Self { rows, messages: Vec::new(), my_id: String::new(), lang, subtitle_id: None }
+        Self { rows, messages: Vec::new(), my_id: String::new(), lang, subtitles: Subtitles::new(ui) }
     }
 
     pub fn event(&mut self, ui: &AppWindow, event: ChatEvent) {
@@ -31,16 +31,18 @@ impl Chat {
                 self.my_id = my_id;
                 self.messages = messages;
                 self.rows.set_vec(self.messages.iter().map(|m| self.row(m)).collect::<Vec<_>>());
-                // Lines from before you joined aren't shown as subtitles
-                self.subtitle_id = None;
+                self.subtitles.clear();
             }
             ChatEvent::Added(message) => {
                 self.rows.push(self.row(&message));
-                if message.spoken == Some(true) && message.from != self.my_id {
-                    self.subtitle_id = Some(message.id.clone());
-                    self.show_subtitle(ui, &message);
-                }
                 self.messages.push(message);
+                if let Some(message) = self.messages.last() {
+                    self.subtitles.added(message, &self.messages, &self.my_id, self.lang);
+                }
+            }
+            ChatEvent::Live { id, text } => {
+                self.subtitles.live(id, text, &self.messages, &self.my_id, self.lang);
+                return;
             }
             ChatEvent::Translated { id, translation } => {
                 let Some(index) = self.messages.iter().position(|m| m.id == id) else { return };
@@ -48,9 +50,7 @@ impl Chat {
                 message.translation = Some(translation);
                 let message = message.clone();
                 self.rows.set_row_data(index, self.row(&message));
-                if self.subtitle_id.as_deref() == Some(id.as_str()) {
-                    self.show_subtitle(ui, &message);
-                }
+                self.subtitles.refresh(&self.messages, &self.my_id, self.lang);
             }
         }
         let others = self.messages.iter().filter(|m| m.from != self.my_id).count();
@@ -67,11 +67,7 @@ impl Chat {
                 self.rows.set_row_data(index, self.row(message));
             }
         }
-    }
-
-    fn show_subtitle(&self, ui: &AppWindow, message: &ChatMessage) {
-        ui.set_subtitle(readable(message, &self.my_id, self.lang).0.into());
-        ui.set_subtitle_serial(ui.get_subtitle_serial().wrapping_add(1));
+        self.subtitles.refresh(&self.messages, &self.my_id, self.lang);
     }
 
     fn row(&self, m: &ChatMessage) -> ChatRow {
@@ -89,7 +85,7 @@ impl Chat {
 
 /// The web's readable(): the other person's message in your language with what they wrote under it, your own as
 /// written, and anything already in your language as is.
-fn readable<'a>(m: &'a ChatMessage, my_id: &str, lang: Lang) -> (&'a str, Option<&'a str>) {
+pub fn readable<'a>(m: &'a ChatMessage, my_id: &str, lang: Lang) -> (&'a str, Option<&'a str>) {
     let Some(t) = m.translation.as_ref().filter(|_| m.from != my_id) else { return (&m.text, None) };
     let (code, text) = match lang {
         Lang::Zh => ("zh", &t.text.zh),
@@ -138,6 +134,7 @@ mod tests {
             text: text.into(),
             ts: 0,
             spoken: None,
+            live_id: None,
             translation: Some(Translation {
                 lang: lang.into(),
                 text: TranslatedText { zh: "你好".into(), en: "hello".into() },

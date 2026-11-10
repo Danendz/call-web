@@ -299,27 +299,105 @@ video.mirror {
   }
 }
 
-.subtitle {
+.subtitles {
   position: absolute;
   left: 50%;
   bottom: calc(var(--pill-space) + 8px);
   z-index: 4;
-  max-width: min(84%, 720px);
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.72);
-  font-size: 20px;
-  line-height: 1.35;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(84%, 720px);
   translate: -50% 0;
-  transition:
-    opacity var(--med) var(--ease),
-    transform var(--med) var(--ease),
-    bottom var(--slow) var(--ease);
+  pointer-events: none;
+  transition: bottom var(--slow) var(--ease);
 }
 
-.subtitle:empty {
-  display: none;
+/* Collapses its height as it fades, so the lines under it slide up instead of jumping; rises in like a chat message */
+.subtitle-line {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  transition:
+    grid-template-rows var(--slow) var(--ease),
+    opacity var(--slow) var(--ease),
+    transform var(--slow) var(--ease);
+}
+
+.subtitle-line.shown {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: none;
+}
+
+.subtitle-line > div {
+  min-height: 0;
+  overflow: hidden;
+  text-align: center;
+}
+
+/* Frosted glass like the pill, so the video shows through */
+.subtitle-bubble {
+  display: inline-grid;
+  margin-top: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  font-size: 20px;
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  animation: subtitle-in var(--slow) var(--ease-spring);
+}
+
+/* Both texts share one cell; the bubble is as wide as the wider, so the crossfade doesn't jump */
+.subtitle-bubble > span {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--slow) var(--ease),
+    filter var(--slow) var(--ease);
+}
+
+.subtitle-text {
+  opacity: 0;
+  filter: blur(4px);
+}
+
+.subtitle-bubble.translated .subtitle-first {
+  opacity: 0;
+  filter: blur(4px);
+}
+
+.subtitle-bubble.translated .subtitle-text {
+  opacity: 1;
+  filter: none;
+}
+
+/* Your own lines, so you can see what was heard */
+.subtitle-line.mine .subtitle-bubble {
+  background: var(--glass);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+}
+
+@keyframes subtitle-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-line,
+  .subtitle-bubble,
+  .subtitle-bubble > span {
+    transition: none;
+    animation: none;
+  }
 }
 
 .stats {
@@ -628,8 +706,12 @@ button.menu-item:active:not(:disabled) {
     margin-left: 2px;
   }
 
-  .subtitle {
+  .subtitle-bubble {
     font-size: 17px;
+  }
+
+  .subtitle-line.mine .subtitle-bubble {
+    font-size: 14px;
   }
 }
 
