@@ -155,7 +155,7 @@ impl Socket {
                             continue;
                         }
                     };
-                    let full = matches!(msg, ServerMessage::Full);
+                    let full = matches!(msg, ServerMessage::Full { .. });
                     self.emit(SignalEvent::Message(msg));
                     if full {
                         return Ended::Stop;

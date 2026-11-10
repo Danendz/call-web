@@ -91,7 +91,7 @@ impl Controller {
                     let _ = tx.send(Internal::PeerScreenshotShown);
                 });
             }
-            ServerMessage::Full => {
+            ServerMessage::Full { .. } => {
                 self.signaling = None;
                 self.drop_peer();
                 self.state.phase = Phase::Full;

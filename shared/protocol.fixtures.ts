@@ -14,6 +14,8 @@ import {
   type ServerMessage,
   type SpeechClientMessage,
   type SpeechServerMessage,
+  type UserClientMessage,
+  type UserServerMessage,
 } from "./protocol.js";
 
 export const constants = {
@@ -70,6 +72,9 @@ export const serverMessages = [
   { type: "peer-joined", polite: true, callElapsedMs: 0 },
   { type: "peer-left" },
   { type: "full" },
+  { type: "full", reason: "time-limit" },
+  { type: "full", reason: "not-invited" },
+  { type: "full", reason: "elsewhere" },
   { type: "signal", payload: { kind: "description", description: { type: "answer", sdp: "v=0\r\n" } } },
   { type: "signal", payload: { kind: "candidate", candidate: null } },
   { type: "chat", message: chatMessage },
@@ -88,3 +93,41 @@ export const speechClientMessages = [
 ] satisfies SpeechClientMessage[];
 
 export const speechServerMessages = [{ type: "paused", until: 1_700_000_000_000 }, { type: "unavailable" }] satisfies SpeechServerMessage[];
+
+export const userClientMessages = [
+  { type: "ring", to: "friend_1" },
+  { type: "cancel", callId: "k1" },
+  { type: "answer", callId: "k1", accept: true },
+  { type: "answer", callId: "k1", accept: false },
+  { type: "missed-seen" },
+  { type: "ping" },
+] satisfies UserClientMessage[];
+
+export const userServerMessages = [
+  {
+    type: "state",
+    username: "me_1",
+    friends: [
+      { username: "friend_1", presence: "online" },
+      { username: "friend_2", presence: "in-call" },
+      { username: "friend_3", presence: "offline" },
+    ],
+    incoming: ["someone"],
+    outgoing: ["other"],
+    blocked: ["spammer"],
+    missed: [{ from: "friend_1", at: 1_700_000_000_000 }],
+    rooms: [{ roomId: "AbCdEfGhIjKlMnOpQrStUv", with: "friend_2" }],
+  },
+  { type: "state", username: "me_1", friends: [], incoming: [], outgoing: [], blocked: [], missed: [], rooms: [] },
+  { type: "ringing", callId: "k1", to: "friend_1" },
+  { type: "incoming", callId: "k1", from: "friend_1" },
+  { type: "answered", callId: "k1", roomId: "AbCdEfGhIjKlMnOpQrStUv" },
+  { type: "call-ended", callId: "k1", reason: "declined" },
+  { type: "call-ended", callId: "k1", reason: "busy" },
+  { type: "call-ended", callId: "k1", reason: "offline" },
+  { type: "call-ended", callId: "k1", reason: "timeout" },
+  { type: "call-ended", callId: "k1", reason: "cancelled" },
+  { type: "call-ended", callId: "k1", reason: "unavailable" },
+  { type: "call-ended", callId: "k1", reason: "answered-elsewhere" },
+  { type: "pong" },
+] satisfies UserServerMessage[];

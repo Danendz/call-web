@@ -12,6 +12,9 @@ import {
   type SessionResponse,
 } from "../../shared/api.js";
 import { sql } from "../db/index.js";
+import { closeSession, closeSessions, refresh } from "../friends/hub.js";
+import { friendsRoute } from "../friends/routes.js";
+import { friendIds } from "../friends/store.js";
 import { HttpError, readJson, sameOrigin, sendJson, str } from "../http.js";
 import { clientIp, rateLimit } from "../limits.js";
 import * as accounts from "./accounts.js";
@@ -96,7 +99,10 @@ const routes: Record<string, Handler> = {
 
   "POST /api/auth/logout": async (req, res) => {
     const user = await sessionUser(req);
-    if (user) await revokeSession(user.tokenHash);
+    if (user) {
+      await revokeSession(user.tokenHash);
+      closeSession(user.tokenHash);
+    }
     res.writeHead(204, { "set-cookie": CLEAR_SESSION_COOKIE }).end();
   },
 
@@ -112,6 +118,7 @@ const routes: Record<string, Handler> = {
     const result = USERNAME_RE.test(name) ? await accounts.recover(name, code, pw) : null;
     if (!result) throw new HttpError(403, "invalid-recovery");
     await revokeSessions(result.userId);
+    closeSessions(result.userId);
     await startSession(res, result.userId, name, client, result.recoveryCode);
   },
 
@@ -126,6 +133,7 @@ const routes: Record<string, Handler> = {
     if (problem) throw new HttpError(400, problem);
     await accounts.setPassword(user.userId, next);
     await revokeSessions(user.userId, user.tokenHash);
+    closeSessions(user.userId, user.tokenHash);
     res.writeHead(204).end();
   },
 
@@ -135,7 +143,10 @@ const routes: Record<string, Handler> = {
     const pw = password(body);
     limit(passwordChecksPerUser(user.userId));
     if (!(await accounts.checkPassword(user.userId, pw))) throw new HttpError(403, "invalid-credentials");
+    const friends = await friendIds(user.userId);
     await accounts.deleteAccount(user.userId);
+    closeSessions(user.userId);
+    refresh(friends);
     res.writeHead(204, { "set-cookie": CLEAR_SESSION_COOKIE }).end();
   },
 
@@ -162,7 +173,9 @@ const routes: Record<string, Handler> = {
 export function serveApi(req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
   if (!pathname.startsWith("/api/")) return false;
   const ip = clientIp(req);
-  const handler = routes[`${req.method} ${pathname}`];
+  const friendsAction = req.method === "POST" && pathname.startsWith("/api/friends/") ? pathname.slice("/api/friends/".length) : null;
+  const handler: Handler | undefined =
+    routes[`${req.method} ${pathname}`] ?? (friendsAction !== null ? async (req, res) => friendsRoute(req, res, await signedIn(req), friendsAction) : undefined);
   const run = async () => {
     // A page on another site can't send a cookie here (SameSite=Strict), and this stops anything that slips past
     if (!sameOrigin(req)) throw new HttpError(403, "forbidden");

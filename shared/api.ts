@@ -78,7 +78,9 @@ export type ApiErrorCode =
   | "username-taken"
   | "invalid-username"
   | "weak-password"
-  | "too-many-invites";
+  | "too-many-invites"
+  // Past the most pending friend requests, friends or blocks one account can have
+  | "too-many";
 
 export interface ApiError {
   error: ApiErrorCode;

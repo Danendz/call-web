@@ -68,6 +68,8 @@ export interface MediaMessage {
   speakerOff?: boolean;
 }
 
+export type FullReason = "time-limit" | "not-invited" | "elsewhere";
+
 export type ServerMessage =
   | {
       type: "joined";
@@ -85,7 +87,10 @@ export type ServerMessage =
     }
   | { type: "peer-joined"; polite: boolean; callElapsedMs: number }
   | { type: "peer-left" }
-  | { type: "full" }
+  // The room can't be joined, and the client stops reconnecting. No reason: two people are already in it (or the
+  // server is out of rooms). "time-limit": an anonymous room's call ran out its time. "not-invited": a private room
+  // of two other accounts. "elsewhere": the same account joined it from another device.
+  | { type: "full"; reason?: FullReason }
   | { type: "signal"; payload: SignalPayload }
   | { type: "chat"; message: ChatMessage }
   | { type: "chat-translation"; id: string; translation: Translation }
@@ -93,3 +98,57 @@ export type ServerMessage =
   | { type: "screenshot" }
   | MediaMessage
   | { type: "error"; message: string };
+
+// /ws/user: one per signed-in client, open while the app is. Carries the friends list with presence, and call
+// requests. A call that's answered gets a private room, which only the two accounts can join.
+
+export type Presence = "online" | "in-call" | "offline";
+
+export interface FriendState {
+  username: string;
+  presence: Presence;
+}
+
+export interface MissedCall {
+  from: string;
+  at: number;
+}
+
+// A private room you left that the other person is still in: rejoin it by its id.
+export interface OpenRoom {
+  roomId: string;
+  with: string;
+}
+
+// "answered-elsewhere": to the callee's other devices once one of them took the call.
+export type CallEndReason = "declined" | "busy" | "offline" | "timeout" | "cancelled" | "unavailable" | "answered-elsewhere";
+
+export type UserClientMessage =
+  // Rings every device of a friend. One outgoing ring at a time: a new one cancels the last.
+  | { type: "ring"; to: string }
+  | { type: "cancel"; callId: string }
+  | { type: "answer"; callId: string; accept: boolean }
+  // Clears the missed calls in the next state
+  | { type: "missed-seen" }
+  | { type: "ping" };
+
+export type UserServerMessage =
+  // Everything the friends screen shows. Sent on connect and again whenever any of it changes.
+  | {
+      type: "state";
+      username: string;
+      friends: FriendState[];
+      // Friend requests to you, and yours still waiting
+      incoming: string[];
+      outgoing: string[];
+      blocked: string[];
+      missed: MissedCall[];
+      rooms: OpenRoom[];
+    }
+  // Your ring reached at least one of their devices
+  | { type: "ringing"; callId: string; to: string }
+  | { type: "incoming"; callId: string; from: string }
+  // To the caller and to the device that answered: join this room
+  | { type: "answered"; callId: string; roomId: string }
+  | { type: "call-ended"; callId: string; reason: CallEndReason }
+  | { type: "pong" };

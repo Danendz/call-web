@@ -10,6 +10,7 @@ import { serveUpdates } from "./updates.js";
 import { migrate, sql } from "./db/index.js";
 import { serveApi } from "./auth/routes.js";
 import { sessionUser } from "./auth/sessions.js";
+import { onUserConnection } from "./friends/hub.js";
 import { sameOrigin } from "./http.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -18,12 +19,13 @@ const HEARTBEAT_MS = 20_000;
 
 // A reconnecting phone opens a few sockets a minute, a page reload one more. Checked before the session lookup.
 const connectsPerIp = rateLimit(30, 60_000);
-// Anonymous sockets get less than a signed-in user, whose sockets also count against the account.
+// Anonymous sockets get less than a signed-in user, whose sockets also count against the account. A signed-in
+// client in a call holds three (/ws/user, /ws, /ws/speech), and an account may be open on a few devices.
 const anonConnectsPerIp = rateLimit(10, 60_000);
 const connectsPerUser = rateLimit(30, 60_000);
 const anonSocketsPerIp = concurrencyLimit(4);
-const userSocketsPerIp = concurrencyLimit(6);
-const socketsPerUser = concurrencyLimit(6);
+const userSocketsPerIp = concurrencyLimit(8);
+const socketsPerUser = concurrencyLimit(10);
 // Per member: typing fast is a few messages in 10 s; a renegotiation sends a few dozen ICE candidates.
 // Each chat message is translated by a paid model, so an anonymous room gets half.
 const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(10, 10_000), user: rateLimit(20, 10_000) };
@@ -99,7 +101,10 @@ server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const roomId = url.searchParams.get("room") ?? "";
   const speech = url.pathname === "/ws/speech";
-  if ((url.pathname !== "/ws" && !speech) || !ROOM_ID_RE.test(roomId) || !sameOrigin(req)) {
+  // The signed-in client's own socket: friends, presence and call requests
+  const userSocket = url.pathname === "/ws/user";
+  const roomSocket = url.pathname === "/ws" || speech;
+  if (!(userSocket || (roomSocket && ROOM_ID_RE.test(roomId))) || !sameOrigin(req)) {
     socket.destroy();
     return;
   }
@@ -111,6 +116,7 @@ server.on("upgrade", (req, socket, head) => {
     (user) => {
       if (socket.destroyed) return;
       const userId = user?.userId ?? null;
+      if (userSocket && !user) return void socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
       if (!(userId ? connectsPerUser(userId) : anonConnectsPerIp(ip))) return tooMany();
       const release = holdSocket(ip, userId);
       if (!release) return tooMany();
@@ -119,7 +125,8 @@ server.on("upgrade", (req, socket, head) => {
         alive.add(ws);
         ws.on("pong", () => alive.add(ws));
         if (speech) onSpeechConnection(ws, roomId, url.searchParams.get("token") ?? "", ip);
-        else onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"), { ip, userId });
+        else if (!userSocket) onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"), { ip, userId });
+        else if (user) onUserConnection(ws, user);
       });
     },
     (err: unknown) => {
