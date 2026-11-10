@@ -3,6 +3,7 @@ import { ChatPanel } from "../chat/ChatPanel";
 import { SettingsSheet } from "../settings/SettingsSheet";
 import { useShowStats } from "../settings/stats";
 import { useSubtitles } from "../settings/subtitles";
+import { TranslationOffer } from "../translate/TranslationOffer";
 import { CopyLink } from "../ui/CopyLink";
 import { useT, type Strings } from "../ui/i18n";
 import "./call.css";
@@ -157,6 +158,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           <Fade className="notice" text={banner} />
           <Fade className="notice muted" text={state.peerScreenshot ? t.peerScreenshot : null} />
           <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
+          {connected && <TranslationOffer lang={state.lang} />}
         </div>
         {subtitles && (
           <Subtitles messages={state.chat} live={state.live} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />

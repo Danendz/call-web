@@ -31,6 +31,12 @@ sherpa-onnx = { version = "2.0.1", default-features = false }
 # Downloading that model, and checking it
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 sha2 = "0.11"
+# Live subtitles' translation: Firefox's Bergamot engine (vendor/bergamot) is WebAssembly; build.rs compiles it ahead
+# of time, so the app only loads machine code and carries no compiler
+wasmtime = { version = "50.0.1", default-features = false, features = ["runtime", "std", "threads"] }
+
+[build-dependencies]
+wasmtime = { version = "50.0.1", default-features = false, features = ["cranelift", "all-arch", "std", "parallel-compilation", "threads"] }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }

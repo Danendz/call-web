@@ -4,7 +4,7 @@ import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
 import { ModelState } from "../settings/settings.slint";
-import { SpeechPrompt } from "speech-prompt.slint";
+import { ModelPrompt } from "../components/model-prompt.slint";
 
 export { ModelState }
 
@@ -176,8 +176,10 @@ export component StartScreen inherits Rectangle {
         close => { asking = false; }
     }
 
-    if root.speech-prompt && !root.settings-open: SpeechPrompt {
-        model-size: root.model-size;
+    // Asked once, on the first launch
+    if root.speech-prompt && !root.settings-open: ModelPrompt {
+        title: @tr("Recognize speech on this device?");
+        body: @tr("Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings.", root.model-size);
         download => {
             root.download-model();
             root.dismiss-speech-prompt();

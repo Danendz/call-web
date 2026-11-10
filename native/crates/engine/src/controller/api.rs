@@ -93,6 +93,8 @@ pub struct State {
     pub model: ModelStatus,
     /// Speech goes to the on-device model once it's ready, instead of the server
     pub on_device: bool,
+    /// The translation model for live subtitles in `lang`, where there's a data folder to keep it in
+    pub translation: ModelStatus,
     /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
     pub force_relay: bool,
     /// An ICE restart to get off the relay just went out
@@ -133,6 +135,9 @@ pub enum Command {
     CancelModelDownload,
     DeleteModel,
     SetOnDevice(bool),
+    /// Downloads the translation model `lang` needs, picking up where an earlier try stopped
+    DownloadTranslation,
+    DeleteTranslation,
     /// Starts sharing (with the OS's picker, or opening the app's) or stops
     ToggleShare,
     /// A screen or window from the app's picker
