@@ -35,6 +35,9 @@ pub struct Settings {
     /// "Connection stats" in Settings: the overlay shows in every call
     #[serde(default)]
     pub show_stats: bool,
+    /// "Live subtitles" in Settings: the last spoken lines over the video
+    #[serde(default = "yes")]
+    pub subtitles: bool,
     /// DeepFilterNet on the mic. Off on a phone, where it costs battery and competes with a shared screen
     #[serde(default = "desktop")]
     pub noise_suppression: bool,
@@ -66,6 +69,7 @@ impl Default for Settings {
             on_device_speech: true,
             speech_prompt_seen: false,
             show_stats: false,
+            subtitles: true,
             noise_suppression: desktop(),
         }
     }

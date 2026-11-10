@@ -43,6 +43,8 @@ fn constants() {
     let c = &fixtures()["constants"];
     assert_eq!(c["MAX_CHAT_LENGTH"], MAX_CHAT_LENGTH);
     assert_eq!(c["MAX_STREAM_ID_LENGTH"], MAX_STREAM_ID_LENGTH);
+    assert_eq!(c["MAX_LIVE_LENGTH"], MAX_LIVE_LENGTH);
+    assert_eq!(c["MAX_LIVE_ID_LENGTH"], MAX_LIVE_ID_LENGTH);
     assert_eq!(c["ROOM_ID_RE"], ROOM_ID_PATTERN, "update is_room_id along with the pattern");
     assert_eq!(c["TRANSCRIBE_SAMPLE_RATE"], TRANSCRIBE_SAMPLE_RATE);
     assert_eq!(c["MAX_UTTERANCE_S"], MAX_UTTERANCE_S);

@@ -9,8 +9,9 @@ import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
+import { SubtitleLine } from "call/subtitles.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, ModelState }
+export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, SubtitleLine }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -67,8 +68,10 @@ export component AppWindow inherits Window {
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
-    in property <string> subtitle;
-    in property <int> subtitle-serial;
+    in property <[SubtitleLine]> subtitles;
+    // "Live subtitles" in Settings, remembered between launches
+    in property <bool> subtitles-on;
+    callback set-subtitles-on(bool);
     in property <bool> transcribe-on;
     in property <int> speech-notice;
     in property <string> speech-paused-until;
@@ -268,8 +271,8 @@ export component AppWindow inherits Window {
             open-settings => { root.settings-open = true; }
             chat: root.chat;
             others-count: root.others-count;
-            subtitle: root.subtitle;
-            subtitle-serial: root.subtitle-serial;
+            subtitles: root.subtitles;
+            subtitles-on: root.subtitles-on;
             transcribe-on: root.transcribe-on;
             speech-notice: root.speech-notice;
             speech-paused-until: root.speech-paused-until;
@@ -328,6 +331,7 @@ export component AppWindow inherits Window {
         if root.settings-open: SettingsSheet {
             sheet: root.touch || root.width < 900px;
             show-stats: root.show-stats;
+            subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             lang: root.lang;
             model-state: root.model-state;
@@ -335,6 +339,7 @@ export component AppWindow inherits Window {
             model-size: root.model-size;
             on-device: root.on-device;
             set-show-stats(on) => { root.set-show-stats(on); }
+            set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }

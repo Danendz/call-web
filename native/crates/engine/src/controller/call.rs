@@ -83,6 +83,7 @@ impl Controller {
             ServerMessage::ChatTranslation { id, translation } => {
                 (self.on_chat)(ChatEvent::Translated { id, translation });
             }
+            ServerMessage::ChatLive { id, text, .. } => (self.on_chat)(ChatEvent::Live { id, text }),
             ServerMessage::Screenshot => {
                 self.state.peer_screenshot = true;
                 let tx = self.internal_tx.clone();

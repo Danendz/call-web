@@ -144,9 +144,21 @@ pub enum Command {
 /// list in place. Kept out of [`State`], which would otherwise copy every message on every change.
 #[derive(Debug, Clone)]
 pub enum ChatEvent {
-    Reset { my_id: String, messages: Vec<ChatMessage> },
+    Reset {
+        my_id: String,
+        messages: Vec<ChatMessage>,
+    },
     Added(ChatMessage),
-    Translated { id: String, translation: Translation },
+    Translated {
+        id: String,
+        translation: Translation,
+    },
+    /// What the other person is saying right now; empty text drops it. The spoken message with this `live_id`
+    /// finishes it.
+    Live {
+        id: String,
+        text: String,
+    },
 }
 
 /// Handle to the engine thread. Dropping it leaves the room and stops the thread.

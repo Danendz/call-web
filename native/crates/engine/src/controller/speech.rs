@@ -49,7 +49,7 @@ impl Controller {
                     })
                     .collect();
                 if let Some(signaling) = &self.signaling {
-                    signaling.send(ClientMessage::Chat { text, spoken: Some(true) });
+                    signaling.send(ClientMessage::Chat { text, spoken: Some(true), live_id: None });
                 }
             }
             SpeechEvent::LocalFailed => self.transcriber.local_failed(),

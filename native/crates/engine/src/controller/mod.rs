@@ -280,7 +280,7 @@ impl Controller {
                     && text.encode_utf16().count() <= MAX_CHAT_LENGTH
                     && let Some(signaling) = &self.signaling
                 {
-                    signaling.send(ClientMessage::Chat { text: text.to_owned(), spoken: None });
+                    signaling.send(ClientMessage::Chat { text: text.to_owned(), spoken: None, live_id: None });
                 }
             }
             Command::SetTranscribe(on) => self.state.transcribe_on = on,

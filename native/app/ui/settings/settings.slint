@@ -92,6 +92,7 @@ export component SettingsSheet inherits Rectangle {
     // From the bottom instead of the right
     in property <bool> sheet;
     in property <bool> show-stats;
+    in property <bool> subtitles-on;
     in property <bool> noise-suppression;
     in property <string> lang;
     in property <ModelState> model-state;
@@ -99,6 +100,7 @@ export component SettingsSheet inherits Rectangle {
     in property <string> model-size;
     in property <bool> on-device;
     callback set-show-stats(bool);
+    callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
     callback set-lang(string);
     callback download-model();
@@ -236,6 +238,21 @@ export component SettingsSheet inherits Rectangle {
                                     label: @tr("Connection stats");
                                     checked: root.show-stats;
                                     toggled => { root.set-show-stats(!root.show-stats); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        SettingRow {
+                            title: @tr("Live subtitles");
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    label: @tr("Live subtitles");
+                                    checked: root.subtitles-on;
+                                    toggled => { root.set-subtitles-on(!root.subtitles-on); }
                                 }
                             }
                         }

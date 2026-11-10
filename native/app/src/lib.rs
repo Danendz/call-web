@@ -7,6 +7,7 @@ mod bridge;
 mod chat;
 mod screenshot;
 mod settings;
+mod subtitles;
 #[cfg(not(target_os = "android"))]
 mod update;
 mod video;
@@ -317,6 +318,19 @@ pub fn run() -> anyhow::Result<()> {
             }
             let mut settings = settings.borrow_mut();
             settings.show_stats = on;
+            settings.save();
+        }
+    });
+    ui.set_subtitles_on(settings.borrow().subtitles);
+    ui.on_set_subtitles_on({
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |on| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_subtitles_on(on);
+            }
+            let mut settings = settings.borrow_mut();
+            settings.subtitles = on;
             settings.save();
         }
     });

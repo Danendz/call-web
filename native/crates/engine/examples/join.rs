@@ -41,6 +41,7 @@ fn main() {
         ChatEvent::Reset { messages, .. } => tracing::info!("chat: {} earlier messages", messages.len()),
         ChatEvent::Added(m) => tracing::info!("chat from {}: {}", m.from, m.text),
         ChatEvent::Translated { id, translation } => tracing::info!("chat {id} translated: {:?}", translation.text),
+        ChatEvent::Live { id, text } => tracing::info!("live {id}: {text}"),
     };
     let engine = Engine::start(
         server,

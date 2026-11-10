@@ -13,6 +13,9 @@ pub const MAX_STREAM_ID_LENGTH: usize = 64;
 pub const ROOM_ID_PATTERN: &str = "^[A-Za-z0-9_-]{6,32}$";
 pub const TRANSCRIBE_SAMPLE_RATE: u32 = 16_000;
 pub const MAX_UTTERANCE_S: u32 = 30;
+/// Live text: what's recognized of an utterance while it's still being said, in UTF-16 code units.
+pub const MAX_LIVE_LENGTH: usize = 500;
+pub const MAX_LIVE_ID_LENGTH: usize = 64;
 
 pub fn is_room_id(id: &str) -> bool {
     (6..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
@@ -44,6 +47,7 @@ pub struct TranslatedText {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
     pub id: String,
     /// `clientId` of the sender.
@@ -53,6 +57,9 @@ pub struct ChatMessage {
     /// Transcribed from the sender's speech.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spoken: Option<bool>,
+    /// The live text this line finishes, which it replaces in the subtitles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_id: Option<String>,
     /// Arrives after the message, in a `chat-translation`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<Translation>,
@@ -98,6 +105,15 @@ pub enum ClientMessage {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         spoken: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        live_id: Option<String>,
+    },
+    /// The utterance being said so far, in the speaker's language. Each one replaces the last with the same id; the
+    /// spoken chat line with that `live_id` finishes it, and empty text drops it.
+    ChatLive {
+        id: String,
+        text: String,
+        lang: Lang,
     },
     Leave,
     Ping,
@@ -146,6 +162,12 @@ pub enum ServerMessage {
     ChatTranslation {
         id: String,
         translation: Translation,
+    },
+    /// The other person's utterance so far; see [`ClientMessage::ChatLive`].
+    ChatLive {
+        id: String,
+        text: String,
+        lang: Lang,
     },
     Pong,
     Screenshot,

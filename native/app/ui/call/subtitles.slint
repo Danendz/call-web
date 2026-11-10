@@ -1,0 +1,93 @@
+import { Theme } from "../theme.slint";
+
+// One spoken line: `first` is what showed when it came (their words, or the live text), `text` what replaces it
+// once translated. The bridge marks the newest few `shown`.
+export struct SubtitleLine {
+    first: string,
+    text: string,
+    translated: bool,
+    mine: bool,
+    shown: bool,
+}
+
+// After this long without a change a line fades; lines change in order, so in silence they go one by one
+component Line inherits Rectangle {
+    in property <SubtitleLine> line;
+    in property <bool> chat-open;
+    in property <length> line-width;
+    // Read in the chat, or quiet for a while
+    property <bool> gone;
+    property <bool> idle;
+    changed chat-open => { if (chat-open) { gone = true; } }
+    changed line => { idle = false; idle-timer.running = true; idle-timer.restart(); }
+    idle-timer := Timer {
+        interval: 8s;
+        triggered => { self.running = false; idle = true; }
+    }
+
+    property <length> font-size: line.mine ? 16px : 20px;
+    property <length> pad: 14px;
+    // Set once drawn, so a new line rises in like a chat message
+    property <bool> entered;
+    init => { gone = chat-open; entered = true; }
+    property <bool> on: entered && line.shown && !idle && !gone && !chat-open;
+    width: min(line-width, max(first-text.preferred-width, translated-text.preferred-width) + 2 * pad);
+    height: max(first-text.preferred-height, translated-text.preferred-height) + 12px;
+    visible: bubble.opacity > 0;
+
+    // Glass like the control pill: Slint has no backdrop blur, so the stronger glass with a shadow
+    bubble := Rectangle {
+        y: on ? 0 : 8px;
+        animate y { duration: Theme.slow; easing: Theme.ease-spring; }
+        opacity: on ? 1 : 0;
+        animate opacity { duration: Theme.slow; easing: Theme.ease; }
+        border-radius: Theme.radius;
+        background: Theme.glass;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        drop-shadow-blur: 16px;
+        drop-shadow-offset-y: 6px;
+        drop-shadow-color: Theme.shadow;
+
+        // The translation crossfades over what was shown first, both in one box so it doesn't jump
+        first-text := Text {
+            x: pad;
+            width: parent.width - 2 * pad;
+            text: line.first;
+            color: line.mine ? #ffffffb8 : #fff;
+            font-size: root.font-size;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            opacity: line.translated ? 0 : 1;
+            animate opacity { duration: Theme.slow; easing: Theme.ease; }
+        }
+        translated-text := Text {
+            x: pad;
+            width: parent.width - 2 * pad;
+            text: line.translated ? line.text : "";
+            color: #fff;
+            font-size: root.font-size;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            opacity: line.translated ? 1 : 0;
+            animate opacity { duration: Theme.slow; easing: Theme.ease; }
+        }
+    }
+}
+
+// The last few spoken lines over the video, like the web's Subtitles, newest at the bottom.
+export component Subtitles inherits VerticalLayout {
+    in property <[SubtitleLine]> lines;
+    in property <bool> chat-open;
+    in property <length> line-width;
+    alignment: end;
+    spacing: 4px;
+    for line in lines: HorizontalLayout {
+        alignment: center;
+        Line {
+            line: line;
+            chat-open: root.chat-open;
+            line-width: root.line-width;
+        }
+    }
+}
