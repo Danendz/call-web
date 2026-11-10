@@ -7,6 +7,7 @@ import { clientIp, concurrencyLimit, ownHost, rateLimit, setSecurityHeaders } fr
 import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
 import { onSpeechConnection } from "./transcribe.js";
 import { serveUpdates } from "./updates.js";
+import { migrate, sql } from "./db/index.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR ?? "dist/web");
@@ -178,7 +179,9 @@ setInterval(() => {
   }
 }, HEARTBEAT_MS);
 
+await migrate();
 server.listen(PORT, () => {
   console.log(`listening on :${PORT}, serving ${STATIC_DIR}`);
   if (!process.env.TURN_HOST) console.warn("TURN_HOST not set: only host candidates, calls work on LAN only");
+  if (!sql) console.warn("DATABASE_URL not set: accounts and friends are off, only room links work");
 });

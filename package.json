@@ -16,6 +16,7 @@
     "denoise:wasm": "tsx scripts/denoise-wasm.ts"
   },
   "dependencies": {
+    "postgres": "3.4.9",
     "vaul": "1.1.2",
     "ws": "8.22.1"
   },
