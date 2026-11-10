@@ -1,10 +1,13 @@
 import { Theme } from "../theme.slint";
-import { Icons } from "../components/icons.slint";
-import { Button, ButtonKind } from "../components/button.slint";
+import { Icons } from "icons.slint";
+import { Button, ButtonKind } from "button.slint";
 
-// Asked once, on the first launch: the model is too big to download without asking. Settings has it after that.
-export component SpeechPrompt inherits Rectangle {
-    in property <string> model-size;
+// Asks before downloading a model too big to fetch without asking: speech recognition on the first launch, live
+// translation when a language is picked. Settings has both after that.
+export component ModelPrompt inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+    in property <image> icon: Icons.captions;
     callback download();
     callback dismiss();
     property <bool> shown: false;
@@ -53,21 +56,21 @@ export component SpeechPrompt inherits Rectangle {
                 border-radius: self.width / 2;
                 background: Theme.accent-soft;
                 Image {
-                    source: Icons.captions;
+                    source: root.icon;
                     colorize: Theme.accent;
                     width: 22px;
                     height: 22px;
                 }
             }
             Text {
-                text: @tr("Recognize speech on this device?");
+                text: root.title;
                 color: Theme.text;
                 font-size: 20px;
                 font-weight: 650;
                 wrap: word-wrap;
             }
             Text {
-                text: @tr("Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings.", root.model-size);
+                text: root.body;
                 color: Theme.muted;
                 font-size: Theme.font-size;
                 wrap: word-wrap;

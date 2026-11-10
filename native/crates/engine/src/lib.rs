@@ -3,6 +3,7 @@
 
 mod camera;
 mod controller;
+mod download;
 mod level;
 mod media;
 mod mic;
@@ -14,6 +15,7 @@ mod screen_audio;
 mod signaling;
 mod speech;
 mod stats;
+mod translate;
 mod video;
 
 pub use camera::CameraAccess;
@@ -22,6 +24,7 @@ pub use media::Device;
 pub use protocol::{ChatMessage, Lang, MAX_CHAT_LENGTH, TranslatedText, Translation};
 pub use speech::{MODEL_SIZE, ModelStatus, SpeechNotice};
 pub use stats::{CallStats, Path, VideoStats};
+pub use translate::{Pair, Translator, TranslatorEvent};
 pub use video::{Feed, Frame, VideoSink};
 
 /// Hands WebRTC the JavaVM and app context on Android. Call it on a Java thread, before the engine starts: WebRTC

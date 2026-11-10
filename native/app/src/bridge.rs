@@ -3,13 +3,15 @@
 //! the pointer.
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use engine::{
-    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, ModelStatus, Path, Phase, SpeechNotice, State, VideoStats,
+    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, ModelStatus, Pair, Path, Phase, SpeechNotice, State,
+    TranslatorEvent, VideoStats,
 };
-use slint::{Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::chat::{Chat, local_time};
 use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState, StatsView};
@@ -21,12 +23,16 @@ pub struct Bridge {
     cams: Rc<VecModel<DeviceItem>>,
     screen_sources: Rc<VecModel<DeviceItem>>,
     chat: RefCell<Chat>,
+    /// Where the translation models are kept
+    data_dir: Option<PathBuf>,
+    /// What translating subtitles depends on from the last state, for when the switch changes in between
+    last: RefCell<(Phase, Lang, ModelStatus)>,
     /// Read by the ticker that redraws the call timer
     pub call_started: Rc<RefCell<Option<Instant>>>,
 }
 
 impl Bridge {
-    pub fn new(ui: &AppWindow, lang: Lang) -> Self {
+    pub fn new(ui: &AppWindow, lang: Lang, data_dir: Option<PathBuf>) -> Self {
         let mics = Rc::new(VecModel::default());
         let speakers = Rc::new(VecModel::default());
         let cams = Rc::new(VecModel::default());
@@ -41,12 +47,29 @@ impl Bridge {
             cams,
             screen_sources,
             chat: RefCell::new(Chat::new(ui, lang)),
+            data_dir,
+            last: RefCell::new((Phase::Start, lang, ModelStatus::Missing)),
             call_started: Rc::default(),
         }
     }
 
     pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
         self.chat.borrow_mut().event(ui, event);
+    }
+
+    pub fn translated(&self, pair: Pair, event: TranslatorEvent) {
+        self.chat.borrow_mut().translation_event(pair, event);
+    }
+
+    /// Translates subtitles here while a call is up with them on and the model downloaded
+    pub fn sync_translation(&self, ui: &AppWindow) {
+        let (phase, lang, model) = *self.last.borrow();
+        let up = matches!(phase, Phase::Starting | Phase::Waiting | Phase::InCall);
+        let want = (up && ui.get_subtitles_on() && model == ModelStatus::Ready).then(|| Pair::into(lang));
+        let weak = ui.as_weak();
+        self.chat.borrow_mut().sync_translation(want, self.data_dir.as_deref(), move |pair, event| {
+            let _ = weak.upgrade_in_event_loop(move |_| crate::with_bridge(|bridge| bridge.translated(pair, event)));
+        });
     }
 
     pub fn render(&self, ui: &AppWindow, state: &State) {
@@ -113,15 +136,25 @@ impl Bridge {
         ui.set_speech_notice(notice);
         ui.set_speech_paused_until(until.into());
         ui.set_peer_screenshot(state.peer_screenshot);
-        let (model, progress) = match state.model {
-            ModelStatus::Missing => (ModelState::Missing, 0),
-            ModelStatus::Downloading(percent) => (ModelState::Downloading, i32::from(percent)),
-            ModelStatus::Ready => (ModelState::Ready, 100),
-            ModelStatus::Failed => (ModelState::Failed, 0),
-        };
+        let (model, progress) = model_state(state.model);
         ui.set_model_state(model);
         ui.set_model_progress(progress);
         ui.set_on_device(state.on_device);
+        let (translation, progress) = model_state(state.translation);
+        ui.set_translation_state(translation);
+        ui.set_translation_progress(progress);
+        ui.set_translation_size(format!("{} MB", Pair::into(state.lang).size().div_ceil(1_000_000)).into());
+        *self.last.borrow_mut() = (state.phase, state.lang, state.translation);
+        self.sync_translation(ui);
+    }
+}
+
+fn model_state(status: ModelStatus) -> (ModelState, i32) {
+    match status {
+        ModelStatus::Missing => (ModelState::Missing, 0),
+        ModelStatus::Downloading(percent) => (ModelState::Downloading, i32::from(percent)),
+        ModelStatus::Ready => (ModelState::Ready, 100),
+        ModelStatus::Failed => (ModelState::Failed, 0),
     }
 }
 

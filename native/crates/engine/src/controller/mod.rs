@@ -5,6 +5,7 @@ mod api;
 mod call;
 mod devices;
 mod speech;
+mod translate;
 
 pub use api::{ChatEvent, Command, Engine, Link, Phase, State};
 
@@ -43,6 +44,9 @@ enum Internal {
     ModelProgress(Arc<AtomicBool>, u8),
     /// The download ended: Ok(true) when the model is all there, Ok(false) when cancelled
     ModelDownloaded(Arc<AtomicBool>, Result<bool, String>),
+    /// The same for the translation model
+    TranslationProgress(Arc<AtomicBool>, u8),
+    TranslationDownloaded(Arc<AtomicBool>, Result<bool, String>),
 }
 
 /// What the server told us when we joined, needed again for every new peer connection.
@@ -78,6 +82,9 @@ struct Controller {
     model_dir: Option<PathBuf>,
     /// Set to stop the download that's running
     model_cancel: Option<Arc<AtomicBool>>,
+    /// Where the translation models are kept; None where there's no data folder
+    data_dir: Option<PathBuf>,
+    translation_cancel: Option<Arc<AtomicBool>>,
     direct_retries: usize,
     next_direct_retry: Option<Instant>,
     last_direct_retry: Option<Instant>,
@@ -110,7 +117,8 @@ impl Controller {
         let media = Media::new();
         let camera = LocalCamera::new(media.factory(), sink.clone());
         let screen = LocalScreen::new(media.factory());
-        let model_dir = data_dir.map(|d| crate::speech::model_dir(&d));
+        let model_dir = data_dir.as_deref().map(crate::speech::model_dir);
+        let translation = translate::status(data_dir.as_deref(), lang);
         let ready = model_dir.as_deref().is_some_and(crate::speech::model_ready);
         let model = if ready { ModelStatus::Ready } else { ModelStatus::Missing };
         let state = State {
@@ -146,6 +154,7 @@ impl Controller {
             speech_notice: None,
             model,
             on_device,
+            translation,
         };
         Self {
             server,
@@ -166,6 +175,8 @@ impl Controller {
             speech_rx,
             model_dir,
             model_cancel: None,
+            data_dir,
+            translation_cancel: None,
             direct_retries: 0,
             next_direct_retry: None,
             last_direct_retry: None,
@@ -205,6 +216,14 @@ impl Controller {
                         }
                     }
                     Internal::ModelDownloaded(download, result) => self.model_downloaded(&download, result),
+                    Internal::TranslationProgress(download, percent) => {
+                        if self.is_current_translation(&download) {
+                            self.state.translation = ModelStatus::Downloading(percent);
+                        }
+                    }
+                    Internal::TranslationDownloaded(download, result) => {
+                        self.translation_downloaded(&download, result)
+                    }
                 },
                 Some(event) = self.speech_rx.recv() => self.speech_event(event),
             }
@@ -223,7 +242,7 @@ impl Controller {
             Command::NewRoom => self.open_room(room::new_room_id()),
             Command::OpenRoom(id) if protocol::is_room_id(&id) => self.open_room(id),
             Command::OpenRoom(_) => tracing::warn!("ignoring an invalid room id"),
-            Command::SetLang(lang) => self.state.lang = lang,
+            Command::SetLang(lang) => self.set_lang(lang),
             Command::Join => self.join(),
             Command::HangUp => {
                 self.disconnect();
@@ -291,6 +310,8 @@ impl Controller {
                 self.state.model = ModelStatus::Missing;
             }
             Command::DeleteModel => self.delete_model(),
+            Command::DownloadTranslation => self.download_translation(),
+            Command::DeleteTranslation => self.delete_translation(),
             Command::SetOnDevice(on) => {
                 self.state.on_device = on;
                 if !on {

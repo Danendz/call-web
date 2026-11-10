@@ -99,6 +99,9 @@ export component SettingsSheet inherits Rectangle {
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
+    in property <ModelState> translation-state;
+    in property <int> translation-progress;
+    in property <string> translation-size;
     callback set-show-stats(bool);
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
@@ -107,6 +110,8 @@ export component SettingsSheet inherits Rectangle {
     callback cancel-download();
     callback delete-model();
     callback set-on-device(bool);
+    callback download-translation();
+    callback delete-translation();
     // The panel is gone: the owner removes it
     callback closed();
 
@@ -253,6 +258,41 @@ export component SettingsSheet inherits Rectangle {
                                     label: @tr("Live subtitles");
                                     checked: root.subtitles-on;
                                     toggled => { root.set-subtitles-on(!root.subtitles-on); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        // The model for the language picked under "I speak"
+                        SettingRow {
+                            title: @tr("Live translation");
+                            detail: root.translation-state == ModelState.ready ? @tr("Downloaded · {}", root.translation-size)
+                                : root.translation-state == ModelState.downloading ? @tr("Downloading… {}%", root.translation-progress)
+                                : root.translation-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
+                                : @tr("Not downloaded · {}", root.translation-size);
+                            detail-color: root.translation-state == ModelState.failed ? Theme.danger-text : Theme.muted;
+                            VerticalLayout {
+                                alignment: center;
+                                if root.translation-state == ModelState.missing: Button {
+                                    text: @tr("Download");
+                                    icon: Icons.download;
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-translation(); }
+                                }
+                                if root.translation-state == ModelState.failed: Button {
+                                    text: @tr("Try again");
+                                    kind: ButtonKind.primary;
+                                    height-hint: 38px;
+                                    clicked => { root.download-translation(); }
+                                }
+                                if root.translation-state == ModelState.ready: Button {
+                                    text: @tr("Delete");
+                                    kind: ButtonKind.danger;
+                                    height-hint: 38px;
+                                    clicked => { root.delete-translation(); }
                                 }
                             }
                         }

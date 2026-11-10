@@ -8,6 +8,7 @@ mod chat;
 mod screenshot;
 mod settings;
 mod subtitles;
+mod translate;
 #[cfg(not(target_os = "android"))]
 mod update;
 mod video;
@@ -58,7 +59,7 @@ pub fn run() -> anyhow::Result<()> {
     #[cfg(target_os = "android")]
     android::attach(&ui, &settings);
 
-    let bridge = Bridge::new(&ui, lang);
+    let bridge = Bridge::new(&ui, lang, settings::data_dir());
     let call_started = bridge.call_started.clone();
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
@@ -272,14 +273,28 @@ pub fn run() -> anyhow::Result<()> {
     ui.on_pick_mic(remember(|s, id| s.mic = Some(id), Command::SelectMic));
     ui.on_pick_speaker(remember(|s, id| s.speaker = Some(id), Command::SelectSpeaker));
     ui.on_pick_cam(remember(|s, id| s.cam = Some(id), Command::SelectCam));
-    ui.on_set_lang(remember(
-        |s, code| s.lang = Some(parse_lang(&code)),
-        |code| {
+    ui.on_set_lang({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |code| {
             let lang = parse_lang(&code);
             select_translation(lang);
-            Command::SetLang(lang)
-        },
-    ));
+            {
+                let mut settings = settings.borrow_mut();
+                settings.lang = Some(lang);
+                // Picking a language offers its translation model again, even if it was put off before
+                settings.translation_prompt_dismissed.retain(|l| *l != lang);
+                settings.save();
+            }
+            if let Some(ui) = weak.upgrade()
+                && settings::data_dir().is_some()
+            {
+                ui.set_translation_dismissed(false);
+            }
+            engine.send(Command::SetLang(lang));
+        }
+    });
     ui.set_model_size(format!("{} MB", engine::MODEL_SIZE.div_ceil(1_000_000)).into());
     // Asked once, where there's somewhere to keep the model
     ui.set_speech_prompt(data_dir.is_some() && !settings.borrow().speech_prompt_seen);
@@ -295,6 +310,20 @@ pub fn run() -> anyhow::Result<()> {
             settings.save();
         }
     });
+    ui.set_translation_dismissed(data_dir.is_none() || settings.borrow().translation_prompt_dismissed.contains(&lang));
+    ui.on_dismiss_translation_prompt({
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move || {
+            let Some(ui) = weak.upgrade() else { return };
+            ui.set_translation_dismissed(true);
+            let mut settings = settings.borrow_mut();
+            settings.translation_prompt_dismissed.push(parse_lang(&ui.get_lang()));
+            settings.save();
+        }
+    });
+    ui.on_download_translation(send(Command::DownloadTranslation));
+    ui.on_delete_translation(send(Command::DeleteTranslation));
     ui.on_download_model(send(Command::DownloadModel));
     ui.on_cancel_model_download(send(Command::CancelModelDownload));
     ui.on_delete_model(send(Command::DeleteModel));
@@ -328,6 +357,7 @@ pub fn run() -> anyhow::Result<()> {
         move |on| {
             if let Some(ui) = weak.upgrade() {
                 ui.set_subtitles_on(on);
+                with_bridge(|bridge| bridge.sync_translation(&ui));
             }
             let mut settings = settings.borrow_mut();
             settings.subtitles = on;

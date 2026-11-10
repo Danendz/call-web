@@ -10,6 +10,7 @@ import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
 import { SubtitleLine } from "call/subtitles.slint";
+import { ModelPrompt } from "components/model-prompt.slint";
 
 export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, SubtitleLine }
 
@@ -89,6 +90,14 @@ export component AppWindow inherits Window {
     callback delete-model();
     callback set-on-device(bool);
     callback dismiss-speech-prompt();
+    // The translation model live subtitles need in this language, and whether its offer was put off
+    in property <ModelState> translation-state;
+    in property <int> translation-progress;
+    in property <string> translation-size;
+    in-out property <bool> translation-dismissed;
+    callback download-translation();
+    callback delete-translation();
+    callback dismiss-translation-prompt();
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
     // 0–100 while an update downloads, else -1
@@ -335,6 +344,11 @@ export component AppWindow inherits Window {
             model-progress: root.model-progress;
             model-size: root.model-size;
             on-device: root.on-device;
+            translation-state: root.translation-state;
+            translation-progress: root.translation-progress;
+            translation-size: root.translation-size;
+            download-translation => { root.download-translation(); }
+            delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
@@ -347,6 +361,20 @@ export component AppWindow inherits Window {
                 root.settings-open = false;
                 keys.focus();
             }
+        }
+
+        // Offered while subtitles are on and it isn't downloaded, until put off; over Settings too, where the language
+        // that needs it was just picked. Not on top of the first launch's speech question.
+        if root.subtitles-on && !root.translation-dismissed && !root.speech-prompt
+            && (root.translation-state == ModelState.missing || root.translation-state == ModelState.failed): ModelPrompt {
+            icon: Icons.languages;
+            title: @tr("Translate live subtitles on this device?");
+            body: @tr("What the other person says shows in your language as they say it. It needs a one-time {} download; you can also do it later in Settings.", root.translation-size);
+            download => {
+                root.download-translation();
+                root.translation-dismissed = true;
+            }
+            dismiss => { root.dismiss-translation-prompt(); }
         }
     }
 }

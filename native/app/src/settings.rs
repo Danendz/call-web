@@ -41,6 +41,9 @@ pub struct Settings {
     /// DeepFilterNet on the mic. Off on a phone, where it costs battery and competes with a shared screen
     #[serde(default = "desktop")]
     pub noise_suppression: bool,
+    /// Languages whose translation model was offered and put off; picking the language again offers it again
+    #[serde(default)]
+    pub translation_prompt_dismissed: Vec<Lang>,
 }
 
 fn yes() -> bool {
@@ -71,6 +74,7 @@ impl Default for Settings {
             show_stats: false,
             subtitles: true,
             noise_suppression: desktop(),
+            translation_prompt_dismissed: Vec::new(),
         }
     }
 }
