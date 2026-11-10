@@ -3,21 +3,30 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { MAX_CHAT_LENGTH, MAX_STREAM_ID_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
-import { clientIp, concurrencyLimit, ownHost, rateLimit, setSecurityHeaders } from "./limits.js";
-import { disconnected, join, leave, postChat, relayToPeer, send } from "./rooms.js";
+import { clientIp, concurrencyLimit, rateLimit, setSecurityHeaders, type Tier } from "./limits.js";
+import { disconnected, join, leave, postChat, relayToPeer, send, tierOf, type Joiner } from "./rooms.js";
 import { onSpeechConnection } from "./transcribe.js";
 import { serveUpdates } from "./updates.js";
 import { migrate, sql } from "./db/index.js";
+import { serveApi } from "./auth/routes.js";
+import { sessionUser } from "./auth/sessions.js";
+import { sameOrigin } from "./http.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR ?? "dist/web");
 const HEARTBEAT_MS = 20_000;
 
-// Per IP: a reconnecting phone opens a few sockets a minute, a page reload one more.
-const socketsPerIp = concurrencyLimit(6);
+// A reconnecting phone opens a few sockets a minute, a page reload one more. Checked before the session lookup.
 const connectsPerIp = rateLimit(30, 60_000);
+// Anonymous sockets get less than a signed-in user, whose sockets also count against the account.
+const anonConnectsPerIp = rateLimit(10, 60_000);
+const connectsPerUser = rateLimit(30, 60_000);
+const anonSocketsPerIp = concurrencyLimit(4);
+const userSocketsPerIp = concurrencyLimit(6);
+const socketsPerUser = concurrencyLimit(6);
 // Per member: typing fast is a few messages in 10 s; a renegotiation sends a few dozen ICE candidates.
-const chatPerMember = rateLimit(20, 10_000);
+// Each chat message is translated by a paid model, so an anonymous room gets half.
+const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(10, 10_000), user: rateLimit(20, 10_000) };
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
 // A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
@@ -43,6 +52,7 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     return;
   }
   if (serveUpdates(req, res, url.pathname)) return;
+  if (serveApi(req, res, url.pathname)) return;
 
   let filePath = path.join(STATIC_DIR, path.normalize(decodeURIComponent(url.pathname)));
   if (!filePath.startsWith(STATIC_DIR)) {
@@ -94,33 +104,49 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   const ip = clientIp(req);
-  if (!connectsPerIp(ip) || !socketsPerIp.acquire(ip)) {
-    socket.end("HTTP/1.1 429 Too Many Requests\r\n\r\n");
-    return;
-  }
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    ws.on("close", () => socketsPerIp.release(ip));
-    alive.add(ws);
-    ws.on("pong", () => alive.add(ws));
-    if (speech) onSpeechConnection(ws, roomId, url.searchParams.get("token") ?? "");
-    else onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"));
-  });
+  const tooMany = () => socket.end("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+  if (!connectsPerIp(ip)) return tooMany();
+  // The web client's session cookie comes with the upgrade; the native client sends its bearer token
+  sessionUser(req).then(
+    (user) => {
+      if (socket.destroyed) return;
+      const userId = user?.userId ?? null;
+      if (!(userId ? connectsPerUser(userId) : anonConnectsPerIp(ip))) return tooMany();
+      const release = holdSocket(ip, userId);
+      if (!release) return tooMany();
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.on("close", release);
+        alive.add(ws);
+        ws.on("pong", () => alive.add(ws));
+        if (speech) onSpeechConnection(ws, roomId, url.searchParams.get("token") ?? "", ip);
+        else onConnection(ws, roomId, url.searchParams.get("clientId"), url.searchParams.get("token"), { ip, userId });
+      });
+    },
+    (err: unknown) => {
+      console.error(err);
+      socket.destroy();
+    },
+  );
 });
 
-// Browsers always send Origin on a WebSocket; another site's page must not open our room sockets.
-function sameOrigin(req: IncomingMessage): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === ownHost(req);
-  } catch {
-    return false;
+/** Takes a socket slot for this IP (and account), returning its release, or null when they hold too many. */
+function holdSocket(ip: string, userId: string | null): (() => void) | null {
+  if (!userId) return anonSocketsPerIp.acquire(ip) ? () => anonSocketsPerIp.release(ip) : null;
+  if (!userSocketsPerIp.acquire(ip)) return null;
+  if (!socketsPerUser.acquire(userId)) {
+    userSocketsPerIp.release(ip);
+    return null;
   }
+  return () => {
+    userSocketsPerIp.release(ip);
+    socketsPerUser.release(userId);
+  };
 }
 
-function onConnection(ws: WebSocket, roomId: string, requestedId: string | null, token: string | null): void {
-  const clientId = join(roomId, requestedId, token, ws);
-  if (!clientId) {
+function onConnection(ws: WebSocket, roomId: string, requestedId: string | null, token: string | null, who: Joiner): void {
+  const clientId = join(roomId, requestedId, token, ws, who);
+  const tier = tierOf(roomId);
+  if (!clientId || !tier) {
     ws.close(4001, "room full");
     return;
   }
@@ -140,7 +166,7 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         if (signalsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "signal", payload: msg.payload });
         break;
       case "chat": {
-        if (!chatPerMember(clientId)) break;
+        if (!chatPerMember[tier](clientId)) break;
         const text = typeof msg.text === "string" ? msg.text.trim() : "";
         if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true);
         break;

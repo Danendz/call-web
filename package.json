@@ -13,6 +13,7 @@
     "start": "node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "fixtures": "tsx scripts/fixtures.ts",
+    "invite": "tsx --env-file-if-exists=.env scripts/invite.ts",
     "denoise:wasm": "tsx scripts/denoise-wasm.ts"
   },
   "dependencies": {

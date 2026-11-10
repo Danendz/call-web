@@ -8,22 +8,29 @@ export function clientIp(req: IncomingMessage): string {
   return (typeof real === "string" && real) || req.socket.remoteAddress || "";
 }
 
-/** At most `max` hits per key in each `windowMs`. Returns false once the key is over. */
-export function rateLimit(max: number, windowMs: number): (key: string) => boolean {
+/**
+ * Which limits a room and its members get. Anonymous link rooms get the tight ones; a room created by a signed-in
+ * user gets the user ones, counted against that account, since an account can be cut off when it's abused.
+ */
+export type Tier = "anon" | "user";
+
+/** At most `max` hits (or `cost` units, like seconds of audio) per key in each `windowMs`. Returns false once over. */
+export function rateLimit(max: number, windowMs: number): (key: string, cost?: number) => boolean {
   const windows = new Map<string, { count: number; resetAt: number }>();
   setInterval(() => {
     const now = Date.now();
     for (const [key, w] of windows) if (w.resetAt <= now) windows.delete(key);
   }, windowMs).unref();
 
-  return (key) => {
+  return (key, cost = 1) => {
     const now = Date.now();
     let w = windows.get(key);
     if (!w || w.resetAt <= now) {
       w = { count: 0, resetAt: now + windowMs };
       windows.set(key, w);
     }
-    return ++w.count <= max;
+    w.count += cost;
+    return w.count <= max;
   };
 }
 

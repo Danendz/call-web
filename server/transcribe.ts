@@ -13,8 +13,8 @@ import {
   type SpeechServerMessage,
 } from "../shared/protocol.js";
 import { createQuota, failIfNotOk } from "./llm.js";
-import { rateLimit } from "./limits.js";
-import { memberByToken, postChat } from "./rooms.js";
+import { rateLimit, type Tier } from "./limits.js";
+import { memberByToken, postChat, tierOf } from "./rooms.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1";
 // Each has its own free quota (2h of audio an hour): when large-v3 runs out, turbo still has its own
@@ -41,7 +41,9 @@ const THANKS_RE =
 const SHORT_AUDIO_S = 2.5;
 const SURE_AVG_LOGPROB = -0.5;
 // One utterance every couple of seconds of nonstop talking; past that someone is spending the quota.
-const uploadsPerMember = rateLimit(30, 60_000);
+// An anonymous room gets half, and an hour of audio a day per IP.
+const uploadsPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(15, 60_000), user: rateLimit(30, 60_000) };
+const anonSecondsPerIp = rateLimit(60 * 60, 24 * 60 * 60_000);
 // What Whisper makes up from noise it was trained on (video subtitles credits)
 const HALLUCINATION_RE = /amara\.org|字幕由|明镜与点点|點點栏目|请不吝点赞/i;
 
@@ -149,7 +151,7 @@ function send(ws: WebSocket, msg: SpeechServerMessage): void {
 }
 
 /** A /ws/speech socket, already upgraded. Only a member of the room holding its token may use it. */
-export function onSpeechConnection(ws: WebSocket, roomId: string, token: string): void {
+export function onSpeechConnection(ws: WebSocket, roomId: string, token: string, ip: string): void {
   const clientId = memberByToken(roomId, token);
   if (!clientId) return ws.close(4003, "not in this room");
   if (!key) {
@@ -220,8 +222,10 @@ export function onSpeechConnection(ws: WebSocket, roomId: string, token: string)
         if (!done || done.bytes < MIN_UTTERANCE_BYTES) break;
         // The seat may have been given up since the socket opened
         if (memberByToken(roomId, token) !== clientId) return ws.close(4003, "not in this room");
-        if (!uploadsPerMember(clientId)) break;
+        const tier = tierOf(roomId) ?? "anon";
         const pcm = Buffer.concat(done.chunks);
+        if (!uploadsPerMember[tier](clientId)) break;
+        if (tier === "anon" && !anonSecondsPerIp(ip, pcm.length / (TRANSCRIBE_SAMPLE_RATE * 2))) break;
         // 16-bit samples: an odd byte at the end is half of one
         finish(done.lang, pcm.length % 2 ? pcm.subarray(0, -1) : pcm, done.startedAt);
         break;

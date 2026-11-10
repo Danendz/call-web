@@ -1,12 +1,19 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import type { ChatMessage, ServerMessage } from "../shared/protocol.js";
+import { rateLimit, type Tier } from "./limits.js";
 import { translatorFromEnv } from "./translate.js";
 import { iceServersFor } from "./turn.js";
 
 const MAX_PEERS = 2;
 // Each room holds its chat in memory; this is far past what two people use.
 const MAX_ROOMS = 100;
+// Anonymous rooms get only part of that, so signed-in users still find space when someone floods links.
+const MAX_ANON_ROOMS = 20;
+const MAX_LINK_ROOMS_PER_USER = 3;
+const anonRoomsPerIp = rateLimit(5, 60 * 60_000);
+// An anonymous call ends after this long; its TURN credentials expire then too (turn.ts).
+const ANON_ROOM_MS = 2 * 60 * 60_000;
 const MAX_CHAT_HISTORY = 200;
 // How long a dropped socket keeps its seat, so a network switch resumes the call instead of ending it.
 const RESUME_GRACE_MS = 20_000;
@@ -23,8 +30,18 @@ interface Member {
   graceTimer?: NodeJS.Timeout;
 }
 
+/** Who is opening the room socket: the IP, and the account when the request carries a session. */
+export interface Joiner {
+  ip: string;
+  userId: string | null;
+}
+
 interface Room {
   id: string;
+  tier: Tier;
+  // The account that created a link room, which counts against its limit
+  ownerId: string | null;
+  expireTimer?: NodeJS.Timeout;
   members: Map<string, Member>;
   chat: ChatMessage[];
   // When both members were first here, and since when one has been alone: drive the call timer.
@@ -53,16 +70,43 @@ function otherMember(room: Room, clientId: string): Member | undefined {
   return undefined;
 }
 
+/** A new room in the creator's tier, or undefined when that tier (or the server) is out of rooms. */
+function createRoom(roomId: string, who: Joiner): Room | undefined {
+  if (rooms.size >= MAX_ROOMS) return undefined;
+  const all = [...rooms.values()];
+  if (who.userId) {
+    if (all.filter((r) => r.ownerId === who.userId).length >= MAX_LINK_ROOMS_PER_USER) return undefined;
+  } else if (all.filter((r) => r.tier === "anon").length >= MAX_ANON_ROOMS || !anonRoomsPerIp(who.ip)) {
+    return undefined;
+  }
+  const room: Room = { id: roomId, tier: who.userId ? "user" : "anon", ownerId: who.userId, members: new Map(), chat: [] };
+  if (room.tier === "anon") room.expireTimer = setTimeout(() => expire(room), ANON_ROOM_MS);
+  rooms.set(roomId, room);
+  return room;
+}
+
+/** Ends an anonymous room's call at its time limit. */
+function expire(room: Room): void {
+  if (rooms.get(room.id) !== room) return;
+  rooms.delete(room.id);
+  for (const m of room.members.values()) {
+    clearTimeout(m.graceTimer);
+    // "full" stops the client from reconnecting
+    send(m.ws, { type: "full" });
+    m.ws?.close(4002, "time limit");
+  }
+}
+
+export function tierOf(roomId: string): Tier | undefined {
+  return rooms.get(roomId)?.tier;
+}
+
 /** Returns the joined clientId, or null if the room (or the server) is full. */
-export function join(roomId: string, requestedId: string | null, token: string | null, ws: WebSocket): string | null {
-  let room = rooms.get(roomId);
+export function join(roomId: string, requestedId: string | null, token: string | null, ws: WebSocket, who: Joiner): string | null {
+  const room = rooms.get(roomId) ?? createRoom(roomId, who);
   if (!room) {
-    if (rooms.size >= MAX_ROOMS) {
-      send(ws, { type: "full" });
-      return null;
-    }
-    room = { id: roomId, members: new Map(), chat: [] };
-    rooms.set(roomId, room);
+    send(ws, { type: "full" });
+    return null;
   }
 
   const seat = requestedId ? room.members.get(requestedId) : undefined;
@@ -79,7 +123,7 @@ export function join(roomId: string, requestedId: string | null, token: string |
       resumed: true,
       peerPresent,
       polite: existing.polite,
-      iceServers: iceServersFor(roomId),
+      iceServers: iceServersFor(roomId, room.tier),
       chat: room.chat,
       ...(peerPresent && room.callStart !== undefined && { callElapsedMs: Date.now() - room.callStart }),
     });
@@ -112,7 +156,7 @@ export function join(roomId: string, requestedId: string | null, token: string |
     resumed: false,
     peerPresent: peer !== undefined,
     polite: member.polite,
-    iceServers: iceServersFor(roomId),
+    iceServers: iceServersFor(roomId, room.tier),
     chat: room.chat,
     ...(callElapsedMs !== undefined && { callElapsedMs }),
   });
@@ -135,6 +179,7 @@ export function leave(roomId: string, clientId: string): void {
   if (room.members.size === 0) {
     // join() can put an emptied room back (evicting a ghost seat); it starts a new call then
     room.callStart = room.aloneSince = undefined;
+    clearTimeout(room.expireTimer);
     rooms.delete(roomId);
   }
 }
