@@ -3,6 +3,23 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.3.0 — 2026-11-10
+
+Live subtitles while you speak, translated on the device, and calling friends.
+
+### New
+
+- Live subtitles: your words show to the other person while you're still speaking, recognized on the device
+- Subtitles are translated on the device into the other person's language
+- The last few spoken lines show above the call controls and fade after a pause; turn them off in Settings
+- Sign in or create an account, add friends and see who's online
+- Call a friend from the start screen: their app rings, and answering opens a private room only you two can join
+- Missed calls show on the start screen, and you can rejoin a private room while the other person is still in it
+
+### Fixed
+
+- Android: the mic shows as available again, so mute, speech to chat and the level meter work
+
 ## 0.2.2 — 2026-11-09
 
 Clearer voice, and switching devices during a call.
