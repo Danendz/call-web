@@ -4,6 +4,9 @@ export const MAX_CHAT_LENGTH = 2000;
 // WebRTC stream ids are UUIDs (Firefox wraps them in braces); anything longer is not one.
 export const MAX_STREAM_ID_LENGTH = 64;
 export const ROOM_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
+// Live text: what's recognized of an utterance while it's still being said, under an id the sender makes up
+export const MAX_LIVE_LENGTH = 500;
+export const MAX_LIVE_ID_LENGTH = 64;
 
 // The two languages the chat is translated between, also what each side's speech is recognized in.
 export const LANGS = ["zh", "en"] as const;
@@ -24,6 +27,7 @@ export interface ChatMessage {
   text: string;
   ts: number;
   spoken?: boolean; // transcribed from the sender's speech
+  liveId?: string; // the live text this line finishes, which it replaces in the subtitles
   translation?: Translation; // arrives after the message, in a chat-translation
 }
 
@@ -50,7 +54,8 @@ export type SignalPayload =
 
 export type ClientMessage =
   | { type: "signal"; payload: SignalPayload }
-  | { type: "chat"; text: string; spoken?: boolean }
+  | { type: "chat"; text: string; spoken?: boolean; liveId?: string }
+  | LiveMessage
   | { type: "leave" }
   | { type: "ping" }
   // Tells the other person you saved a picture of the call; carries nothing
@@ -69,6 +74,16 @@ export interface MediaMessage {
 }
 
 export type FullReason = "time-limit" | "not-invited" | "elsewhere";
+
+// The utterance being said so far, in the speaker's language, relayed to the other person and never stored. Each one
+// replaces the last with the same id; the spoken chat line with that liveId finishes it, and empty text drops it
+// (it turned out to be noise).
+export interface LiveMessage {
+  type: "chat-live";
+  id: string;
+  text: string;
+  lang: Lang;
+}
 
 export type ServerMessage =
   | {
@@ -94,6 +109,7 @@ export type ServerMessage =
   | { type: "signal"; payload: SignalPayload }
   | { type: "chat"; message: ChatMessage }
   | { type: "chat-translation"; id: string; translation: Translation }
+  | LiveMessage
   | { type: "pong" }
   | { type: "screenshot" }
   | MediaMessage

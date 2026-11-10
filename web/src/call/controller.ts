@@ -1,4 +1,4 @@
-import type { ChatMessage, FullReason, IceServerConfig, Lang, ServerMessage } from "../../../shared/protocol";
+import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, ServerMessage } from "../../../shared/protocol";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
@@ -44,6 +44,8 @@ export interface CallState {
   remoteCamOn: boolean;
   iceState: RTCIceConnectionState | null;
   chat: ChatMessage[];
+  /** What the other person is saying right now, until its chat line comes. */
+  live: LiveMessage | null;
   micOn: boolean;
   camOn: boolean;
   micAccess: MediaAccess;
@@ -88,6 +90,7 @@ const initialState: CallState = {
   remoteCamOn: true,
   iceState: null,
   chat: [],
+  live: null,
   micOn: true,
   camOn: true,
   micAccess: "pending",
@@ -333,7 +336,7 @@ export class CallController {
   }
 
   async start(): Promise<void> {
-    this.set({ phase: "starting", chat: [], remoteStream: null });
+    this.set({ phase: "starting", chat: [], live: null, remoteStream: null });
     // Joining without camera/mic is allowed: you can still hear, watch and chat.
     if (this.mediaReady || !this.state.localStream) await this.preview();
 
@@ -438,7 +441,7 @@ export class CallController {
         this.signaling.setIdentity(msg.clientId, msg.token);
         this.token = msg.token;
         this.iceServers = msg.iceServers;
-        this.set({ myId: msg.clientId, chat: msg.chat });
+        this.set({ myId: msg.clientId, chat: msg.chat, live: null });
         if (msg.resumed && this.peer) {
           // Our socket dropped (network switch); the media path likely died with it.
           if (msg.peerPresent) {
@@ -460,13 +463,19 @@ export class CallController {
       case "peer-left":
         this.remoteScreenId = null;
         this.dropPeer();
-        this.set({ remoteCamOn: true, remoteSpeakerOff: false });
+        this.set({ remoteCamOn: true, remoteSpeakerOff: false, live: null });
         break;
       case "signal":
         this.peer?.handleSignal(msg.payload);
         break;
-      case "chat":
-        this.set({ chat: [...this.state.chat, msg.message] });
+      case "chat": {
+        const finishesLive = msg.message.liveId !== undefined && msg.message.liveId === this.state.live?.id;
+        this.set({ chat: [...this.state.chat, msg.message], ...(finishesLive && { live: null }) });
+        break;
+      }
+      case "chat-live":
+        if (msg.text) this.set({ live: msg });
+        else if (msg.id === this.state.live?.id) this.set({ live: null });
         break;
       case "chat-translation":
         this.set({ chat: this.state.chat.map((m) => (m.id === msg.id ? { ...m, translation: msg.translation } : m)) });

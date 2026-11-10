@@ -281,10 +281,17 @@ export function memberByToken(roomId: string, token: string): string | null {
 }
 
 /** Posts the message as written, then its translation once it's back (kept in the history for a rejoin). */
-export function postChat(roomId: string, clientId: string, text: string, spoken = false): void {
+export function postChat(roomId: string, clientId: string, text: string, spoken = false, liveId?: string): void {
   const room = rooms.get(roomId);
   if (!room) return;
-  const message: ChatMessage = { id: randomUUID(), from: clientId, text, ts: Date.now(), ...(spoken && { spoken }) };
+  const message: ChatMessage = {
+    id: randomUUID(),
+    from: clientId,
+    text,
+    ts: Date.now(),
+    ...(spoken && { spoken }),
+    ...(liveId !== undefined && { liveId }),
+  };
   room.chat.push(message);
   if (room.chat.length > MAX_CHAT_HISTORY) room.chat.shift();
   for (const m of room.members.values()) send(m.ws, { type: "chat", message });

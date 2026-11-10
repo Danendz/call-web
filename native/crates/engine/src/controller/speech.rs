@@ -1,14 +1,15 @@
 //! Speech to chat's side of the controller: which recognizer a recording uses, what comes back from it, and the
-//! on-device model's download.
+//! on-device models' downloads.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use protocol::{ClientMessage, MAX_CHAT_LENGTH, SpeechServerMessage};
+use protocol::{ClientMessage, MAX_CHAT_LENGTH, MAX_LIVE_LENGTH, SpeechServerMessage};
 
 use super::{Controller, Internal, Phase};
-use crate::speech::{self, ModelStatus, Params, SpeechEvent, SpeechNotice};
+use crate::speech::{self, Model, ModelStatus, OnDevice, Params, SpeechEvent, SpeechNotice};
 
 impl Controller {
     /// Starts or stops the recording; only while someone is there to read it, and never while muted, like the web.
@@ -30,26 +31,30 @@ impl Controller {
         url.set_path("/ws/speech");
         url.query_pairs_mut().clear().append_pair("room", room).append_pair("token", token);
         let mic = self.state.mic_id.as_ref().and_then(|id| self.state.mics.iter().find(|d| &d.id == id));
-        let local =
-            (self.state.on_device && self.state.model == ModelStatus::Ready).then(|| self.model_dir.clone()).flatten();
+        // Live subtitles want text while you speak, which only the live model gives
+        let local = if self.state.live_subtitles && self.state.live == ModelStatus::Ready {
+            self.model_dir(Model::Live).map(OnDevice::Live)
+        } else if self.state.on_device && self.state.model == ModelStatus::Ready {
+            self.model_dir(Model::SenseVoice).map(OnDevice::SenseVoice)
+        } else {
+            None
+        };
         Some(Params { url, lang: self.state.lang, mic: mic.map(|d| d.label.clone()), local })
     }
 
     pub(super) fn speech_event(&mut self, event: SpeechEvent) {
         match event {
             SpeechEvent::Server(msg) => self.speech_notice(msg),
-            SpeechEvent::Text(text) => {
-                // Cut to what the server takes, which counts UTF-16 units
-                let mut units = 0;
-                let text: String = text
-                    .chars()
-                    .take_while(|c| {
-                        units += c.len_utf16();
-                        units <= MAX_CHAT_LENGTH
-                    })
-                    .collect();
+            SpeechEvent::Text { text, live_id } => {
                 if let Some(signaling) = &self.signaling {
-                    signaling.send(ClientMessage::Chat { text, spoken: Some(true) });
+                    let text = cut(&text, MAX_CHAT_LENGTH);
+                    signaling.send(ClientMessage::Chat { text, spoken: Some(true), live_id });
+                }
+            }
+            SpeechEvent::Live { id, text } => {
+                if let Some(signaling) = &self.signaling {
+                    let text = cut(&text, MAX_LIVE_LENGTH);
+                    signaling.send(ClientMessage::ChatLive { id, text, lang: self.state.lang });
                 }
             }
             SpeechEvent::LocalFailed => self.transcriber.local_failed(),
@@ -73,58 +78,104 @@ impl Controller {
         self.state.speech_notice = Some(notice);
     }
 
-    pub(super) fn download_model(&mut self) {
-        let Some(dir) = self.model_dir.clone() else { return };
-        if self.model_cancel.is_some() || self.state.model == ModelStatus::Ready {
+    /// The model's status and the cancel flag of its running download
+    fn model_slot(&mut self, model: Model) -> (&mut ModelStatus, &mut Option<Arc<AtomicBool>>) {
+        match model {
+            Model::SenseVoice => (&mut self.state.model, &mut self.model_cancel),
+            Model::Live => (&mut self.state.live, &mut self.live_cancel),
+        }
+    }
+
+    pub(super) fn model_dir(&self, model: Model) -> Option<PathBuf> {
+        self.data_dir.as_deref().map(|d| speech::model_dir(d, model))
+    }
+
+    pub(super) fn download_model(&mut self, model: Model) {
+        let Some(dir) = self.model_dir(model) else { return };
+        let (status, running) = self.model_slot(model);
+        if running.is_some() || *status == ModelStatus::Ready {
             return;
         }
         let cancel = Arc::new(AtomicBool::new(false));
-        self.model_cancel = Some(cancel.clone());
-        self.state.model = ModelStatus::Downloading(0);
+        *running = Some(cancel.clone());
+        *status = ModelStatus::Downloading(0);
         let (server, tx) = (self.server.clone(), self.internal_tx.clone());
         let spawned = std::thread::Builder::new().name("model download".into()).spawn(move || {
             let progress = |percent| {
-                let _ = tx.send(Internal::ModelProgress(cancel.clone(), percent));
+                let _ = tx.send(Internal::ModelProgress(model, cancel.clone(), percent));
             };
-            let result = speech::download_model(&server, &dir, &cancel, &progress);
-            let _ = tx.send(Internal::ModelDownloaded(cancel.clone(), result));
+            let result = speech::download_model(&server, &dir, model, &cancel, &progress);
+            let _ = tx.send(Internal::ModelDownloaded(model, cancel.clone(), result));
         });
         if let Err(e) = spawned {
             tracing::warn!("couldn't start the model download: {e}");
-            self.model_cancel = None;
-            self.state.model = ModelStatus::Failed;
+            let (status, running) = self.model_slot(model);
+            *running = None;
+            *status = ModelStatus::Failed;
         }
     }
 
-    /// Whether `download` is the one running: a cancelled one can still report after a new one started.
-    pub(super) fn is_current_download(&self, download: &Arc<AtomicBool>) -> bool {
-        self.model_cancel.as_ref().is_some_and(|c| Arc::ptr_eq(c, download))
+    pub(super) fn model_progress(&mut self, model: Model, download: &Arc<AtomicBool>, percent: u8) {
+        let (status, running) = self.model_slot(model);
+        // A cancelled download can still report after a new one started
+        if running.as_ref().is_some_and(|c| Arc::ptr_eq(c, download)) {
+            *status = ModelStatus::Downloading(percent);
+        }
     }
 
-    pub(super) fn model_downloaded(&mut self, download: &Arc<AtomicBool>, result: Result<bool, String>) {
-        if !self.is_current_download(download) {
+    pub(super) fn model_downloaded(&mut self, model: Model, download: &Arc<AtomicBool>, result: Result<bool, String>) {
+        let (status, running) = self.model_slot(model);
+        if !running.as_ref().is_some_and(|c| Arc::ptr_eq(c, download)) {
             return;
         }
-        self.model_cancel = None;
-        self.state.model = match result {
+        *running = None;
+        *status = match result {
             Ok(true) => ModelStatus::Ready,
             Ok(false) => ModelStatus::Missing,
             Err(e) => {
-                tracing::warn!("model download failed: {e}");
+                tracing::warn!("{model:?} model download failed: {e}");
                 ModelStatus::Failed
             }
         };
     }
 
-    pub(super) fn delete_model(&mut self) {
-        let Some(dir) = &self.model_dir else { return };
-        if let Some(cancel) = self.model_cancel.take() {
+    pub(super) fn cancel_model_download(&mut self, model: Model) {
+        let (status, running) = self.model_slot(model);
+        if let Some(cancel) = running.take() {
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        self.transcriber.release();
-        if let Err(e) = speech::delete_model(dir) {
-            tracing::warn!("couldn't delete the model: {e}");
+        if *status != ModelStatus::Ready {
+            *status = ModelStatus::Missing;
         }
-        self.state.model = if speech::model_ready(dir) { ModelStatus::Ready } else { ModelStatus::Missing };
     }
+
+    pub(super) fn delete_model(&mut self, model: Model) {
+        let Some(dir) = self.model_dir(model) else { return };
+        self.cancel_model_download(model);
+        self.transcriber.release();
+        if let Err(e) = speech::delete_model(&dir) {
+            tracing::warn!("couldn't delete the {model:?} model: {e}");
+        }
+        let ready = speech::model_ready(&dir, model);
+        *self.model_slot(model).0 = if ready { ModelStatus::Ready } else { ModelStatus::Missing };
+    }
+}
+
+/// Whether `model` is all there in the data folder
+pub(super) fn status(data_dir: Option<&Path>, model: Model) -> ModelStatus {
+    match data_dir {
+        Some(d) if speech::model_ready(&speech::model_dir(d, model), model) => ModelStatus::Ready,
+        _ => ModelStatus::Missing,
+    }
+}
+
+/// `text` cut to what the server takes, which counts UTF-16 units
+fn cut(text: &str, max: usize) -> String {
+    let mut units = 0;
+    text.chars()
+        .take_while(|c| {
+            units += c.len_utf16();
+            units <= max
+        })
+        .collect()
 }

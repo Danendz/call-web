@@ -9,6 +9,7 @@ import { DeviceItem } from "../setup/device-row.slint";
 import { ChatPanel, ChatRow } from "../chat/chat.slint";
 import { Button } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { Subtitles, SubtitleLine } from "subtitles.slint";
 
 export { StatsView, ChatRow }
 
@@ -59,9 +60,9 @@ export component CallScreen inherits Rectangle {
     in property <[ChatRow]> chat;
     // The other person's messages so far; what the chat hasn't shown yet is the unread badge
     in property <int> others-count;
-    // The other person's latest spoken line, and a counter that ticks when it or its translation arrives
-    in property <string> subtitle;
-    in property <int> subtitle-serial;
+    in property <[SubtitleLine]> subtitles;
+    // "Live subtitles" in Settings
+    in property <bool> subtitles-on;
     in property <bool> transcribe-on;
     // 0 nothing to say, 1 the server has no speech model, 2 out of quota until speech-paused-until (a local time)
     in property <int> speech-notice;
@@ -106,7 +107,7 @@ export component CallScreen inherits Rectangle {
     property <int> seen-count;
     property <int> unread: chat-open ? 0 : max(0, others-count - seen-count);
     changed others-count => { if (chat-open) { seen-count = others-count; } }
-    changed chat-open => { if (chat-open) { seen-count = others-count; } subtitle-shown = false; }
+    changed chat-open => { if (chat-open) { seen-count = others-count; } }
     property <length> chat-width: min(360px, root.width * 0.42);
     property <length> chat-height: root.height * 0.58;
 
@@ -160,23 +161,6 @@ export component CallScreen inherits Rectangle {
         triggered => {
             self.running = false;
             root.flash = false;
-        }
-    }
-
-    property <bool> subtitle-shown;
-    changed subtitle-serial => {
-        if (!chat-open && subtitle != "") {
-            subtitle-shown = true;
-            subtitle-timer.running = true;
-            subtitle-timer.restart();
-        }
-    }
-    subtitle-timer := Timer {
-        interval: 6s;
-        running: false;
-        triggered => {
-            self.running = false;
-            subtitle-shown = false;
         }
     }
 
@@ -378,26 +362,15 @@ export component CallScreen inherits Rectangle {
             }
         }
 
-        // Their latest spoken line over the video while the chat is closed, like the web's Subtitle
-        Rectangle {
+        Subtitles {
             x: (parent.width - self.width) / 2;
             y: parent.height - self.height - (root.idle ? 28px : 104px);
             animate y { duration: Theme.med; easing: Theme.ease; }
-            width: min(min(parent.width * 0.84, 720px), line.preferred-width + 32px);
-            height: line.preferred-height + 16px;
-            border-radius: Theme.radius;
-            background: #000000b8;
-            opacity: subtitle-shown && !chat-open && connected && !root.pip ? 1 : 0;
-            visible: self.opacity > 0;
-            animate opacity { duration: Theme.med; easing: Theme.ease; }
-            line := Text {
-                width: parent.width - 32px;
-                text: subtitle;
-                color: #fff;
-                font-size: 20px;
-                wrap: word-wrap;
-                horizontal-alignment: center;
-            }
+            width: min(parent.width * 0.84, 720px);
+            line-width: self.width;
+            visible: root.subtitles-on && connected && !root.pip;
+            lines: root.subtitles;
+            chat-open: root.chat-open;
         }
 
         StatsOverlay {

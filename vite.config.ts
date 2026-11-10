@@ -14,6 +14,7 @@ export default defineConfig({
     proxy: {
       "/ws": { target: "ws://localhost:8080", ws: true },
       "/api": "http://localhost:8080",
+      "/updates": "http://localhost:8080",
     },
   },
 });

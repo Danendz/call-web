@@ -1,218 +1,112 @@
-//! The on-device speech model's files: where they're kept, whether they're all there, and downloading them from our
-//! own server (`/updates/*`, the releases bucket; GitHub and Hugging Face are slow or blocked in China). A download
-//! picks up where it stopped, and a file only gets its final name once its SHA-256 matches, so a file under its
-//! final name is a whole, checked one.
+//! The on-device speech models' files: where they're kept, and whether they're all there. They're downloaded by
+//! `crate::download`.
 
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::atomic::AtomicBool;
 
-use sha2::{Digest, Sha256};
 use url::Url;
 
-/// SenseVoice-Small, int8: Mandarin and English (and mixed), with punctuation.
-const NAME: &str = "sensevoice-small-2024-07-17";
+use crate::download::{self, ModelFile};
 
-pub(crate) struct ModelFile {
-    /// Its name in the model's folder, which sherpa-onnx is pointed at
-    pub local: &'static str,
-    /// Its name under `/updates/`, versioned so it's cached for good
-    remote: &'static str,
-    size: u64,
-    sha256: &'static str,
+/// A speech model on this device, each in a folder of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Model {
+    /// SenseVoice-Small, int8: decodes each utterance once it's over. Mandarin and English (and mixed), with
+    /// punctuation.
+    SenseVoice,
+    /// For live subtitles: a streaming Zipformer (Mandarin and English, mixed), int8, that decodes while you speak,
+    /// and a CT-Transformer that punctuates the line once it's over.
+    Live,
 }
 
-pub(crate) const MODEL: ModelFile = ModelFile {
+pub(crate) const SENSE_VOICE: ModelFile = ModelFile {
     local: "model.int8.onnx",
     remote: "sensevoice-small-int8-2024-07-17.onnx",
     size: 239_233_841,
     sha256: "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
 };
 
-pub(crate) const TOKENS: ModelFile = ModelFile {
+pub(crate) const SENSE_VOICE_TOKENS: ModelFile = ModelFile {
     local: "tokens.txt",
     remote: "sensevoice-small-2024-07-17-tokens.txt",
     size: 315_894,
     sha256: "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
 };
 
-const FILES: [&ModelFile; 2] = [&MODEL, &TOKENS];
+pub(crate) const ENCODER: ModelFile = ModelFile {
+    local: "encoder.int8.onnx",
+    remote: "streaming-zipformer-zh-en-2023-02-20-encoder.int8.onnx",
+    size: 181_895_032,
+    sha256: "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b",
+};
 
-// Tries in a row that get nowhere before the download gives up
-const RETRIES: u32 = 5;
-const RETRY_AFTER: Duration = Duration::from_secs(3);
+pub(crate) const DECODER: ModelFile = ModelFile {
+    local: "decoder.int8.onnx",
+    remote: "streaming-zipformer-zh-en-2023-02-20-decoder.int8.onnx",
+    size: 13_091_040,
+    sha256: "1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa",
+};
 
-/// The whole download, for the UI.
-pub const MODEL_SIZE: u64 = MODEL.size + TOKENS.size;
+pub(crate) const JOINER: ModelFile = ModelFile {
+    local: "joiner.int8.onnx",
+    remote: "streaming-zipformer-zh-en-2023-02-20-joiner.int8.onnx",
+    size: 3_228_404,
+    sha256: "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0",
+};
 
-/// Where the on-device model stands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ModelStatus {
-    Missing,
-    /// Percent done
-    Downloading(u8),
-    Ready,
-    /// The last download stopped on an error; what's done so far is kept for the next try
-    Failed,
+pub(crate) const LIVE_TOKENS: ModelFile = ModelFile {
+    local: "tokens.txt",
+    remote: "streaming-zipformer-zh-en-2023-02-20-tokens.txt",
+    size: 56_317,
+    sha256: "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3",
+};
+
+pub(crate) const PUNCTUATION: ModelFile = ModelFile {
+    local: "punctuation.int8.onnx",
+    remote: "ct-transformer-zh-en-2024-04-12-punctuation.int8.onnx",
+    size: 75_519_198,
+    sha256: "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1",
+};
+
+impl Model {
+    fn name(self) -> &'static str {
+        match self {
+            Self::SenseVoice => "sensevoice-small-2024-07-17",
+            Self::Live => "live-zh-en-2023-02-20",
+        }
+    }
+
+    fn files(self) -> &'static [&'static ModelFile] {
+        match self {
+            Self::SenseVoice => &[&SENSE_VOICE, &SENSE_VOICE_TOKENS],
+            Self::Live => &[&ENCODER, &DECODER, &JOINER, &LIVE_TOKENS, &PUNCTUATION],
+        }
+    }
+
+    /// The whole download, for the UI
+    pub fn size(self) -> u64 {
+        self.files().iter().map(|f| f.size).sum()
+    }
 }
 
 /// The model's folder in the app's data folder.
-pub(crate) fn dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("models").join(NAME)
+pub(crate) fn dir(data_dir: &Path, model: Model) -> PathBuf {
+    data_dir.join("models").join(model.name())
 }
 
-pub(crate) fn is_ready(dir: &Path) -> bool {
-    FILES.iter().all(|f| is_whole(dir, f))
+pub(crate) fn is_ready(dir: &Path, model: Model) -> bool {
+    download::is_ready(dir, model.files())
 }
 
-/// Removes the model and anything half downloaded.
-pub(crate) fn delete(dir: &Path) -> io::Result<()> {
-    match fs::remove_dir_all(dir) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
-        _ => Ok(()),
-    }
-}
-
-/// Downloads what's missing into `dir`, on the calling thread. `progress` gets the percent each time it changes.
-/// Returns Ok(false) when `cancel` stopped it.
 pub(crate) fn download(
     server: &Url,
     dir: &Path,
+    model: Model,
     cancel: &Arc<AtomicBool>,
     progress: &dyn Fn(u8),
 ) -> Result<bool, String> {
-    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let agent = ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(15)))
-        // A stalled read gives up, and the next try resumes
-        .timeout_recv_body(Some(Duration::from_secs(30)))
-        .http_status_as_error(false)
-        .build()
-        .new_agent();
-    let mut done: u64 = FILES.iter().filter(|f| is_whole(dir, f)).map(|f| f.size).sum();
-    let mut shown = u8::MAX;
-    let mut report = |done: u64| {
-        let percent = (done * 100 / MODEL_SIZE).min(100) as u8;
-        if percent != shown {
-            shown = percent;
-            progress(percent);
-        }
-    };
-    report(done);
-    for file in FILES {
-        if is_whole(dir, file) {
-            continue;
-        }
-        let url = server.join(&format!("updates/{}", file.remote)).map_err(|e| e.to_string())?;
-        let part = dir.join(format!("{}.part", file.local));
-        // A dropped connection is tried again from where it stopped, as long as each try gets further
-        let mut failures = 0;
-        loop {
-            let before = part_len(&part);
-            match fetch(&agent, &url, &part, file, cancel, &mut |n| report(done + n)) {
-                Ok(true) => break,
-                Ok(false) => return Ok(false),
-                Err(e) => {
-                    failures = if part_len(&part) > before { 1 } else { failures + 1 };
-                    if failures > RETRIES {
-                        return Err(e);
-                    }
-                    tracing::info!("model download dropped, trying again: {e}");
-                    std::thread::sleep(RETRY_AFTER);
-                    if cancel.load(Ordering::Relaxed) {
-                        return Ok(false);
-                    }
-                }
-            }
-        }
-        if sha256(&part).map_err(|e| e.to_string())? != file.sha256 {
-            // Corrupt somewhere: start this file over next time
-            let _ = fs::remove_file(&part);
-            return Err(format!("{} didn't match its checksum", file.remote));
-        }
-        fs::rename(&part, dir.join(file.local)).map_err(|e| e.to_string())?;
-        done += file.size;
-        report(done);
-    }
-    Ok(true)
+    download::download(server, dir, model.files(), cancel, progress)
 }
 
-fn part_len(part: &Path) -> u64 {
-    fs::metadata(part).map(|m| m.len()).unwrap_or(0)
-}
-
-fn is_whole(dir: &Path, file: &ModelFile) -> bool {
-    fs::metadata(dir.join(file.local)).is_ok_and(|m| m.len() == file.size)
-}
-
-/// Appends the rest of `file` to `part`, asking only for the bytes it doesn't have yet.
-fn fetch(
-    agent: &ureq::Agent,
-    url: &Url,
-    part: &Path,
-    file: &ModelFile,
-    cancel: &AtomicBool,
-    progress: &mut dyn FnMut(u64),
-) -> Result<bool, String> {
-    let mut have = part_len(part);
-    if have == file.size {
-        // Whole, but stopped before its checksum
-        return Ok(true);
-    }
-    if have > file.size {
-        have = 0;
-    }
-    let mut request = agent.get(url.as_str());
-    if have > 0 {
-        request = request.header("range", format!("bytes={have}-"));
-    }
-    let response = request.call().map_err(|e| e.to_string())?;
-    let status = response.status().as_u16();
-    let mut out = match status {
-        206 => OpenOptions::new().append(true).open(part),
-        // The whole file: the server ignored the range, or there was nothing yet
-        200 => {
-            have = 0;
-            File::create(part)
-        }
-        _ => return Err(format!("{} answered {status}", file.remote)),
-    }
-    .map_err(|e| e.to_string())?;
-    progress(have);
-    let mut body = response.into_body().into_reader();
-    let mut buf = vec![0u8; 256 * 1024];
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            return Ok(false);
-        }
-        let n = body.read(&mut buf).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        out.write_all(buf.get(..n).unwrap_or_default()).map_err(|e| e.to_string())?;
-        have += n as u64;
-        progress(have);
-    }
-    out.flush().map_err(|e| e.to_string())?;
-    if have != file.size {
-        return Err(format!("{} ended at {have} of {} bytes", file.remote, file.size));
-    }
-    Ok(true)
-}
-
-fn sha256(path: &Path) -> io::Result<String> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1024 * 1024];
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(buf.get(..n).unwrap_or_default());
-    }
-    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
-}
+pub(crate) use download::delete;

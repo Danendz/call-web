@@ -155,6 +155,9 @@ msgstr "已下载 · {}"
 msgid "Downloading speech model… {}%"
 msgstr "正在下载语音模型… {}%"
 
+msgid "Downloading live subtitles… {}%"
+msgstr "正在下载实时字幕… {}%"
+
 msgid "Downloading update… {}%"
 msgstr "正在下载更新… {}%"
 
@@ -266,6 +269,9 @@ msgstr "还没有好友。输入完整的用户名来添加。"
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
 
+msgid "Live subtitles"
+msgstr "实时字幕"
+
 msgid "Noise suppression"
 msgstr "降噪"
 
@@ -317,8 +323,8 @@ msgstr "准备好加入了吗？"
 msgid "Recognize on this device"
 msgstr "在本机上识别"
 
-msgid "Recognize speech on this device?"
-msgstr "在本机上识别语音？"
+msgid "Download live subtitles?"
+msgstr "下载实时字幕？"
 
 msgid "Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device."
 msgstr "在本机上识别语音，转成聊天更快，服务器的语音额度用完时也能继续用，而且你的声音不会离开这台设备。"
@@ -398,8 +404,8 @@ msgstr "语音发送到服务器识别"
 msgid "Speech to chat"
 msgstr "语音转文字"
 
-msgid "Speech to chat gets faster, keeps working when the server's speech limit is used up, and your voice never leaves this device. It needs a one-time {} download; you can also do it later in Settings."
-msgstr "语音转聊天会更快，服务器的语音额度用完时也能继续用，而且你的声音不会离开这台设备。需要一次性下载 {}，也可以以后在设置里下载。"
+msgid "What you say shows to the other person as you say it, and what they say shows in your language right away, all worked out on this device. It needs a one-time {} download; you can also do it later in Settings."
+msgstr "你说的话会在说的同时显示给对方，对方说的话也会立刻以你的语言显示，全部在这台设备上完成。需要一次性下载 {}，也可以以后在设置里下载。"
 
 msgid "Speech-to-chat isn't available right now"
 msgstr "语音转文字暂不可用"
@@ -541,3 +547,18 @@ msgstr "{} 还在通话中"
 
 msgid "{} isn't online. They'll see a missed call."
 msgstr "{} 不在线。对方会看到未接来电。"
+
+msgid "Live translation"
+msgstr "实时翻译"
+
+msgid "Live speech"
+msgstr "实时语音识别"
+
+msgid "Not used while live subtitles are on"
+msgstr "开启实时字幕时不使用"
+
+msgid "Translate live subtitles on this device?"
+msgstr "在本机上翻译实时字幕？"
+
+msgid "What the other person says shows in your language as they say it. It needs a one-time {} download; you can also do it later in Settings."
+msgstr "对方说的话会在说出时就以你的语言显示。需要一次性下载 {}，也可以稍后在设置中下载。"

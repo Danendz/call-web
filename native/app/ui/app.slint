@@ -12,8 +12,10 @@ import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
+import { SubtitleLine } from "call/subtitles.slint";
+import { ModelPrompt } from "components/model-prompt.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, FriendRow, MissedRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, SubtitleLine, FriendRow, MissedRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -70,8 +72,10 @@ export component AppWindow inherits Window {
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
-    in property <string> subtitle;
-    in property <int> subtitle-serial;
+    in property <[SubtitleLine]> subtitles;
+    // "Live subtitles" in Settings, remembered between launches
+    in property <bool> subtitles-on;
+    callback set-subtitles-on(bool);
     in property <bool> transcribe-on;
     in property <int> speech-notice;
     in property <string> speech-paused-until;
@@ -80,17 +84,38 @@ export component AppWindow inherits Window {
     // Counts screenshots that couldn't be saved, so each one shows its toast
     in property <int> shot-failures;
     in property <string> version;
-    // The on-device speech model, for settings and the first launch's question
+    // SenseVoice, the on-device speech model for when live subtitles are off, in Settings
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
     in property <bool> on-device;
-    in-out property <bool> speech-prompt;
     callback download-model();
     callback cancel-model-download();
     callback delete-model();
     callback set-on-device(bool);
-    callback dismiss-speech-prompt();
+    // The live speech model, which sends what you say as you say it
+    in property <ModelState> live-state;
+    in property <int> live-progress;
+    in property <string> live-size;
+    callback download-live();
+    callback cancel-live-download();
+    callback delete-live();
+    // Live speech and this language's translation together, asked for once on the start screen
+    in property <ModelState> pack-state;
+    in property <int> pack-progress;
+    in property <string> pack-size;
+    in-out property <bool> live-prompt;
+    callback download-pack();
+    callback dismiss-live-prompt();
+    property <bool> live-prompt-up: root.live-prompt && root.subtitles-on && root.pack-state != ModelState.ready;
+    // The translation model live subtitles need in this language, and whether its offer was put off
+    in property <ModelState> translation-state;
+    in property <int> translation-progress;
+    in property <string> translation-size;
+    in-out property <bool> translation-dismissed;
+    callback download-translation();
+    callback delete-translation();
+    callback dismiss-translation-prompt();
     // Set once an update has downloaded; it installs on quit, or now from the start screen
     in property <string> update-version;
     // 0–100 while an update downloads, else -1
@@ -242,12 +267,14 @@ export component AppWindow inherits Window {
             dismiss-background-guide => { root.dismiss-background-guide(); }
             model-state: root.model-state;
             model-progress: root.model-progress;
-            model-size: root.model-size;
+            pack-state: root.pack-state;
+            pack-progress: root.pack-progress;
+            pack-size: root.pack-size;
             settings-open: root.settings-open;
             open-settings => { root.settings-open = true; }
-            speech-prompt: root.speech-prompt;
-            download-model => { root.download-model(); }
-            dismiss-speech-prompt => { root.dismiss-speech-prompt(); }
+            live-prompt: root.live-prompt-up;
+            download-pack => { root.download-pack(); }
+            dismiss-live-prompt => { root.dismiss-live-prompt(); }
             account: root.account;
             open-sign-in => { root.sign-in-open = true; }
             friends: root.friends;
@@ -343,8 +370,8 @@ export component AppWindow inherits Window {
             open-settings => { root.settings-open = true; }
             chat: root.chat;
             others-count: root.others-count;
-            subtitle: root.subtitle;
-            subtitle-serial: root.subtitle-serial;
+            subtitles: root.subtitles;
+            subtitles-on: root.subtitles-on;
             transcribe-on: root.transcribe-on;
             speech-notice: root.speech-notice;
             speech-paused-until: root.speech-paused-until;
@@ -423,13 +450,26 @@ export component AppWindow inherits Window {
         if root.settings-open: SettingsSheet {
             sheet: root.touch || root.width < 900px;
             show-stats: root.show-stats;
+            subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;
             model-size: root.model-size;
             on-device: root.on-device;
+            translation-state: root.translation-state;
+            translation-progress: root.translation-progress;
+            translation-size: root.translation-size;
+            live-state: root.live-state;
+            live-progress: root.live-progress;
+            live-size: root.live-size;
+            download-live => { root.download-live(); }
+            cancel-live-download => { root.cancel-live-download(); }
+            delete-live => { root.delete-live(); }
+            download-translation => { root.download-translation(); }
+            delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }
+            set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }
@@ -454,6 +494,20 @@ export component AppWindow inherits Window {
                 root.settings-open = false;
                 keys.focus();
             }
+        }
+
+        // Offered while subtitles are on and it isn't downloaded, until put off; over Settings too, where the language
+        // that needs it was just picked. Not on top of the live subtitles question, which downloads it too.
+        if root.subtitles-on && !root.translation-dismissed && !root.live-prompt-up
+            && (root.translation-state == ModelState.missing || root.translation-state == ModelState.failed): ModelPrompt {
+            icon: Icons.languages;
+            title: @tr("Translate live subtitles on this device?");
+            body: @tr("What the other person says shows in your language as they say it. It needs a one-time {} download; you can also do it later in Settings.", root.translation-size);
+            download => {
+                root.download-translation();
+                root.translation-dismissed = true;
+            }
+            dismiss => { root.dismiss-translation-prompt(); }
         }
 
         if root.sign-in-open && root.account == "signed-out": SignInDialog {

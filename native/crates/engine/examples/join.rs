@@ -8,7 +8,8 @@
 //! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file). `SHARE=1` shares the screen once in the
 //! call (with `CALL_FAKE_SCREEN=1` a test pattern). `DATA_DIR=<folder>` recognizes speech on this machine with the
 //! model in `<folder>/models/`, as the app does once it's downloaded; with `DOWNLOAD=1` it downloads the model there
-//! first, from the server.
+//! first, from the server. `LIVE=1` turns live subtitles on, so speech goes to the live model there instead and is
+//! sent as live text while it's said.
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -17,7 +18,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use engine::{ChatEvent, Command, Engine, Feed, Frame, Lang, Phase, VideoSink, room};
+use engine::{ChatEvent, Command, Engine, Feed, Frame, Lang, Model, Phase, VideoSink, room};
 use url::Url;
 
 fn main() {
@@ -41,6 +42,7 @@ fn main() {
         ChatEvent::Reset { messages, .. } => tracing::info!("chat: {} earlier messages", messages.len()),
         ChatEvent::Added(m) => tracing::info!("chat from {}: {}", m.from, m.text),
         ChatEvent::Translated { id, translation } => tracing::info!("chat {id} translated: {:?}", translation.text),
+        ChatEvent::Live { id, text } => tracing::info!("live {id}: {text}"),
     };
     let engine = Engine::start(
         server,
@@ -56,20 +58,23 @@ fn main() {
                 let _ = say_tx.send(text.clone());
             }
             tracing::info!(
-                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={} model={:?}",
+                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={} model={:?} live={:?}",
                 state.phase,
                 state.link,
                 state.reconnecting,
                 state.call_started.map(|at| at.elapsed().as_secs()),
                 state.mics.len(),
-                state.model
+                state.model,
+                state.live
             );
         },
         on_chat,
     )
     .unwrap_or_else(|e| panic!("engine: {e}"));
+    let live = std::env::var_os("LIVE").is_some();
+    engine.send(Command::SetLiveSubtitles(live));
     if std::env::var_os("DOWNLOAD").is_some() {
-        engine.send(Command::DownloadModel);
+        engine.send(Command::DownloadModel(if live { Model::Live } else { Model::SenseVoice }));
     }
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {

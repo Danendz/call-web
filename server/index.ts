@@ -2,7 +2,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { MAX_CHAT_LENGTH, MAX_STREAM_ID_LENGTH, ROOM_ID_RE, type ClientMessage } from "../shared/protocol.js";
+import {
+  LANGS,
+  MAX_CHAT_LENGTH,
+  MAX_LIVE_ID_LENGTH,
+  MAX_LIVE_LENGTH,
+  MAX_STREAM_ID_LENGTH,
+  ROOM_ID_RE,
+  type ClientMessage,
+} from "../shared/protocol.js";
 import { clientIp, concurrencyLimit, rateLimit, setSecurityHeaders, type Tier } from "./limits.js";
 import { disconnected, join, leave, postChat, relayToPeer, send, tierOf, type Joiner } from "./rooms.js";
 import { onSpeechConnection } from "./transcribe.js";
@@ -31,6 +39,8 @@ const socketsPerUser = concurrencyLimit(10);
 const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(10, 10_000), user: rateLimit(20, 10_000) };
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
+// Live text is sent a few times a second while speaking
+const livePerMember = rateLimit(80, 10_000);
 // A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
 const mediaPerMember = rateLimit(30, 10_000);
 
@@ -175,7 +185,20 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
       case "chat": {
         if (!chatPerMember[tier](clientId)) break;
         const text = typeof msg.text === "string" ? msg.text.trim() : "";
-        if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true);
+        const liveId = typeof msg.liveId === "string" && msg.liveId.length <= MAX_LIVE_ID_LENGTH ? msg.liveId : undefined;
+        if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true, liveId);
+        break;
+      }
+      case "chat-live": {
+        const { id, text, lang } = msg;
+        const valid =
+          typeof id === "string" &&
+          id.length > 0 &&
+          id.length <= MAX_LIVE_ID_LENGTH &&
+          typeof text === "string" &&
+          text.length <= MAX_LIVE_LENGTH &&
+          LANGS.includes(lang);
+        if (valid && livePerMember(clientId)) relayToPeer(roomId, clientId, { type: "chat-live", id, text, lang });
         break;
       }
       case "leave":

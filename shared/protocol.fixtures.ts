@@ -7,6 +7,8 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, USERNAME_RE } from "./api.js"
 import {
   LANGS,
   MAX_CHAT_LENGTH,
+  MAX_LIVE_ID_LENGTH,
+  MAX_LIVE_LENGTH,
   MAX_STREAM_ID_LENGTH,
   MAX_UTTERANCE_S,
   ROOM_ID_RE,
@@ -21,6 +23,8 @@ import {
 
 export const constants = {
   MAX_CHAT_LENGTH,
+  MAX_LIVE_LENGTH,
+  MAX_LIVE_ID_LENGTH,
   MAX_STREAM_ID_LENGTH,
   ROOM_ID_RE: ROOM_ID_RE.source,
   LANGS,
@@ -43,6 +47,9 @@ export const clientMessages = [
   },
   { type: "chat", text: "hi" },
   { type: "chat", text: "hi", spoken: true },
+  { type: "chat", text: "你好。", spoken: true, liveId: "l1" },
+  { type: "chat-live", id: "l1", text: "你好", lang: "zh" },
+  { type: "chat-live", id: "l1", text: "", lang: "zh" },
   { type: "leave" },
   { type: "ping" },
   { type: "screenshot" },
@@ -82,7 +89,9 @@ export const serverMessages = [
   { type: "signal", payload: { kind: "description", description: { type: "answer", sdp: "v=0\r\n" } } },
   { type: "signal", payload: { kind: "candidate", candidate: null } },
   { type: "chat", message: chatMessage },
+  { type: "chat", message: { ...chatMessage, spoken: true, liveId: "l1" } },
   { type: "chat-translation", id: "m1", translation },
+  { type: "chat-live", id: "l1", text: "can you", lang: "en" },
   { type: "pong" },
   { type: "screenshot" },
   { type: "media", camOn: true, screen: "s1" },

@@ -5,6 +5,7 @@ import { LANG_NAMES } from "../call/speech/lang";
 import type { CallController, CallState } from "../call/controller";
 import { isRearCamera } from "../call/media";
 import { SettingsSheet } from "../settings/SettingsSheet";
+import { TranslationOffer } from "../translate/TranslationOffer";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Video } from "../ui/Video";
@@ -130,6 +131,8 @@ export function Setup({ controller, state, onSignIn }: { controller: CallControl
             </select>
           </label>
         </div>
+
+        <TranslationOffer lang={state.lang} />
 
         {blocked && (
           <div className="permission-help">
