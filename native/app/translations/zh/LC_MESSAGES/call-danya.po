@@ -5,11 +5,38 @@ msgstr ""
 "Language: zh_CN\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "3–20 lowercase letters, digits or _"
+msgstr "3–20 个小写字母、数字或 _"
+
+msgid "Accept"
+msgstr "接受"
+
+msgid "Account"
+msgstr "账号"
+
+msgid "Accounts are by invite: ask someone who has one for a code."
+msgstr "注册需要邀请码：请向已有账号的人要一个。"
+
+msgid "Add a friend by username"
+msgstr "按用户名添加好友"
+
+msgid "At least 10 characters"
+msgstr "至少 10 个字符"
+
 msgid "Back"
 msgstr "返回"
 
 msgid "Back camera"
 msgstr "后置摄像头"
+
+msgid "Back to friends"
+msgstr "返回好友"
+
+msgid "Block"
+msgstr "屏蔽"
+
+msgid "Blocked"
+msgstr "已屏蔽"
 
 msgid "Bluetooth"
 msgstr "蓝牙"
@@ -19,6 +46,15 @@ msgstr "通话已结束"
 
 msgid "Call link"
 msgstr "通话链接"
+
+msgid "Call {}"
+msgstr "呼叫 {}"
+
+msgid "Calling {}…"
+msgstr "正在呼叫 {}…"
+
+msgid "Calls without an account end after 2 hours. Start a new room to keep talking."
+msgstr "未登录的通话在 2 小时后结束。创建新房间继续聊。"
 
 msgid "Camera"
 msgstr "摄像头"
@@ -35,11 +71,23 @@ msgstr "摄像头：被系统设置阻止"
 msgid "Camera: Not found"
 msgstr "摄像头：未找到"
 
+msgid "Can't reach the server. Try again."
+msgstr "无法连接服务器，请重试。"
+
 msgid "Cancel"
 msgstr "取消"
 
+msgid "Change password"
+msgstr "修改密码"
+
 msgid "Chat"
 msgstr "聊天"
+
+msgid "Choose camera"
+msgstr "选择摄像头"
+
+msgid "Clear"
+msgstr "清除"
 
 msgid "Close"
 msgstr "关闭"
@@ -65,11 +113,35 @@ msgstr "已复制"
 msgid "Copy"
 msgstr "复制"
 
+msgid "Copy it now: it's shown only once."
+msgstr "现在就复制：它只显示这一次。"
+
+msgid "Couldn't call {}"
+msgstr "无法呼叫 {}"
+
 msgid "Couldn't save the screenshot"
 msgstr "截图保存失败"
 
+msgid "Create account"
+msgstr "注册"
+
+msgid "Current password"
+msgstr "当前密码"
+
+msgid "Decline"
+msgstr "拒绝"
+
 msgid "Delete"
 msgstr "删除"
+
+msgid "Delete account"
+msgstr "删除账号"
+
+msgid "Deletes your account, friends and missed calls for good. Enter your password to confirm."
+msgstr "将永久删除你的账号、好友和未接来电。输入密码确认。"
+
+msgid "Dismiss"
+msgstr "关闭"
 
 msgid "Done"
 msgstr "完成"
@@ -92,8 +164,23 @@ msgstr "正在下载更新… {}%"
 msgid "Downloading… {}%"
 msgstr "正在下载… {}%"
 
+msgid "Each code makes one account and works for 7 days. Unused: {} of {}."
+msgstr "每个邀请码可注册一个账号，7 天内有效。未使用：{} / {}。"
+
+msgid "Enter the recovery code you saved when you created the account."
+msgstr "输入注册时保存的恢复码。"
+
 msgid "External camera"
 msgstr "外接摄像头"
+
+msgid "Forgot password"
+msgstr "忘记密码"
+
+msgid "Friend requests"
+msgstr "好友请求"
+
+msgid "Friends"
+msgstr "好友"
 
 msgid "Front camera"
 msgstr "前置摄像头"
@@ -101,11 +188,29 @@ msgstr "前置摄像头"
 msgid "Hang up"
 msgstr "挂断"
 
+msgid "Headset"
+msgstr "耳机"
+
+msgid "I saved it"
+msgstr "我已保存"
+
 msgid "I speak"
 msgstr "我说"
 
+msgid "If that username exists, they'll see your request."
+msgstr "如果该用户名存在，对方会看到你的请求。"
+
 msgid "In a call"
 msgstr "通话中"
+
+msgid "Invite code"
+msgstr "邀请码"
+
+msgid "Invite codes"
+msgstr "邀请码"
+
+msgid "It's the only way back in if you forget your password, and it's shown only now."
+msgstr "忘记密码时这是唯一的找回方式，而且只显示这一次。"
 
 msgid "Join"
 msgstr "加入"
@@ -128,17 +233,38 @@ msgstr "消息"
 msgid "Microphone"
 msgstr "麦克风"
 
+msgid "Microphone and speaker"
+msgstr "麦克风和扬声器"
+
 msgid "Microphone: Not found"
 msgstr "麦克风：未找到"
+
+msgid "Missed calls"
+msgstr "未接来电"
 
 msgid "More"
 msgstr "更多"
 
+msgid "More for {}"
+msgstr "{} 的更多操作"
+
 msgid "Mute"
 msgstr "静音"
 
+msgid "Mute speaker"
+msgstr "静音扬声器"
+
+msgid "New invite code"
+msgstr "生成邀请码"
+
+msgid "New password"
+msgstr "新密码"
+
 msgid "New room"
 msgstr "新房间"
+
+msgid "No friends yet. Add someone by their exact username."
+msgstr "还没有好友。输入完整的用户名来添加。"
 
 msgid "No messages yet. They disappear when the room closes."
 msgstr "还没有消息。房间关闭后消息会消失。"
@@ -149,14 +275,26 @@ msgstr "实时字幕"
 msgid "Noise suppression"
 msgstr "降噪"
 
+msgid "Not allowed."
+msgstr "不允许此操作。"
+
 msgid "Not downloaded · {}"
 msgstr "未下载 · {}"
 
 msgid "Not now"
 msgstr "以后再说"
 
+msgid "Offline"
+msgstr "离线"
+
 msgid "On-device recognition"
 msgstr "本机识别"
+
+msgid "Online"
+msgstr "在线"
+
+msgid "Only the two people in this call can join it."
+msgstr "只有这次通话的两个人可以加入。"
 
 msgid "Open"
 msgstr "打开"
@@ -164,11 +302,17 @@ msgstr "打开"
 msgid "Open settings"
 msgstr "打开设置"
 
-msgid "Headset"
-msgstr "耳机"
+msgid "Password"
+msgstr "密码"
+
+msgid "Password changed. Your other devices were signed out."
+msgstr "密码已修改。你的其他设备已退出登录。"
 
 msgid "Phone earpiece"
 msgstr "听筒"
+
+msgid "Pick a longer password that's harder to guess (at least 10 characters, not your username)."
+msgstr "请使用更长、更难猜的密码（至少 10 个字符，且不包含用户名）。"
 
 msgid "Portrait video"
 msgstr "竖屏视频"
@@ -185,8 +329,17 @@ msgstr "下载实时字幕？"
 msgid "Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device."
 msgstr "在本机上识别语音，转成聊天更快，服务器的语音额度用完时也能继续用，而且你的声音不会离开这台设备。"
 
+msgid "Reconnecting…"
+msgstr "正在重连…"
+
+msgid "Recovery code"
+msgstr "恢复码"
+
 msgid "Rejoin"
 msgstr "重新加入"
+
+msgid "Remove"
+msgstr "删除"
 
 msgid "Room is full"
 msgstr "房间已满"
@@ -194,8 +347,14 @@ msgstr "房间已满"
 msgid "Room link"
 msgstr "房间链接"
 
+msgid "Rooms"
+msgstr "房间"
+
 msgid "Rotate their video"
 msgstr "旋转对方画面"
+
+msgid "Save your recovery code"
+msgstr "保存你的恢复码"
 
 msgid "Screenshot"
 msgstr "截图"
@@ -221,11 +380,20 @@ msgstr "共享屏幕"
 msgid "Show in folder"
 msgstr "在文件夹中显示"
 
+msgid "Sign in"
+msgstr "登录"
+
+msgid "Sign out"
+msgstr "退出登录"
+
 msgid "So calls keep going with the screen off, let Call Danya run in the background without battery limits in its settings."
 msgstr "为了在锁屏后通话不中断，请在应用设置中允许 Call Danya 在后台运行，并取消电池限制。"
 
 msgid "So calls keep going with the screen off: in Settings → Apps → App launch, set Call Danya to Manage manually and turn on all three switches."
 msgstr "为了在锁屏后通话不中断：请在 设置 → 应用 → 应用启动管理 中，将 Call Danya 设为“手动管理”，并打开全部三个开关。"
+
+msgid "Something's wrong with that request."
+msgstr "请求有误。"
 
 msgid "Speaker"
 msgstr "扬声器"
@@ -263,8 +431,17 @@ msgstr "切换画面"
 msgid "Tap to return to the call"
 msgstr "点按返回通话"
 
+msgid "That invite code isn't valid, or was already used."
+msgstr "邀请码无效或已被使用。"
+
 msgid "That isn't a call link"
 msgstr "这不是通话链接"
+
+msgid "That username is taken."
+msgstr "该用户名已被使用。"
+
+msgid "The call goes on there."
+msgstr "通话在那台设备上继续。"
 
 msgid "The download stopped. Try again to continue where it left off."
 msgstr "下载中断了。重试会从中断的地方继续。"
@@ -278,8 +455,20 @@ msgstr "对方的摄像头"
 msgid "Their screen"
 msgstr "对方的屏幕"
 
+msgid "They muted your sound"
+msgstr "对方已将你静音"
+
+msgid "This is a private room"
+msgstr "这是一个私人房间"
+
 msgid "This room already has two people in it."
 msgstr "这个房间已经有两个人了。"
+
+msgid "Time's up"
+msgstr "时间到了"
+
+msgid "Too many tries. Wait a while and try again."
+msgstr "尝试次数过多，请稍后再试。"
 
 msgid "Try again"
 msgstr "重试"
@@ -296,29 +485,68 @@ msgstr "打开摄像头"
 msgid "Turn on microphone"
 msgstr "打开麦克风"
 
+msgid "Unblock"
+msgstr "取消屏蔽"
+
 msgid "Unmute"
 msgstr "取消静音"
 
 msgid "Update to {}"
 msgstr "更新到 {}"
 
+msgid "Username"
+msgstr "用户名"
+
+msgid "Usernames are 3–20 lowercase letters, digits or _."
+msgstr "用户名为 3–20 个小写字母、数字或 _。"
+
 msgid "Waiting for the other person to join…"
 msgstr "等待对方加入…"
+
+msgid "Waiting for them to accept"
+msgstr "等待对方接受"
+
+msgid "Withdraw"
+msgstr "撤回"
+
+msgid "Wrong username or password."
+msgstr "用户名或密码错误。"
+
+msgid "Wrong username or recovery code."
+msgstr "用户名或恢复码错误。"
 
 msgid "You"
 msgstr "你"
 
-msgid "Microphone and speaker"
-msgstr "麦克风和扬声器"
+msgid "You already have the most unused codes."
+msgstr "未使用的邀请码已达上限。"
 
-msgid "Choose camera"
-msgstr "选择摄像头"
+msgid "You joined from another device"
+msgstr "你在另一台设备上加入了"
 
-msgid "Mute speaker"
-msgstr "静音扬声器"
+msgid "You were signed out. Sign in again."
+msgstr "你已退出登录，请重新登录。"
 
-msgid "They muted your sound"
-msgstr "对方已将你静音"
+msgid "You've reached the limit for this."
+msgstr "已达到上限。"
+
+msgid "{} declined"
+msgstr "{} 拒绝了通话"
+
+msgid "{} didn't answer"
+msgstr "{} 没有接听"
+
+msgid "{} is calling"
+msgstr "{} 来电"
+
+msgid "{} is in another call. They'll see a missed call."
+msgstr "{} 正在通话中。对方会看到未接来电。"
+
+msgid "{} is still in the call"
+msgstr "{} 还在通话中"
+
+msgid "{} isn't online. They'll see a missed call."
+msgstr "{} 不在线。对方会看到未接来电。"
 
 msgid "Live translation"
 msgstr "实时翻译"

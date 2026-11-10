@@ -4,6 +4,7 @@
 mod camera;
 mod controller;
 mod download;
+pub mod friends;
 mod level;
 mod media;
 mod mic;
@@ -17,11 +18,15 @@ mod speech;
 mod stats;
 mod translate;
 mod video;
+mod ws;
 
 pub use camera::CameraAccess;
 pub use controller::{ChatEvent, Command, Engine, Link, Phase, State};
 pub use media::Device;
-pub use protocol::{ChatMessage, Lang, MAX_CHAT_LENGTH, TranslatedText, Translation};
+pub use protocol::{
+    ApiErrorCode, CallEndReason, ChatMessage, FriendState, FriendsLists, FullReason, Lang, MAX_CHAT_LENGTH,
+    MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, MissedCall, OpenRoom, Presence, TranslatedText, Translation,
+};
 pub use speech::{LiveModel, Model, ModelStatus, SpeechNotice, Utterance};
 pub use stats::{CallStats, Path, VideoStats};
 pub use translate::{Pair, Translator, TranslatorEvent};

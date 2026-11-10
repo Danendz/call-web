@@ -1,6 +1,12 @@
-//! Messages exchanged over `/ws` and `/ws/speech`, mirroring `shared/protocol.ts` by hand. The TypeScript file is
+//! Messages exchanged over `/ws`, `/ws/speech` and `/ws/user`, and the `/api` bodies, mirroring `shared/protocol.ts` by hand. The TypeScript file is
 //! the source of truth: `tests/fixtures.rs` parses every example in `shared/protocol.fixtures.ts`, so a change
 //! there that isn't followed here fails the tests.
+
+mod api;
+mod user;
+
+pub use api::*;
+pub use user::*;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -152,7 +158,11 @@ pub enum ServerMessage {
         call_elapsed_ms: u64,
     },
     PeerLeft,
-    Full,
+    /// The room can't be joined; stop reconnecting. No reason: two people are already in it.
+    Full {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<FullReason>,
+    },
     Signal {
         payload: SignalPayload,
     },
@@ -182,6 +192,20 @@ pub enum ServerMessage {
         message: String,
     },
     /// A type this build doesn't know, from a newer server: ignored rather than dropping the connection.
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FullReason {
+    /// An anonymous room's call ran out its time.
+    TimeLimit,
+    /// A private room of two other accounts.
+    NotInvited,
+    /// The same account joined it from another device.
+    Elsewhere,
+    /// A reason this build doesn't know, from a newer server.
     #[serde(other)]
     Unknown,
 }

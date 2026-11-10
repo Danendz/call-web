@@ -1,9 +1,12 @@
-import { bucket, defineRailway, github, preserve, project, ref, service } from "railway/iac";
+import { bucket, defineRailway, github, postgres, preserve, project, ref, service } from "railway/iac";
 
 export default defineRailway(() => {
   // Native app releases, uploaded by CI (native-release.yml) and served at /updates/* by the web service. Private:
   // Railway buckets have no public access, and the bucket's own host isn't known to be reachable from China.
   const releases = bucket("releases", { region: "sin" });
+
+  // Accounts, sessions, invites and friends. Next to the web service, which is its only client.
+  const db = postgres("db", { region: "asia-southeast1-eqsg3a" });
 
   const web = service("web", {
     // Every push to main deploys; without this, `railway config apply` would disconnect the repo
@@ -26,6 +29,7 @@ export default defineRailway(() => {
       LLM_BASE_URL: preserve(),
       LLM_API_KEY: preserve(),
       LLM_MODEL: preserve(),
+      DATABASE_URL: ref(db, "DATABASE_URL"),
       RELEASES_ENDPOINT: ref(releases, "ENDPOINT"),
       RELEASES_BUCKET: ref(releases, "BUCKET"),
       RELEASES_REGION: ref(releases, "REGION"),
@@ -34,5 +38,5 @@ export default defineRailway(() => {
     },
   });
 
-  return project("call-danya", { resources: [releases, web] });
+  return project("call-danya", { resources: [releases, db, web] });
 });

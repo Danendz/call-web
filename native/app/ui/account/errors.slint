@@ -1,0 +1,20 @@
+// What each of the server's refusals means, in the app's language. Codes are protocol::ApiErrorCode in kebab-case.
+
+export global AccountText {
+    pure public function error(code: string) -> string {
+        if (code == "") { return ""; }
+        if (code == "unauthorized") { return @tr("You were signed out. Sign in again."); }
+        if (code == "forbidden") { return @tr("Not allowed."); }
+        if (code == "rate-limited") { return @tr("Too many tries. Wait a while and try again."); }
+        if (code == "unavailable") { return @tr("Can't reach the server. Try again."); }
+        if (code == "invalid-credentials") { return @tr("Wrong username or password."); }
+        if (code == "invalid-invite") { return @tr("That invite code isn't valid, or was already used."); }
+        if (code == "invalid-recovery") { return @tr("Wrong username or recovery code."); }
+        if (code == "username-taken") { return @tr("That username is taken."); }
+        if (code == "invalid-username") { return @tr("Usernames are 3–20 lowercase letters, digits or _."); }
+        if (code == "weak-password") { return @tr("Pick a longer password that's harder to guess (at least 10 characters, not your username)."); }
+        if (code == "too-many-invites") { return @tr("You already have the most unused codes."); }
+        if (code == "too-many") { return @tr("You've reached the limit for this."); }
+        return @tr("Something's wrong with that request.");
+    }
+}

@@ -11,11 +11,14 @@
     "dev:web": "vite",
     "build": "vite build && tsx scripts/precompress.ts && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
+    "test": "node --import tsx --test server/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "fixtures": "tsx scripts/fixtures.ts",
+    "invite": "tsx --env-file-if-exists=.env scripts/invite.ts",
     "denoise:wasm": "tsx scripts/denoise-wasm.ts"
   },
   "dependencies": {
+    "postgres": "3.4.9",
     "vaul": "1.1.2",
     "ws": "8.22.1"
   },

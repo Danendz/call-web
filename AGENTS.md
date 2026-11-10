@@ -44,7 +44,7 @@ The repo is public, so everything committed (code, comments, docs, commit messag
 
 ## Before saying it's done
 
-- There are no tests or linter yet. Run `npm run typecheck` and `npm run build`, and both must pass.
+- Run `npm run typecheck`, `npm run build` and `npm test` (server tests, `server/*.test.ts` with `node:test`), and all must pass. There is no linter yet.
 - Don't test the call by opening the same room in two tabs under `npm run dev`: the two tabs never connect in dev, so this proves nothing. Check UI changes on a single tab (setup screen, waiting screen), and leave real two-person call testing to the user.
 
 ## UI text

@@ -1,0 +1,72 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { CopyLink } from "../components/copy-link.slint";
+
+// A new recovery code, shown once until it's saved.
+export component RecoveryDialog inherits Rectangle {
+    in property <string> code;
+    callback saved();
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    background: #00000099;
+    TouchArea { }
+
+    Rectangle {
+        width: min(420px, parent.width - 32px);
+        height: content.preferred-height;
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.surface;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+        content := VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 60px;
+                    height: 60px;
+                    border-radius: self.width / 2;
+                    background: Theme.surface-3;
+                    Image {
+                        source: Icons.shield-check;
+                        colorize: Theme.muted;
+                        width: 26px;
+                        height: 26px;
+                    }
+                }
+            }
+            Text {
+                text: @tr("Save your recovery code");
+                color: Theme.text;
+                font-size: 20px;
+                font-weight: 650;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: @tr("It's the only way back in if you forget your password, and it's shown only now.");
+                color: Theme.muted;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+            CopyLink {
+                url: root.code;
+                label: @tr("Recovery code");
+            }
+            Button {
+                text: @tr("I saved it");
+                kind: ButtonKind.primary;
+                clicked => { root.saved(); }
+            }
+        }
+    }
+}

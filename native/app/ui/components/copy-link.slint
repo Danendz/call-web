@@ -2,9 +2,10 @@ import { Theme } from "../theme.slint";
 import { Icons } from "icons.slint";
 import { Button, ButtonKind } from "button.slint";
 
-// The room's web address with a copy button, like the web's CopyLink.
+// The room's web address with a copy button, like the web's CopyLink. `label` names other things to copy.
 export component CopyLink inherits Rectangle {
     in property <string> url;
+    in property <string> label: @tr("Room link");
     in property <color> fill: Theme.surface-2;
     property <bool> copied: false;
 
@@ -35,7 +36,7 @@ export component CopyLink inherits Rectangle {
                 color: Theme.muted;
                 font-size: Theme.font-size-small;
                 vertical-alignment: center;
-                accessible-label: @tr("Room link");
+                accessible-label: root.label;
             }
         }
 

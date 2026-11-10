@@ -94,7 +94,10 @@
       "en"
     ],
     "TRANSCRIBE_SAMPLE_RATE": 16000,
-    "MAX_UTTERANCE_S": 30
+    "MAX_UTTERANCE_S": 30,
+    "USERNAME_RE": "^[a-z0-9_]{3,20}$",
+    "MIN_PASSWORD_LENGTH": 10,
+    "MAX_PASSWORD_LENGTH": 200
   },
   "serverMessages": [
     {
@@ -162,6 +165,18 @@
     },
     {
       "type": "full"
+    },
+    {
+      "type": "full",
+      "reason": "time-limit"
+    },
+    {
+      "type": "full",
+      "reason": "not-invited"
+    },
+    {
+      "type": "full",
+      "reason": "elsewhere"
     },
     {
       "type": "signal",
@@ -258,6 +273,136 @@
     },
     {
       "type": "unavailable"
+    }
+  ],
+  "userClientMessages": [
+    {
+      "type": "ring",
+      "to": "friend_1"
+    },
+    {
+      "type": "cancel",
+      "callId": "k1"
+    },
+    {
+      "type": "answer",
+      "callId": "k1",
+      "accept": true
+    },
+    {
+      "type": "answer",
+      "callId": "k1",
+      "accept": false
+    },
+    {
+      "type": "missed-seen"
+    },
+    {
+      "type": "ping"
+    }
+  ],
+  "userServerMessages": [
+    {
+      "type": "state",
+      "username": "me_1",
+      "friends": [
+        {
+          "username": "friend_1",
+          "presence": "online"
+        },
+        {
+          "username": "friend_2",
+          "presence": "in-call"
+        },
+        {
+          "username": "friend_3",
+          "presence": "offline"
+        }
+      ],
+      "incoming": [
+        "someone"
+      ],
+      "outgoing": [
+        "other"
+      ],
+      "blocked": [
+        "spammer"
+      ],
+      "missed": [
+        {
+          "from": "friend_1",
+          "at": 1700000000000
+        }
+      ],
+      "rooms": [
+        {
+          "roomId": "AbCdEfGhIjKlMnOpQrStUv",
+          "with": "friend_2"
+        }
+      ]
+    },
+    {
+      "type": "state",
+      "username": "me_1",
+      "friends": [],
+      "incoming": [],
+      "outgoing": [],
+      "blocked": [],
+      "missed": [],
+      "rooms": []
+    },
+    {
+      "type": "ringing",
+      "callId": "k1",
+      "to": "friend_1"
+    },
+    {
+      "type": "incoming",
+      "callId": "k1",
+      "from": "friend_1"
+    },
+    {
+      "type": "answered",
+      "callId": "k1",
+      "roomId": "AbCdEfGhIjKlMnOpQrStUv"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "declined"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "busy"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "offline"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "timeout"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "cancelled"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "unavailable"
+    },
+    {
+      "type": "call-ended",
+      "callId": "k1",
+      "reason": "answered-elsewhere"
+    },
+    {
+      "type": "pong"
     }
   ]
 }

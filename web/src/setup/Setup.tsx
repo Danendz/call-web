@@ -15,7 +15,7 @@ import { MicLevel } from "./MicLevel";
 import "./setup.css";
 
 /** Pre-join screen: camera preview, mic level, device pickers and permission help. */
-export function Setup({ controller, state }: { controller: CallController; state: CallState }) {
+export function Setup({ controller, state, onSignIn }: { controller: CallController; state: CallState; onSignIn?: () => void }) {
   const t = useT();
   useEffect(() => {
     void controller.preview();
@@ -80,6 +80,7 @@ export function Setup({ controller, state }: { controller: CallController; state
         <div className="panel-head">
           <h1>{t.readyToJoin}</h1>
           <div className="panel-actions">
+            {onSignIn && <button onClick={onSignIn}>{t.signIn}</button>}
             <DownloadApp />
             <IconButton label={t.settings} onClick={() => setSettingsOpen(true)}>
               <Settings size={18} />

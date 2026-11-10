@@ -89,6 +89,8 @@ struct Controller {
     next_direct_retry: Option<Instant>,
     last_direct_retry: Option<Instant>,
     stream_id: String,
+    /// The signed-in account's token, sent on the room socket; never logged
+    session: Option<crate::friends::SessionToken>,
     signaling: Option<Signaling>,
     signal_tx: mpsc::UnboundedSender<SignalEvent>,
     signal_rx: mpsc::UnboundedReceiver<SignalEvent>,
@@ -146,6 +148,7 @@ impl Controller {
             cams: Vec::new(),
             cam_id: None,
             portrait: false,
+            full_reason: None,
             stats: None,
             force_relay: false,
             trying_direct: false,
@@ -183,6 +186,7 @@ impl Controller {
             next_direct_retry: None,
             last_direct_retry: None,
             stream_id: room::random_id(),
+            session: None,
             signaling: None,
             signal_tx,
             signal_rx,
@@ -245,6 +249,7 @@ impl Controller {
             Command::OpenRoom(id) if protocol::is_room_id(&id) => self.open_room(id),
             Command::OpenRoom(_) => tracing::warn!("ignoring an invalid room id"),
             Command::SetLang(lang) => self.set_lang(lang),
+            Command::SetSession(session) => self.session = session,
             Command::Join => self.join(),
             Command::HangUp => {
                 self.disconnect();
@@ -357,6 +362,7 @@ impl Controller {
         self.state.room_url = Some(room::room_url(&self.server, &id));
         self.state.room_id = Some(id);
         self.state.phase = Phase::Setup;
+        self.state.full_reason = None;
         self.state.has_mic = self.media.has_mic();
         self.state.mics = self.media.mics();
         self.state.speakers = self.media.speakers();
@@ -370,7 +376,12 @@ impl Controller {
         if let Some(mic) = &self.mic {
             mic.set_enabled(self.state.mic_on);
         }
-        self.signaling = Some(Signaling::connect(&self.server, &room_id, self.signal_tx.clone()));
+        self.signaling = Some(Signaling::connect(
+            &self.server,
+            &room_id,
+            self.session.as_ref().map(|s| s.0.clone()),
+            self.signal_tx.clone(),
+        ));
         self.state.phase = Phase::Starting;
     }
 

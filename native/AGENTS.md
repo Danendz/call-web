@@ -19,7 +19,7 @@ native/
 ```
 
 - **`protocol` mirrors `shared/protocol.ts` by hand.** The TS file is the source of truth. When it changes: update `shared/protocol.fixtures.ts` with an example of the new shape, run `npm run fixtures`, then update `crates/protocol` until `cargo test -p protocol` passes. Never add a message only on the Rust side.
-- **The engine owns state, the UI renders it.** Like `web/src/call/controller.ts`: the UI sends `Command`s and receives state snapshots and events. No call logic in `.slint` files or in Slint callbacks beyond sending a command.
+- **The engine owns state, the UI renders it.** Like `web/src/call/controller.ts`: the UI sends `Command`s and receives state snapshots and events. No call logic in `.slint` files or in Slint callbacks beyond sending a command. The account and friends run apart from the call, in `engine::friends` on their own thread (`/api` and `/ws/user`), like the web's `FriendsSocket` next to `CallController`; the app hands an answered call to the call engine (`app/src/friends.rs`). The session token is kept in its own file in app data, never in `settings.json`, and never logged (`SessionToken`'s `Debug` hides it).
 - **Code used by one screen stays in that screen's folder.** Move it to `components/` (Slint) or a shared module only once a second screen needs it.
 - **Split a file by what it does once it grows past ~300 lines.**
 

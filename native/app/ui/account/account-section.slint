@@ -1,0 +1,177 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { CopyLink } from "../components/copy-link.slint";
+import { Field } from "../components/field.slint";
+import { AccountText } from "errors.slint";
+
+component Heading inherits Text {
+    color: Theme.muted;
+    font-size: Theme.font-size-small;
+    font-weight: 650;
+}
+
+// The account part of Settings, while signed in: invite codes, password, blocked users, signing out, deleting.
+export component AccountSection inherits VerticalLayout {
+    in property <string> username;
+    in property <string> error;
+    in property <bool> busy;
+    // A new invite code, shown once
+    in property <string> invite;
+    in property <int> invites-unused;
+    in property <int> invites-max;
+    in property <bool> password-changed;
+    in property <[string]> blocked;
+    callback new-invite();
+    callback change-password(string, string);
+    callback unblock(string);
+    callback sign-out();
+    callback delete-account(string);
+    callback clear-error();
+
+    // Which form the error belongs to, so it shows under that one
+    property <string> last;
+
+    spacing: 10px;
+
+    Heading { text: @tr("Account"); }
+    HorizontalLayout {
+        spacing: 10px;
+        Image {
+            source: Icons.user-round;
+            colorize: Theme.muted;
+            width: 20px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.username;
+            color: Theme.text;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Button {
+            text: @tr("Sign out");
+            icon: Icons.log-out;
+            height-hint: 38px;
+            clicked => { root.sign-out(); }
+        }
+    }
+
+    Rectangle { height: 6px; }
+    Heading { text: @tr("Invite codes"); }
+    if root.invites-max > 0: Text {
+        text: @tr("Each code makes one account and works for 7 days. Unused: {} of {}.", root.invites-unused, root.invites-max);
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    if root.invite != "": CopyLink {
+        url: root.invite;
+        label: @tr("Invite code");
+    }
+    if root.invite != "": Text {
+        text: @tr("Copy it now: it's shown only once.");
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+    }
+    if root.last == "invite" && root.error != "": Text {
+        text: AccountText.error(root.error);
+        color: Theme.bad;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    Button {
+        text: @tr("New invite code");
+        enabled: !root.busy && (root.invites-max == 0 || root.invites-unused < root.invites-max);
+        clicked => {
+            root.last = "invite";
+            root.new-invite();
+        }
+    }
+
+    Rectangle { height: 6px; }
+    Heading { text: @tr("Change password"); }
+    current := Field {
+        label: @tr("Current password");
+        secret: true;
+        edited => { root.clear-error(); }
+    }
+    next := Field {
+        label: @tr("New password");
+        hint: @tr("At least 10 characters");
+        secret: true;
+        edited => { root.clear-error(); }
+    }
+    if root.password-changed: Text {
+        text: @tr("Password changed. Your other devices were signed out.");
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    if root.last == "password" && root.error != "": Text {
+        text: AccountText.error(root.error);
+        color: Theme.bad;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    Button {
+        text: @tr("Change password");
+        enabled: !root.busy && current.text != "" && next.text != "";
+        clicked => {
+            root.last = "password";
+            root.change-password(current.text, next.text);
+            current.clear();
+            next.clear();
+        }
+    }
+
+    if root.blocked.length > 0: Rectangle { height: 6px; }
+    if root.blocked.length > 0: Heading { text: @tr("Blocked"); }
+    for name in root.blocked: HorizontalLayout {
+        spacing: 10px;
+        Text {
+            text: name;
+            color: Theme.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Button {
+            text: @tr("Unblock");
+            height-hint: 36px;
+            font-size: Theme.font-size-small;
+            clicked => { root.unblock(name); }
+        }
+    }
+
+    Rectangle { height: 6px; }
+    Heading { text: @tr("Delete account"); }
+    Text {
+        text: @tr("Deletes your account, friends and missed calls for good. Enter your password to confirm.");
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    confirm := Field {
+        placeholder: @tr("Password");
+        secret: true;
+        edited => { root.clear-error(); }
+    }
+    if root.last == "delete" && root.error != "": Text {
+        text: AccountText.error(root.error);
+        color: Theme.bad;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+    Button {
+        text: @tr("Delete account");
+        kind: ButtonKind.danger;
+        enabled: !root.busy && confirm.text != "";
+        clicked => {
+            root.last = "delete";
+            root.delete-account(confirm.text);
+            confirm.clear();
+        }
+    }
+}

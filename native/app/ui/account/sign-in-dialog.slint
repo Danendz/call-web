@@ -1,0 +1,183 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { Field } from "../components/field.slint";
+import { AccountText } from "errors.slint";
+
+// Tabs at the top of the dialog
+component Tab inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked();
+
+    height: 36px;
+    border-radius: self.height / 2;
+    background: selected ? Theme.surface-3 : #00000000;
+    accessible-role: tab;
+    accessible-label: text;
+    accessible-action-default => { root.clicked(); }
+    Text {
+        text: root.text;
+        color: root.selected ? Theme.text : Theme.muted;
+        font-size: Theme.font-size-small;
+        font-weight: 550;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Sign in, create an account with an invite code, or set a new password with the recovery code.
+export component SignInDialog inherits Rectangle {
+    // An error code from the server (AccountText), shown under the fields
+    in property <string> error;
+    in property <bool> busy;
+    callback sign-in(string, string);
+    callback register(string, string, string);
+    callback recover(string, string, string);
+    callback clear-error();
+    callback close();
+
+    // "signin", "register" or "recover"
+    property <string> mode: "signin";
+    property <bool> shown: false;
+    init => {
+        shown = true;
+        username.focus-input();
+    }
+
+    background: shown ? #00000099 : #00000000;
+    animate background { duration: Theme.med; easing: Theme.ease; }
+
+    TouchArea {
+        clicked => { root.close(); }
+    }
+
+    Rectangle {
+        width: min(420px, parent.width - 32px);
+        height: min(content.preferred-height, parent.height - 32px);
+        y: (parent.height - self.height) / 2 + (shown ? 0 : 10px);
+        opacity: shown ? 1 : 0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.glass-border;
+        background: Theme.surface;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        clip: true;
+        animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+        TouchArea { }
+
+        Flickable {
+            content-height: content.preferred-height;
+
+            content := VerticalLayout {
+                width: parent.width;
+                padding: 22px;
+                spacing: 14px;
+
+                HorizontalLayout {
+                    padding: 4px;
+                    Rectangle {
+                        border-radius: 22px;
+                        background: Theme.surface-2;
+                        HorizontalLayout {
+                            padding: 4px;
+                            Tab {
+                                text: @tr("Sign in");
+                                selected: root.mode != "register";
+                                clicked => { root.switch-to("signin"); }
+                            }
+                            Tab {
+                                text: @tr("Create account");
+                                selected: root.mode == "register";
+                                clicked => { root.switch-to("register"); }
+                            }
+                        }
+                    }
+                }
+
+                if root.mode == "register": Text {
+                    text: @tr("Accounts are by invite: ask someone who has one for a code.");
+                    color: Theme.muted;
+                    font-size: Theme.font-size-small;
+                    wrap: word-wrap;
+                }
+                if root.mode == "recover": Text {
+                    text: @tr("Enter the recovery code you saved when you created the account.");
+                    color: Theme.muted;
+                    font-size: Theme.font-size-small;
+                    wrap: word-wrap;
+                }
+
+                username := Field {
+                    label: @tr("Username");
+                    hint: root.mode == "register" ? @tr("3–20 lowercase letters, digits or _") : "";
+                    edited => { root.clear-error(); }
+                    accepted => { password.focus-input(); }
+                }
+                if root.mode == "register": Field {
+                    label: @tr("Invite code");
+                    text <=> root.code;
+                    edited => { root.clear-error(); }
+                }
+                if root.mode == "recover": Field {
+                    label: @tr("Recovery code");
+                    text <=> root.code;
+                    edited => { root.clear-error(); }
+                }
+                password := Field {
+                    label: root.mode == "recover" ? @tr("New password") : @tr("Password");
+                    hint: root.mode == "signin" ? "" : @tr("At least 10 characters");
+                    secret: true;
+                    edited => { root.clear-error(); }
+                    accepted => { root.submit(); }
+                }
+
+                if root.error != "": Text {
+                    text: AccountText.error(root.error);
+                    color: Theme.bad;
+                    font-size: Theme.font-size-small;
+                    wrap: word-wrap;
+                }
+
+                Button {
+                    text: root.mode == "signin" ? @tr("Sign in") : root.mode == "register" ? @tr("Create account") : @tr("Change password");
+                    kind: ButtonKind.primary;
+                    enabled: !root.busy && username.text != "" && password.text != "";
+                    clicked => { root.submit(); }
+                }
+                if root.mode == "signin": Button {
+                    text: @tr("Forgot password");
+                    height-hint: 36px;
+                    font-size: Theme.font-size-small;
+                    clicked => { root.switch-to("recover"); }
+                }
+            }
+        }
+    }
+
+    property <string> code;
+
+    function switch-to(next: string) {
+        root.mode = next;
+        root.code = "";
+        root.clear-error();
+    }
+
+    function submit() {
+        if (root.busy || username.text == "" || password.text == "") { return; }
+        if (root.mode == "signin") {
+            root.sign-in(username.text, password.text);
+        } else if (root.mode == "register") {
+            root.register(username.text, password.text, root.code);
+        } else {
+            root.recover(username.text, root.code, password.text);
+        }
+    }
+}
