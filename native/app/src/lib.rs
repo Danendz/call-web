@@ -122,9 +122,8 @@ pub fn run() -> anyhow::Result<()> {
     let friends = friends::start(&ui, &engine, server_for_friends)?;
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
-    // mic level while the setup screen shows it
-    let ticker = slint::Timer::default();
-    ticker.start(slint::TimerMode::Repeated, Duration::from_millis(33), {
+    // mic level while the setup screen shows it. The clock runs only on the screens that need it
+    let tick = Rc::new({
         let weak = ui.as_weak();
         let engine = engine.clone();
         move || {
@@ -141,6 +140,33 @@ pub fn run() -> anyhow::Result<()> {
             android::sync(&ui);
         }
     });
+    let ticker = slint::Timer::default();
+    ticker.start(slint::TimerMode::Repeated, Duration::from_millis(33), {
+        let tick = tick.clone();
+        move || tick()
+    });
+    let pace = {
+        let weak = ui.as_weak();
+        move || {
+            let Some(ui) = weak.upgrade() else { return };
+            // Once more for the new screen: the timer clears when the call ends
+            tick();
+            let every = match ui.get_phase() {
+                // The mic level bar moves smoothly
+                AppPhase::Setup => Duration::from_millis(33),
+                // The call timer shows seconds; a quarter of one keeps it from skipping one
+                AppPhase::Starting | AppPhase::Waiting | AppPhase::InCall => Duration::from_millis(250),
+                _ => {
+                    ticker.stop();
+                    return;
+                }
+            };
+            ticker.set_interval(every);
+            ticker.restart();
+        }
+    };
+    pace();
+    ui.on_phase_changed(pace);
     {
         let settings = settings.borrow();
         if let Some(mic) = settings.mic.clone() {

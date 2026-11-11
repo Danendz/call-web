@@ -222,7 +222,12 @@ export component AppWindow inherits Window {
     callback feeds-seen(bool, bool, bool);
     callback show-shot();
     callback update-now();
-    changed phase => { keys.focus(); }
+    // The screen changed, so the UI clock runs at the pace that screen needs
+    callback phase-changed();
+    changed phase => {
+        keys.focus();
+        root.phase-changed();
+    }
 
     title: "Call Danya";
     icon: Icons.video;
