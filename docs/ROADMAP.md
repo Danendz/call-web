@@ -93,7 +93,7 @@ Less CPU, memory and battery in a call. In a call on a Mac the app used 16–21%
 | [x] Publish only what changed | A state that changed nothing isn't handed to the UI, and stats have their own callback, so the overlay's tick doesn't touch the rest of the UI. |
 | [x] Stats only when shown | Stats are sampled once a second and handed to the UI only while the overlay is up; otherwise every 5 s, just for the relay check. |
 | [x] Speech from WebRTC's mic | Speech to chat reads the call's mic after WebRTC's echo cancellation, noise suppression and gain control, instead of opening the mic again with a second canceller. |
-| [ ] Give memory back after a call | Return the allocator's freed pages after the speech models unload. |
+| [x] Give memory back after a call | Once the speech models are dropped, the allocator returns their freed pages to the system (`malloc_zone_pressure_relief` on macOS, `M_PURGE` on Android, `HeapCompact` on Windows) instead of keeping them for reuse. |
 
 ## Phase 4 — Android (Native only)
 
