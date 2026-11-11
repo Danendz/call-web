@@ -30,7 +30,11 @@ use crate::room;
 use crate::screen::{self, LocalScreen};
 use crate::signaling::{SignalEvent, Signaling, SocketStatus};
 use crate::speech::{Model, ModelStatus, SpeechEvent, SpeechNotice, Transcriber};
+use crate::stats::CallStats;
 use crate::video::VideoSink;
+
+/// See [`Engine::start`]'s `on_stats`
+type OnStats = Box<dyn Fn(Option<(CallStats, bool)>) + Send>;
 
 /// What the engine tells itself from other threads and timers.
 enum Internal {
@@ -62,6 +66,10 @@ struct Controller {
     server: Url,
     state: State,
     on_state: Box<dyn Fn(State) + Send>,
+    /// The state last handed to `on_state`, so a pass that changed nothing isn't handed over again
+    published: Option<State>,
+    on_stats: OnStats,
+    stats_shown: bool,
     on_chat: Box<dyn Fn(ChatEvent) + Send>,
     media: Media,
     level: Level,
@@ -110,6 +118,7 @@ impl Controller {
         level: Level,
         sink: Arc<dyn VideoSink>,
         on_state: Box<dyn Fn(State) + Send>,
+        on_stats: OnStats,
         on_chat: Box<dyn Fn(ChatEvent) + Send>,
     ) -> Self {
         let (signal_tx, signal_rx) = mpsc::unbounded_channel();
@@ -149,9 +158,7 @@ impl Controller {
             cam_id: None,
             portrait: false,
             full_reason: None,
-            stats: None,
             force_relay: false,
-            trying_direct: false,
             peer_screenshot: false,
             transcribe_on: false,
             speech_notice: None,
@@ -165,6 +172,9 @@ impl Controller {
             server,
             state,
             on_state,
+            published: None,
+            on_stats,
+            stats_shown: false,
             on_chat,
             media,
             level,
@@ -354,6 +364,12 @@ impl Controller {
                     peer.set_force_relay(relay);
                 }
             }
+            Command::SetStatsShown(shown) => {
+                self.stats_shown = shown;
+                if let Some(peer) = &self.peer {
+                    peer.set_stats_shown(shown);
+                }
+            }
         }
     }
 
@@ -410,7 +426,12 @@ impl Controller {
         }
     }
 
-    fn publish(&self) {
-        (self.on_state)(self.state.clone());
+    fn publish(&mut self) {
+        if self.published.as_ref() == Some(&self.state) {
+            return;
+        }
+        let state = self.state.clone();
+        (self.on_state)(state.clone());
+        self.published = Some(state);
     }
 }

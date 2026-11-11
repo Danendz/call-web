@@ -220,6 +220,7 @@ export component AppWindow inherits Window {
     callback corner-moved(string, string);
     // Which videos the screen on show draws (yours, theirs, their screen); the others aren't converted
     callback feeds-seen(bool, bool, bool);
+    callback stats-shown(bool);
     callback show-shot();
     callback update-now();
     // The screen changed, so the UI clock runs at the pace that screen needs
@@ -370,6 +371,7 @@ export component AppWindow inherits Window {
             close-screen-picker => { root.close-screen-picker(); }
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
             feeds-seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
+            stats-shown(on) => { root.stats-shown(on); }
             peer-frame-rotation: root.peer-frame-rotation;
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;

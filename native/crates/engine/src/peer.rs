@@ -18,7 +18,7 @@ use libwebrtc::video_track::RtcVideoTrack;
 use protocol::{IceServerConfig, SessionDescription as Description, SignalPayload};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{Instant, interval, sleep_until};
+use tokio::time::{Instant, Interval, interval, sleep_until};
 
 use crate::screen::ScreenTracks;
 use crate::stats::{self, CallStats, Counters};
@@ -26,6 +26,8 @@ use crate::stats::{self, CallStats, Counters};
 const DISCONNECTED_GRACE: Duration = Duration::from_secs(4);
 const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
+// While the stats overlay is hidden only the relay check reads them, and its retries are 15 s apart at the least
+const STATS_HIDDEN_EVERY: Duration = Duration::from_secs(5);
 // Enough for clean 720p at 30 fps; a direct call into mainland China carried ~2 Mbps with negligible loss
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 // A camera that gives 60 fps gets half again, so its frames aren't blurrier than at 30
@@ -70,6 +72,7 @@ enum Input {
     RestartIce,
     ForceRelay(bool),
     Screen(Option<ScreenTracks>),
+    StatsShown(bool),
 }
 
 pub struct PeerConfig {
@@ -80,6 +83,8 @@ pub struct PeerConfig {
     pub stream_id: String,
     /// Our shared screen goes out in its own stream, so the other side can tell it from the camera.
     pub screen_stream_id: String,
+    /// The stats overlay is up, so stats are sampled every second instead of every few
+    pub stats_shown: bool,
 }
 
 /// Runs until dropped; dropping it closes the connection.
@@ -145,6 +150,7 @@ impl Peer {
             ignore_offer: false,
             last_restart: None,
             disconnected_since: None,
+            stats: stats_interval(config.stats_shown),
             events,
         };
         let (close, closed) = oneshot::channel();
@@ -168,6 +174,10 @@ impl Peer {
     /// Sends the shared screen alongside the camera, or stops; see [`Session::set_screen`].
     pub fn set_screen(&self, tracks: Option<ScreenTracks>) {
         let _ = self.input.send(Input::Screen(tracks));
+    }
+
+    pub fn set_stats_shown(&self, shown: bool) {
+        let _ = self.input.send(Input::StatsShown(shown));
     }
 }
 
@@ -208,6 +218,10 @@ fn rtc_config(servers: &[IceServerConfig], relay: bool) -> RtcConfiguration {
     config
 }
 
+fn stats_interval(shown: bool) -> Interval {
+    interval(if shown { STATS_EVERY } else { STATS_HIDDEN_EVERY })
+}
+
 struct Session {
     pc: PeerConnection,
     polite: bool,
@@ -222,19 +236,19 @@ struct Session {
     ignore_offer: bool,
     last_restart: Option<Instant>,
     disconnected_since: Option<Instant>,
+    stats: Interval,
     events: mpsc::UnboundedSender<PeerEvent>,
 }
 
 impl Session {
     async fn run(mut self, mut input: mpsc::UnboundedReceiver<Input>, mut closed: oneshot::Receiver<()>) {
-        let mut stats = interval(STATS_EVERY);
         loop {
             let grace = self.disconnected_since.map(|since| since + DISCONNECTED_GRACE);
             tokio::select! {
                 // The Peer was dropped
                 _ = &mut closed => break,
                 Some(msg) = input.recv() => self.handle(msg).await,
-                _ = stats.tick() => self.sample_stats().await,
+                _ = self.stats.tick() => self.sample_stats().await,
                 () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
                     self.disconnected_since = None;
                     self.restart_ice();
@@ -291,6 +305,8 @@ impl Session {
                 self.last_restart = None;
                 self.restart_ice();
             }
+            // Its first tick is now, so the overlay fills as it opens
+            Input::StatsShown(shown) => self.stats = stats_interval(shown),
         }
     }
 

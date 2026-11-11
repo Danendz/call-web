@@ -90,8 +90,8 @@ Less CPU, memory and battery in a call. In a call on a Mac the app used 16–21%
 | [x] Skip frames nobody sees | No conversion for a feed that isn't shown: window minimized or covered (macOS), minimized (Windows), app in the background (Android), or picture-in-picture showing another feed. |
 | [ ] Render with wgpu, video on the GPU | Switch Slint's renderer from OpenGL to wgpu (Metal on macOS, Vulkan on Android, DX12 on Windows), then hand video in as a `WGPUTexture` with a YUV shader: no CPU conversion and 2.7× less upload, and macOS stops depending on deprecated OpenGL. Changes the renderer for the whole UI, so every screen needs retesting on all three platforms. A YUV shader on the current OpenGL renderer was skipped: Skia doesn't restore GL state after an outside draw, and Android drops the context in the background. Texture upload is still the hottest frame on Mac after buffer reuse. |
 | [x] Quieter UI timer | The UI's clock runs only where something on screen needs it: 30 Hz on the setup screen for the mic level, 4 Hz in a call for the call timer and Android's call notification, and not at all on the other screens. |
-| [ ] Publish only what changed | Skip a state publish that changed nothing, and send stats on their own so the overlay's tick doesn't touch the rest of the UI. |
-| [ ] Stats only when shown | Full stats once a second only while the overlay is on; the relay check keeps its own cheap sample. |
+| [x] Publish only what changed | A state that changed nothing isn't handed to the UI, and stats have their own callback, so the overlay's tick doesn't touch the rest of the UI. |
+| [x] Stats only when shown | Stats are sampled once a second and handed to the UI only while the overlay is up; otherwise every 5 s, just for the relay check. |
 | [ ] Speech from WebRTC's mic | Take speech audio from WebRTC's capture after its echo cancellation, instead of opening the mic again with a second canceller. |
 | [ ] Give memory back after a call | Return the allocator's freed pages after the speech models unload. |
 

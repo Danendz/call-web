@@ -112,6 +112,7 @@ impl Controller {
             polite: self.seat.polite,
             stream_id: self.stream_id.clone(),
             screen_stream_id: self.screen.stream_id.clone(),
+            stats_shown: self.stats_shown,
         };
         match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {
             Ok(peer) => {
@@ -140,7 +141,7 @@ impl Controller {
         self.remote_audio.clear();
         self.transcriber.set_remote_audio(None);
         self.remote.drop_tracks();
-        self.state.stats = None;
+        (self.on_stats)(None);
         // Events from the old connection still queued must not touch the next one
         while self.peer_rx.try_recv().is_ok() {}
         self.state.link = None;
@@ -213,8 +214,10 @@ impl Controller {
             }
             PeerEvent::Stats(stats) => {
                 self.maybe_retry_direct(&stats);
-                self.state.trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);
-                self.state.stats = Some(*stats);
+                if self.stats_shown {
+                    let trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);
+                    (self.on_stats)(Some((*stats, trying_direct)));
+                }
             }
             PeerEvent::IceState(ice) => {
                 self.state.link = Some(match ice {
