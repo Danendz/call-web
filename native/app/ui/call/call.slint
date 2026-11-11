@@ -94,6 +94,7 @@ export component CallScreen inherits Rectangle {
     callback share-source(string);
     callback close-screen-picker();
     callback corner-moved(string, string);
+    callback feeds-seen(bool, bool, bool);
     callback show-shot();
     callback hang-up();
     callback open-settings();
@@ -224,6 +225,7 @@ export component CallScreen inherits Rectangle {
             corner-peer: root.corner-peer;
             corner-screen: root.corner-screen;
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
+            seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
             touched => {
                 root.wake();
                 chat.blur();
