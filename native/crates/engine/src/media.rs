@@ -1,10 +1,11 @@
 //! The WebRTC factory and the devices behind it. Audio goes through WebRTC's platform audio device: it captures the
 //! picked mic, plays the other person through the picked speaker, and runs WebRTC's echo canceller, noise
 //! suppression and gain control on the mic, like a browser does with the web app's constraints. With noise
-//! suppression switched on, DeepFilterNet replaces WebRTC's own after the other two.
+//! suppression switched on, DeepFilterNet replaces WebRTC's own after the other two. Speech to chat reads the mic
+//! from there too ([`MicTap`]), rather than opening it a second time with an echo canceller of its own.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 
 use libwebrtc::audio_track::RtcAudioTrack;
 use libwebrtc::peer_connection_factory::PeerConnectionFactory;
@@ -22,6 +23,7 @@ pub struct Media {
     factory: PeerConnectionFactory,
     platform_audio: bool,
     denoise: Arc<Denoise>,
+    tap: MicTap,
     /// WebRTC shuts the audio device down once the last peer connection is gone, and on Android LiveKit's proxy
     /// never starts it again: the next call crashed starting audio. A connection that never connects keeps it up.
     #[cfg(target_os = "android")]
@@ -32,9 +34,11 @@ impl Media {
     pub fn new() -> Self {
         let factory = PeerConnectionFactory::default();
         let platform_audio = factory.acquire_platform_adm();
+        let tap = MicTap::default();
         if platform_audio {
             factory.set_adm_recording_enabled(true);
             factory.set_adm_playout_enabled(true);
+            capture_processor::set_capture_processor(Some(processor(None, Arc::default(), tap.clone())));
         } else {
             tracing::warn!("no platform audio device: the call will be silent");
         }
@@ -47,6 +51,7 @@ impl Media {
             factory,
             platform_audio,
             denoise: Arc::default(),
+            tap,
             #[cfg(target_os = "android")]
             _keep_audio,
         }
@@ -123,14 +128,14 @@ impl Media {
         denoise.on.store(on, Ordering::Relaxed);
         if on && denoise.model.load(Ordering::Relaxed) == MODEL_NONE {
             denoise.model.store(MODEL_LOADING, Ordering::Relaxed);
-            let denoise = denoise.clone();
+            let (denoise, tap) = (denoise.clone(), self.tap.clone());
             std::thread::spawn(move || {
                 let loaded = denoise::Denoiser::new()
                     .inspect_err(|e| tracing::warn!("noise suppression model didn't load: {e}"))
                     .ok();
                 let model = if loaded.is_some() { MODEL_READY } else { MODEL_FAILED };
                 if let Some(denoiser) = loaded {
-                    capture_processor::set_capture_processor(Some(processor(denoiser, denoise.on.clone())));
+                    capture_processor::set_capture_processor(Some(processor(Some(denoiser), denoise.on.clone(), tap)));
                 }
                 denoise.model.store(model, Ordering::Relaxed);
                 denoise.apply();
@@ -142,6 +147,37 @@ impl Media {
     /// Captures from the selected mic once a peer connection sends it.
     pub fn mic_track(&self) -> Option<RtcAudioTrack> {
         self.platform_audio.then(|| self.factory.create_device_audio_track("mic"))
+    }
+
+    /// The call's mic after WebRTC's processing, while a call sends it. None without the platform audio device.
+    pub(crate) fn mic_tap(&self) -> Option<MicTap> {
+        self.platform_audio.then(|| self.tap.clone())
+    }
+}
+
+/// One 10 ms frame of the call's mic, as floats in the 16-bit range, and its sample rate.
+pub(crate) type MicFrame = (Vec<f32>, u32);
+
+/// Hands the call's mic, after echo cancellation, noise suppression and gain control, to one reader at a time.
+#[derive(Clone, Default)]
+pub(crate) struct MicTap(Arc<Mutex<Option<mpsc::Sender<MicFrame>>>>);
+
+impl MicTap {
+    /// Frames from now on go to the receiver, until it's dropped. A reader already there is cut off.
+    pub(crate) fn open(&self) -> mpsc::Receiver<MicFrame> {
+        let (tx, rx) = mpsc::channel();
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+        rx
+    }
+
+    /// On the audio thread: never waits, and a frame nobody can take is dropped.
+    fn send(&self, frame: &[f32], rate: u32) {
+        let Ok(mut reader) = self.0.try_lock() else { return };
+        if let Some(tx) = reader.as_ref()
+            && tx.send((frame.to_vec(), rate)).is_err()
+        {
+            *reader = None;
+        }
     }
 }
 
@@ -165,23 +201,28 @@ impl Denoise {
     }
 }
 
-/// Runs on WebRTC's audio thread, after its echo canceller and gain control. Frames at a rate other than the model's
-/// (WebRTC processes at 48 kHz when the mic gives it that, as desktop and phone mics do) pass through.
-fn processor(mut denoiser: denoise::Denoiser, on: Arc<AtomicBool>) -> capture_processor::CaptureProcessor {
+/// Runs on WebRTC's audio thread, after its echo canceller and gain control: DeepFilterNet once it's loaded, then
+/// the tap. Frames at a rate other than the model's (WebRTC processes at 48 kHz when the mic gives it that, as
+/// desktop and phone mics do) pass through it undenoised.
+fn processor(
+    mut denoiser: Option<denoise::Denoiser>,
+    on: Arc<AtomicBool>,
+    tap: MicTap,
+) -> capture_processor::CaptureProcessor {
     let mut warned = false;
     Box::new(move |frame, rate| {
-        if !on.load(Ordering::Relaxed) {
-            return;
-        }
-        if rate != denoise::SAMPLE_RATE {
-            if !warned {
+        if let Some(denoiser) = denoiser.as_mut()
+            && on.load(Ordering::Relaxed)
+        {
+            if rate == denoise::SAMPLE_RATE {
+                // WebRTC's floats are in the 16-bit range
+                denoiser.process(frame, 32768.0);
+            } else if !warned {
                 tracing::warn!("noise suppression skipped: the mic is processed at {rate} Hz");
                 warned = true;
             }
-            return;
         }
-        // WebRTC's floats are in the 16-bit range
-        denoiser.process(frame, 32768.0);
+        tap.send(frame, rate);
     })
 }
 

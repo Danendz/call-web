@@ -92,7 +92,7 @@ Less CPU, memory and battery in a call. In a call on a Mac the app used 16–21%
 | [x] Quieter UI timer | The UI's clock runs only where something on screen needs it: 30 Hz on the setup screen for the mic level, 4 Hz in a call for the call timer and Android's call notification, and not at all on the other screens. |
 | [x] Publish only what changed | A state that changed nothing isn't handed to the UI, and stats have their own callback, so the overlay's tick doesn't touch the rest of the UI. |
 | [x] Stats only when shown | Stats are sampled once a second and handed to the UI only while the overlay is up; otherwise every 5 s, just for the relay check. |
-| [ ] Speech from WebRTC's mic | Take speech audio from WebRTC's capture after its echo cancellation, instead of opening the mic again with a second canceller. |
+| [x] Speech from WebRTC's mic | Speech to chat reads the call's mic after WebRTC's echo cancellation, noise suppression and gain control, instead of opening the mic again with a second canceller. |
 | [ ] Give memory back after a call | Return the allocator's freed pages after the speech models unload. |
 
 ## Phase 4 — Android (Native only)

@@ -1,5 +1,5 @@
-//! Opening a mic outside WebRTC, for what needs its samples directly: the setup screen's level meter and the
-//! speech-to-chat recorder. WebRTC's own capture only feeds the call.
+//! Opening a mic outside WebRTC, for what needs its samples directly: the setup screen's level meter, and speech to
+//! chat without WebRTC's platform audio or with `CALL_FAKE_MIC`. In a call, speech to chat reads WebRTC's capture.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample};

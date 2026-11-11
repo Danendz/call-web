@@ -126,6 +126,7 @@ impl Controller {
         let (internal_tx, internal_rx) = mpsc::unbounded_channel();
         let (speech_tx, speech_rx) = mpsc::unbounded_channel();
         let media = Media::new();
+        let transcriber = Transcriber::new(speech_tx, media.mic_tap());
         let camera = LocalCamera::new(media.factory(), sink.clone());
         let screen = LocalScreen::new(media.factory());
         let translation = translate::status(data_dir.as_deref(), lang);
@@ -185,7 +186,7 @@ impl Controller {
             screen,
             internal_tx,
             internal_rx,
-            transcriber: Transcriber::new(speech_tx),
+            transcriber,
             remote_audio: Vec::new(),
             speech_rx,
             model_cancel: None,
