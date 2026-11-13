@@ -3,6 +3,17 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.3.1 — 2026-11-13
+
+Emoji reactions during a call, and emoji in chat.
+
+### New
+
+- Send a reaction from the call controls: it floats up over the video on both sides
+- Tap the same reaction fast for a combo, and every fifth ❤️, 🎉 or 🔥 fills the screen with hearts, confetti or flames
+- Android: the phone gives a short buzz when the other person reacts
+- Pick emoji from a grid in the chat
+
 ## 0.3.0 — 2026-11-10
 
 Live subtitles while you speak, translated on the device, and calling friends.
