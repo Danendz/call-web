@@ -715,6 +715,30 @@ button.menu-item:active:not(:disabled) {
   }
 }
 
+/* The narrowest phones: the pill's buttons shrink so all of them fit across */
+@media (max-width: 400px) {
+  .pill {
+    gap: 4px;
+  }
+
+  .pill .icon-btn,
+  .call.chat-open .pill .icon-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .pill .split-chevron,
+  .call.chat-open .pill .split-chevron {
+    width: 18px;
+    height: 42px;
+  }
+
+  .pill .icon-btn.danger,
+  .call.chat-open .pill .icon-btn.danger {
+    width: 50px;
+  }
+}
+
 /* Phone held upright (STACKED_QUERY in useMediaQuery.ts): chat opens under the video instead of beside it. */
 @media (max-width: 899px) and (orientation: portrait) {
   .call {

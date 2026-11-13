@@ -22,8 +22,9 @@ import type { CallController, CallState } from "./controller";
 import { DeviceMenu, type MenuSection } from "./DeviceMenu";
 import type { DeviceOption } from "./media";
 import { MoreMenu, type MenuItem } from "./MoreMenu";
+import { ReactionBar } from "./reactions/ReactionBar";
 
-type OpenMenu = "mic" | "cam" | "more" | null;
+type OpenMenu = "mic" | "cam" | "react" | "more" | null;
 
 /** Floating call controls. The mic and camera chevrons hold device choices; the rest goes in ⋯. */
 export function ControlPill({
@@ -33,6 +34,7 @@ export function ControlPill({
   unread,
   canRotate,
   onRotate,
+  canReact,
   canScreenshot,
   onScreenshot,
   onToggleChat,
@@ -46,6 +48,7 @@ export function ControlPill({
   unread: number;
   canRotate: boolean;
   onRotate: () => void;
+  canReact: boolean;
   canScreenshot: boolean;
   onScreenshot: () => void;
   onToggleChat: () => void;
@@ -163,6 +166,12 @@ export function ControlPill({
       ) : (
         camButton
       )}
+      <ReactionBar
+        disabled={!canReact}
+        onReact={(emoji) => controller.sendReaction(emoji)}
+        {...menu("react")}
+        open={canReact && openMenu === "react"}
+      />
       <IconButton
         label={t.chat}
         variant={chatOpen ? "active" : null}

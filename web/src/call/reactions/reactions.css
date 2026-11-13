@@ -1,0 +1,186 @@
+/* ---- reaction row above the pill ---- */
+
+/* Centered over the whole pill, not its button: .react itself isn't positioned */
+.reaction-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 8px) scale(0.96);
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    visibility 0s linear var(--fast);
+}
+
+.reaction-bar.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease-spring);
+}
+
+.reaction-bar button {
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  transition: transform var(--fast) var(--ease-spring);
+}
+
+.reaction-bar button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.15);
+}
+
+.reaction-bar button:active {
+  transform: scale(0.85);
+}
+
+/* ---- flying reactions ---- */
+
+.reactions {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.reactions canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.floater {
+  position: absolute;
+  bottom: calc(110px + env(safe-area-inset-bottom));
+  font-size: calc(36px + var(--grow, 1) * 4px);
+  line-height: 1;
+  translate: -50% 0;
+  animation: float-up 3s cubic-bezier(0.25, 0.6, 0.4, 1) forwards;
+}
+
+.floater.combo {
+  z-index: 1;
+}
+
+.floater .sway {
+  position: relative;
+  display: inline-block;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  animation: sway 1.1s ease-in-out infinite alternate;
+}
+
+.floater .count {
+  position: absolute;
+  left: 85%;
+  top: -10%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: pop var(--med) var(--ease-spring);
+}
+
+.floater .burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.floater .burst i {
+  position: absolute;
+  font-size: 14px;
+  font-style: normal;
+  translate: -50% -50%;
+  transform: rotate(var(--a)) translateY(0);
+  animation: burst 0.6s var(--ease) forwards;
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.3);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-4vh) scale(1.15);
+  }
+  20% {
+    transform: translateY(-9vh) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-55vh) scale(0.9);
+  }
+}
+
+@keyframes sway {
+  from {
+    transform: translateX(calc(var(--drift) * -1)) rotate(-8deg);
+  }
+  to {
+    transform: translateX(var(--drift)) rotate(8deg);
+  }
+}
+
+@keyframes burst {
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(-56px) scale(0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floater {
+    animation: float-still 1.6s var(--ease) forwards;
+  }
+  .floater .sway,
+  .floater .count {
+    animation: none;
+  }
+  .floater .burst {
+    display: none;
+  }
+  .reaction-bar,
+  .reaction-bar.open {
+    transition: none;
+  }
+}
+
+@keyframes float-still {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  70% {
+    opacity: 1;
+  }
+}

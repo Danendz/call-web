@@ -8,6 +8,7 @@ import {
   MAX_LIVE_ID_LENGTH,
   MAX_LIVE_LENGTH,
   MAX_STREAM_ID_LENGTH,
+  REACTIONS,
   ROOM_ID_RE,
   type ClientMessage,
 } from "../shared/protocol.js";
@@ -41,6 +42,8 @@ const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(
 const spokenPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(30, 10_000), user: rateLimit(60, 10_000) };
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
+// A fast tapper sends a few a second; more than this is a script
+const reactionsPerMember = rateLimit(30, 10_000);
 // Live text is sent a few times a second while speaking
 const livePerMember = rateLimit(80, 10_000);
 // A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
@@ -213,6 +216,11 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
       case "screenshot":
         if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
+      case "reaction": {
+        const emoji = REACTIONS.find((r) => r === msg.emoji);
+        if (emoji && reactionsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "reaction", emoji });
+        break;
+      }
       case "media": {
         const { camOn, screen, speakerOff = false } = msg;
         const validScreen = screen === null || (typeof screen === "string" && screen.length <= MAX_STREAM_ID_LENGTH);
