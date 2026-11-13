@@ -33,6 +33,8 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "renderer-skia",
     "unstable-wgpu-30",
 ] }
+# The same wgpu Slint uses, for the video shader's WGSL, which Slint doesn't turn on; see video/gpu.rs
+wgpu = { version = "30", default-features = false, features = ["wgsl"] }
 velopack = "=1.2.161"
 
 [target.'cfg(target_os = "android")'.dependencies]

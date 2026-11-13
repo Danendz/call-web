@@ -80,7 +80,8 @@ pub fn renderer_name() -> &'static str {
     RENDERER.get().copied().unwrap_or("—")
 }
 
-/// Notes which graphics API the window renders with, and marks wgpu as working here once it draws a frame.
+/// Notes which graphics API the window renders with, hands its device to video, and marks wgpu as working here once
+/// it draws a frame.
 pub fn watch_renderer(ui: &crate::ui::AppWindow, settings: &Rc<RefCell<Settings>>) {
     use slint::{ComponentHandle, GraphicsAPI, RenderingState};
     let settings = settings.clone();
@@ -88,19 +89,28 @@ pub fn watch_renderer(ui: &crate::ui::AppWindow, settings: &Rc<RefCell<Settings>
     let mut drew = false;
     let result = ui.window().set_rendering_notifier(move |state, api| match state {
         RenderingState::RenderingSetup => {
+            use slint::wgpu_30::wgpu::Backend;
             let name = match api {
-                GraphicsAPI::WGPU30 { device, .. } => match device.adapter_info().backend {
-                    slint::wgpu_30::wgpu::Backend::Metal => "Metal",
-                    slint::wgpu_30::wgpu::Backend::Dx12 => "D3D12",
-                    slint::wgpu_30::wgpu::Backend::Vulkan => "Vulkan",
-                    _ => "wgpu",
-                },
+                GraphicsAPI::WGPU30 { device, queue, .. } => {
+                    let backend = device.adapter_info().backend;
+                    // Video converts on the GPU where its submits can run beside Skia's; see video::gpu
+                    if matches!(backend, Backend::Metal | Backend::Dx12) {
+                        crate::video::gpu::set_device(Some((device.clone(), queue.clone())));
+                    }
+                    match backend {
+                        Backend::Metal => "Metal",
+                        Backend::Dx12 => "D3D12",
+                        Backend::Vulkan => "Vulkan",
+                        _ => "wgpu",
+                    }
+                }
                 GraphicsAPI::NativeOpenGL { .. } => "OpenGL",
                 _ => "other",
             };
             let _ = RENDERER.set(name);
             tracing::info!("drawing with {name}");
         }
+        RenderingState::RenderingTeardown => crate::video::gpu::set_device(None),
         RenderingState::AfterRendering if !drew => {
             drew = true;
             let Ok(mut settings) = settings.try_borrow_mut() else { return };

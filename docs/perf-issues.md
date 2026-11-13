@@ -30,6 +30,7 @@ For scale, the headless `join` peer used 14–21% for the same call with no UI. 
      | In a call | 13.6–24.1%, 775–811 MB | 14.5–15.5%, 386–513 MB |
 
      CPU is unchanged. The memory drop in a call may partly be Metal's GPU memory being counted differently in `vmmap`'s physical footprint. Setup varies on both, depending on when the camera preview starts inside the sample.
+   - *Shipped (step 2):* on Metal and D3D12, video goes in as YUV planes and a shader draws them into the texture Slint shows. In the test call (640×360 in, 404×720 self-view, 14 fps), converting a frame takes 0.5 ms and the app's CPU in a call was the same as with CPU conversion, 20–22% for both builds measured back to back: at these sizes libyuv was already cheap, so the gain shows only at 720p and up.
 
 2. **Frames were converted when nobody would see them.** *Shipped:* a feed isn't converted while the window is minimized or covered, or while picture-in-picture shows a different feed.
 

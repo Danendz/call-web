@@ -79,6 +79,60 @@ impl<'a> Frame<'a> {
         }
         CONVERT_US.record(started.elapsed().as_micros());
     }
+
+    /// Calls `f` with the frame's YUV planes, for converting on the GPU: I420 and NV12 as they came, any other format
+    /// turned into I420 first. The time `f` takes counts as conversion in the stats.
+    pub fn with_planes<R>(&self, f: impl FnOnce(Planes<'_>) -> R) -> R {
+        let started = Instant::now();
+        let b = self.buffer;
+        let converted;
+        let planes = if let Some(buf) = b.as_nv12() {
+            let (y, uv) = buf.data();
+            let (y_stride, uv_stride) = buf.strides();
+            Planes::Nv12 { width: self.width(), height: self.height(), y, uv, strides: [y_stride, uv_stride] }
+        } else {
+            let buf = match b.as_i420() {
+                Some(buf) => buf,
+                None => {
+                    converted = b.to_i420();
+                    &converted
+                }
+            };
+            let (y, u, v) = buf.data();
+            let (y_stride, u_stride, v_stride) = buf.strides();
+            Planes::I420 {
+                width: self.width(),
+                height: self.height(),
+                y,
+                u,
+                v,
+                strides: [y_stride, u_stride, v_stride],
+            }
+        };
+        let result = f(planes);
+        CONVERT_US.record(started.elapsed().as_micros());
+        result
+    }
+}
+
+/// A frame's pixels as YUV planes, rows `strides` bytes apart. Chroma is half the size each way, rounded up.
+pub enum Planes<'a> {
+    I420 {
+        width: u32,
+        height: u32,
+        y: &'a [u8],
+        u: &'a [u8],
+        v: &'a [u8],
+        strides: [u32; 3],
+    },
+    /// U and V interleaved in one plane, as cameras on macOS deliver them
+    Nv12 {
+        width: u32,
+        height: u32,
+        y: &'a [u8],
+        uv: &'a [u8],
+        strides: [u32; 2],
+    },
 }
 
 /// Where frames go to be shown. Called on video threads, so it must be quick and must not queue: keep the newest

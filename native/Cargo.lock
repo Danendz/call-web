@@ -811,6 +811,7 @@ dependencies = [
  "url",
  "velopack",
  "webrtc-sys-build",
+ "wgpu",
 ]
 
 [[package]]

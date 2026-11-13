@@ -252,9 +252,9 @@ pub fn run() -> anyhow::Result<()> {
                 "self" => ui.get_self_video(),
                 _ => ui.get_peer_video(),
             };
-            let Some(main) = main.to_rgba8() else { return };
+            let Some(main) = video::pixels(&main) else { return };
             // Your own camera rides along as a tile, unless it's what's on the stage
-            let tile = (feed != "self" && ui.get_cam_on()).then(|| ui.get_self_video().to_rgba8()).flatten();
+            let tile = (feed != "self" && ui.get_cam_on()).then(|| video::pixels(&ui.get_self_video())).flatten();
             let picture = screenshot::Picture {
                 main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
                 tile: tile.map(|frame| screenshot::Shot {
