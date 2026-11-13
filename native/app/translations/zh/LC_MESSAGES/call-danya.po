@@ -359,6 +359,12 @@ msgstr "保存你的恢复码"
 msgid "Screenshot"
 msgstr "截图"
 
+msgid "React"
+msgstr "表情回应"
+
+msgid "Emoji"
+msgstr "表情"
+
 msgid "Screenshot saved"
 msgstr "截图已保存"
 

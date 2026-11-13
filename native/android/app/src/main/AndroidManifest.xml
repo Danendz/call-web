@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Screen off while the phone is at your ear -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- A short buzz when the other person's reaction arrives -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Bluetooth headsets on Android 11 and older -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <!-- Updates from our server, installed through the system installer (Updater.kt) -->

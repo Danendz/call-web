@@ -10,8 +10,9 @@ import { ChatPanel, ChatRow } from "../chat/chat.slint";
 import { Button } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Subtitles, SubtitleLine } from "subtitles.slint";
+import { ReactionsOverlay, Floater, Spark } from "reactions.slint";
 
-export { StatsView, ChatRow }
+export { StatsView, ChatRow, Floater, Spark }
 
 export enum CallLink { none, connecting, connected, unstable, failed }
 
@@ -68,6 +69,10 @@ export component CallScreen inherits Rectangle {
     in property <int> speech-notice;
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
+    in property <[Floater]> floaters;
+    in property <[Spark]> sparks;
+    // Sends the index of the reaction picked in the pill's bar
+    callback react(int);
     // Where the last screenshot was saved; a new one shows the toast for a while
     in property <string> saved-shot;
     in property <int> shot-failures;
@@ -319,6 +324,13 @@ export component CallScreen inherits Rectangle {
             }
         }
 
+        ReactionsOverlay {
+            floaters: root.floaters;
+            sparks: root.sparks;
+            visible: !root.pip;
+            bottom-space: 110px;
+        }
+
         // The camera flash, like the web's .shot-flash
         Rectangle {
             background: #fff;
@@ -435,6 +447,8 @@ export component CallScreen inherits Rectangle {
             pick-output(id) => { root.pick-output(id); }
             toggle-share => { root.toggle-share(); }
             transcribe-on: root.transcribe-on;
+            can-react: root.connected;
+            react(i) => { root.react(i); }
             chat-open: root.chat-open;
             unread: root.unread;
             toggle-transcribe => { root.toggle-transcribe(); }

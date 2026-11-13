@@ -347,6 +347,12 @@ impl Controller {
                     signaling.send(ClientMessage::Screenshot);
                 }
             }
+            Command::SendReaction(emoji) => {
+                if let (Some(signaling), Some(_)) = (&self.signaling, &self.peer) {
+                    signaling.send(ClientMessage::Reaction { emoji });
+                    (self.on_chat)(ChatEvent::Reaction { emoji, mine: true });
+                }
+            }
             Command::SetNoiseSuppression(on) => self.media.set_noise_suppression(on),
             Command::SetForceRelay(relay) => {
                 self.state.force_relay = relay;

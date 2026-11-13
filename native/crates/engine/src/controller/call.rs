@@ -84,6 +84,7 @@ impl Controller {
                 (self.on_chat)(ChatEvent::Translated { id, translation });
             }
             ServerMessage::ChatLive { id, text, .. } => (self.on_chat)(ChatEvent::Live { id, text }),
+            ServerMessage::Reaction { emoji } => (self.on_chat)(ChatEvent::Reaction { emoji, mine: false }),
             ServerMessage::Screenshot => {
                 self.state.peer_screenshot = true;
                 let tx = self.internal_tx.clone();
