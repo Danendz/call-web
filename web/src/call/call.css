@@ -1,41 +1,27 @@
-/* ---- layout: stage, plus a chat cell that grows from zero ---- */
+/* ---- layout: the stage fills the screen; chat floats over it ---- */
 
 .call {
-  --chat-w: 360px;
   --pip-long: clamp(120px, 22vw, 240px);
   --pip-gap: 16px;
-  /* Room the pill takes at the bottom of the stage; the tile and subtitles sit above it */
+  /* Room the pill takes at the bottom of the stage; the tiles sit above it */
   --pill-space: calc(96px + env(safe-area-inset-bottom));
+  /* The chat's message box, level with the middle of the pill */
+  --chat-bottom: calc(31px + env(safe-area-inset-bottom));
   position: fixed;
   top: var(--vv-top, 0px);
   left: 0;
   right: 0;
   height: var(--vv-height, 100dvh);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 0px;
-  grid-template-rows: 100%;
-  grid-template-areas: "stage chat";
   background: #000;
   animation: fade-in var(--slow) var(--ease);
-  transition:
-    grid-template-columns var(--slow) var(--ease),
-    grid-template-rows var(--slow) var(--ease);
-}
-
-.call.chat-open {
-  grid-template-columns: minmax(0, 1fr) var(--chat-w);
 }
 
 .call.idle {
   --pill-space: calc(20px + env(safe-area-inset-bottom));
 }
 
-.call .chat {
-  border-left: 1px solid var(--border);
-}
-
 .stage {
-  grid-area: stage;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -78,7 +64,7 @@
 /* --pip-stack moves a second tile in the same corner past the first */
 .feed.pip {
   top: calc(100% - var(--pip-h) - var(--pill-space) - var(--pip-stack, 0px));
-  left: calc(100% - var(--pip-w) - var(--pip-gap) - env(safe-area-inset-right));
+  left: calc(100% - var(--pip-w) - var(--pip-gap) - env(safe-area-inset-right) - var(--pip-rail, 0px));
   z-index: 3;
   touch-action: none;
   width: var(--pip-w);
@@ -299,107 +285,6 @@ video.mirror {
   }
 }
 
-.subtitles {
-  position: absolute;
-  left: 50%;
-  bottom: calc(var(--pill-space) + 8px);
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: min(84%, 720px);
-  translate: -50% 0;
-  pointer-events: none;
-  transition: bottom var(--slow) var(--ease);
-}
-
-/* Collapses its height as it fades, so the lines under it slide up instead of jumping; rises in like a chat message */
-.subtitle-line {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transform: translateY(-6px) scale(0.97);
-  transition:
-    grid-template-rows var(--slow) var(--ease),
-    opacity var(--slow) var(--ease),
-    transform var(--slow) var(--ease);
-}
-
-.subtitle-line.shown {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transform: none;
-}
-
-.subtitle-line > div {
-  min-height: 0;
-  overflow: hidden;
-  text-align: center;
-}
-
-/* Frosted glass like the pill, so the video shows through */
-.subtitle-bubble {
-  display: inline-grid;
-  margin-top: 6px;
-  padding: 6px 14px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--shadow);
-  font-size: 20px;
-  line-height: 1.35;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  animation: subtitle-in var(--slow) var(--ease-spring);
-}
-
-/* Both texts share one cell; the bubble is as wide as the wider, so the crossfade doesn't jump */
-.subtitle-bubble > span {
-  grid-area: 1 / 1;
-  transition:
-    opacity var(--slow) var(--ease),
-    filter var(--slow) var(--ease);
-}
-
-.subtitle-text {
-  opacity: 0;
-  filter: blur(4px);
-}
-
-.subtitle-bubble.translated .subtitle-first {
-  opacity: 0;
-  filter: blur(4px);
-}
-
-.subtitle-bubble.translated .subtitle-text {
-  opacity: 1;
-  filter: none;
-}
-
-/* Your own lines, so you can see what was heard */
-.subtitle-line.mine .subtitle-bubble {
-  background: var(--glass);
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 16px;
-}
-
-@keyframes subtitle-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.96);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subtitle-line,
-  .subtitle-bubble,
-  .subtitle-bubble > span {
-    transition: none;
-    animation: none;
-  }
-}
-
 .stats {
   position: absolute;
   top: calc(14px + env(safe-area-inset-top));
@@ -491,7 +376,13 @@ video.mirror {
   transition:
     opacity var(--med) var(--ease),
     transform var(--med) var(--ease),
+    translate var(--slow) var(--ease),
     bottom var(--slow) var(--ease);
+}
+
+/* Centered, unless that would put it over the chat's message box: then it starts past the box's right edge */
+.call.chat-open .pill {
+  translate: max(-50%, calc(392px + env(safe-area-inset-left) - 50vw)) 0;
 }
 
 .call.idle .pill {
@@ -673,19 +564,50 @@ button.menu-item:active:not(:disabled) {
   color: var(--accent-hover);
 }
 
-/* ---- narrow screens ---- */
+/* ---- phones: the pill is a rail on the right above the chat's message box, hang-up alone in the top corner ---- */
 
-@media (max-width: 899px) {
+/* Same as SHEET_QUERY in useMediaQuery.ts */
+@media (max-width: 899px), (max-height: 500px) {
   .call {
-    --chat-w: min(320px, 42vw);
     --pip-long: clamp(104px, 28vw, 168px);
     --pip-gap: 12px;
-    --pill-space: calc(84px + env(safe-area-inset-bottom));
+    --pill-space: calc(16px + env(safe-area-inset-bottom));
+    /* The rail's bottom: just above the message box (44px tall), or near the edge while the chat is hidden */
+    --rail-bottom: calc(var(--chat-bottom) + 54px);
   }
 
-  .pill {
+  .call:not(.chat-open) {
+    --rail-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  /* A tile in a right corner keeps clear of the rail or of hang-up */
+  .feed.pip[data-corner$="r"] {
+    --pip-rail: 64px;
+  }
+
+  /* The message box spans the width; the messages above it keep clear of the rail */
+  .chat {
+    right: calc(16px + env(safe-area-inset-right));
+    width: auto;
+  }
+
+  .chat .messages {
+    margin-right: 56px;
+  }
+
+  .pill,
+  .call.chat-open .pill {
+    left: auto;
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: var(--rail-bottom);
+    flex-direction: column;
     gap: 6px;
     padding: 6px;
+    translate: none;
+  }
+
+  .call.idle .pill {
+    transform: translateX(24px);
   }
 
   .pill .icon-btn {
@@ -693,101 +615,64 @@ button.menu-item:active:not(:disabled) {
     height: 46px;
   }
 
-  .pill .split-chevron {
-    width: 22px;
+  /* Notices keep clear of hang-up, on both sides to stay centered */
+  .notices {
+    max-width: calc(100% - 144px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+
+  .stage > .hang-up {
+    position: absolute;
+    top: calc(14px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    z-index: 5;
+    width: 46px;
     height: 46px;
+    box-shadow: var(--shadow);
+    transition:
+      opacity var(--med) var(--ease),
+      transform var(--med) var(--ease);
   }
 
-  .pill .icon-btn.danger {
-    width: 56px;
+  .call.idle .stage > .hang-up {
+    opacity: 0;
+    transform: translateX(24px);
+    pointer-events: none;
   }
 
-  .pill .hang-up {
-    margin-left: 2px;
+  /* The chevron is a small tab on the button's left, pointing at where its sheet's choices are */
+  .pill .split {
+    background: none;
   }
 
-  .subtitle-bubble {
-    font-size: 17px;
+  .pill button.split-chevron {
+    position: absolute;
+    right: calc(100% + 2px);
+    top: 50%;
+    width: 20px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px 0 0 999px;
+    background: var(--glass);
+    translate: 0 -50%;
   }
 
-  .subtitle-line.mine .subtitle-bubble {
-    font-size: 14px;
-  }
-}
-
-/* The narrowest phones: the pill's buttons shrink so all of them fit across */
-@media (max-width: 400px) {
-  .pill {
-    gap: 4px;
+  .pill .split-chevron svg {
+    rotate: -90deg;
   }
 
-  .pill .icon-btn,
-  .call.chat-open .pill .icon-btn {
-    width: 42px;
-    height: 42px;
+  /* The emoji panel opens to the rail's left, from its bottom, so the message box stays free below it (.pill to
+     outweigh reactions.css, loaded after) */
+  .pill .reaction-bar {
+    left: auto;
+    right: calc(100% + 8px);
+    bottom: 0;
+    width: min(340px, calc(100vw - 100px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    transform: translateX(8px) scale(0.96);
+    transform-origin: bottom right;
   }
 
-  .pill .split-chevron,
-  .call.chat-open .pill .split-chevron {
-    width: 18px;
-    height: 42px;
-  }
-
-  .pill .icon-btn.danger,
-  .call.chat-open .pill .icon-btn.danger {
-    width: 50px;
-  }
-}
-
-/* Phone held upright (STACKED_QUERY in useMediaQuery.ts): chat opens under the video instead of beside it. */
-@media (max-width: 899px) and (orientation: portrait) {
-  .call {
-    grid-template-columns: 100%;
-    grid-template-rows: 100% 0%;
-    grid-template-areas: "stage" "chat";
-  }
-
-  .call.chat-open {
-    grid-template-columns: 100%;
-    grid-template-rows: 42% 58%;
-    --pip-long: 96px;
-    --pill-space: 66px;
-  }
-
-  .call .chat {
-    border-left: none;
-    border-top: 1px solid var(--border);
-  }
-
-  .chat-inner {
-    width: 100%;
-    transform: translateY(32px);
-  }
-
-  .call.chat-open .pill {
-    bottom: 10px;
-    padding: 4px;
-  }
-
-  .call.chat-open .pill .icon-btn {
-    width: 42px;
-    height: 42px;
-  }
-
-  .call.chat-open .pill .split-chevron {
-    height: 42px;
-  }
-
-  .call.chat-open .pill .icon-btn.danger {
-    width: 50px;
-  }
-
-  .call.chat-open .notices,
-  .call.chat-open .stats {
-    top: calc(10px + env(safe-area-inset-top));
-  }
-
-  .call.chat-open .menu {
-    bottom: calc(100% + 10px);
+  .pill .reaction-bar.open {
+    transform: none;
   }
 }

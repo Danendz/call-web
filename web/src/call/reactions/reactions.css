@@ -1,24 +1,24 @@
-/* ---- reaction row above the pill ---- */
+/* ---- emoji panel above the pill ---- */
 
 /* Centered over the whole pill, not its button: .react itself isn't positioned */
 .reaction-bar {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 12px);
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
   width: min(360px, calc(100vw - 24px));
-  padding: 6px;
   border: 1px solid var(--glass-border);
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: var(--glass-strong);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   box-shadow: var(--shadow);
+  overflow: hidden;
   opacity: 0;
   visibility: hidden;
   transform: translate(-50%, 8px) scale(0.96);
+  transform-origin: bottom center;
   transition:
     opacity var(--fast) var(--ease),
     transform var(--fast) var(--ease),
@@ -34,24 +34,77 @@
     transform var(--med) var(--ease-spring);
 }
 
+.reaction-bar .quick {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 6px;
+}
+
 .reaction-bar button {
-  min-height: 40px;
+  min-height: 0;
   padding: 0;
   border: none;
-  border-radius: 999px;
   background: transparent;
-  font-size: 24px;
   line-height: 1;
+}
+
+.reaction-bar .quick button {
+  min-height: 40px;
+  border-radius: 999px;
+  font-size: 24px;
   transition: transform var(--fast) var(--ease-spring);
 }
 
-.reaction-bar button:hover {
+.reaction-bar .quick button:hover,
+.emoji-grid button:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.reaction-bar .quick button:hover {
   transform: scale(1.15);
 }
 
-.reaction-bar button:active {
+.reaction-bar .quick button:active,
+.emoji-grid button:active {
   transform: scale(0.85);
+}
+
+.emoji-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.reaction-bar .emoji-tabs button {
+  flex: 1;
+  min-height: 36px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 18px;
+  opacity: 0.55;
+}
+
+.reaction-bar .emoji-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  opacity: 1;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  max-height: min(210px, calc(var(--vv-height, 100dvh) * 0.3));
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.reaction-bar .emoji-grid button {
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  font-size: 22px;
 }
 
 /* ---- flying reactions ---- */

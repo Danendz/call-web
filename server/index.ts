@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import { EMOJI_GROUPS } from "../shared/emoji.js";
 import {
   LANGS,
   MAX_CHAT_LENGTH,
@@ -44,6 +45,8 @@ const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
 // A fast tapper sends a few a second; more than this is a script
 const reactionsPerMember = rateLimit(30, 10_000);
+// The quick reactions and the picker's grid: an allowlist, so a reaction is never free text
+const reactions = new Set<string>([...REACTIONS, ...EMOJI_GROUPS.flatMap((g) => g.emoji)]);
 // Live text is sent a few times a second while speaking
 const livePerMember = rateLimit(80, 10_000);
 // A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
@@ -217,8 +220,8 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
       case "reaction": {
-        const emoji = REACTIONS.find((r) => r === msg.emoji);
-        if (emoji && reactionsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "reaction", emoji });
+        const emoji = msg.emoji;
+        if (typeof emoji === "string" && reactions.has(emoji) && reactionsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "reaction", emoji });
         break;
       }
       case "media": {

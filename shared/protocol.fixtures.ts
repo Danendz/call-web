@@ -4,6 +4,7 @@
 // these honest.
 
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, USERNAME_RE } from "./api.js";
+import { EMOJI_GROUPS } from "./emoji.js";
 import {
   LANGS,
   MAX_CHAT_LENGTH,
@@ -30,6 +31,7 @@ export const constants = {
   ROOM_ID_RE: ROOM_ID_RE.source,
   LANGS,
   REACTIONS,
+  EMOJI: EMOJI_GROUPS.flatMap((g) => g.emoji),
   TRANSCRIBE_SAMPLE_RATE,
   MAX_UTTERANCE_S,
   USERNAME_RE: USERNAME_RE.source,

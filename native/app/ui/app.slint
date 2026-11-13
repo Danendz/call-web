@@ -12,10 +12,9 @@ import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark } from "call/call.slint";
-import { SubtitleLine } from "call/subtitles.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, SubtitleLine, FriendRow, MissedRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, MissedRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -72,7 +71,6 @@ export component AppWindow inherits Window {
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
-    in property <[SubtitleLine]> subtitles;
     // "Live subtitles" in Settings, remembered between launches
     in property <bool> subtitles-on;
     callback set-subtitles-on(bool);
@@ -82,7 +80,7 @@ export component AppWindow inherits Window {
     in property <bool> peer-screenshot;
     in property <[Floater]> floaters;
     in property <[Spark]> sparks;
-    callback react(int);
+    callback react(string);
     in property <string> saved-shot;
     // Counts screenshots that couldn't be saved, so each one shows its toast
     in property <int> shot-failures;
@@ -373,23 +371,19 @@ export component AppWindow inherits Window {
             open-settings => { root.settings-open = true; }
             chat: root.chat;
             others-count: root.others-count;
-            subtitles: root.subtitles;
-            subtitles-on: root.subtitles-on;
             transcribe-on: root.transcribe-on;
             speech-notice: root.speech-notice;
             speech-paused-until: root.speech-paused-until;
             peer-screenshot: root.peer-screenshot;
             floaters: root.floaters;
             sparks: root.sparks;
-            react(i) => { root.react(i); }
+            react(e) => { root.react(e); }
             saved-shot: root.saved-shot;
             shot-failures: root.shot-failures;
             screenshot(feed, rotation) => { root.screenshot(feed, rotation); }
             show-shot => { root.show-shot(); }
             toggle-transcribe => { root.toggle-transcribe(); }
             send-chat(text) => { root.send-chat(text) }
-            // From the whole window, so the on-screen keyboard doesn't flip it
-            stacked: root.width < 900px && root.height > root.width;
             touch: root.touch;
             keyboard-shown: root.virtual-keyboard-size.height > 0;
             pip: root.pip;

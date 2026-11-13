@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
 
-/** Phone held upright: chat opens under the video instead of beside it. Same query as in call.css. */
-export const STACKED_QUERY = "(max-width: 899px) and (orientation: portrait)";
-
-/** Narrow screens, where the pill's menus open as bottom sheets. Same width as call.css's narrow block. */
-export const SHEET_QUERY = "(max-width: 899px)";
+/**
+ * Phones, upright or on their side: the pill becomes a rail down the right edge, its menus open as bottom sheets and
+ * the chat spans the width beside it. Same as call.css's phone block.
+ */
+export const SHEET_QUERY = "(max-width: 899px), (max-height: 500px)";
 
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(

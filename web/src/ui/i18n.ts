@@ -95,7 +95,6 @@ const en = {
   speechUnavailable: "Speech-to-chat isn't available in this browser",
   speechPaused: (at: string) => `Speech-to-chat paused until ${at}: free limit reached`,
 
-  closeChat: "Close chat",
   noMessages: "No messages yet. They disappear when the room closes.",
   spoken: "Spoken",
   tapToListen: "Tap to listen",
@@ -196,7 +195,6 @@ const zh: Strings = {
   speechUnavailable: "此浏览器不支持语音转文字",
   speechPaused: (at) => `语音转文字已暂停至 ${at}：已达到免费额度`,
 
-  closeChat: "关闭聊天",
   noMessages: "还没有消息。房间关闭后消息会消失。",
   spoken: "语音",
   tapToListen: "点击收听",

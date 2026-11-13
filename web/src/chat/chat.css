@@ -1,82 +1,103 @@
-/* Lives in the call grid's "chat" cell; the call layout animates that cell open and shut. */
+/*
+ * Floats over the video in the lower left, its message box level with the pill (under the rail on phones). No
+ * panel: each message is its own see-through bubble, and the list's top fades out, so only the latest few stand out
+ * and the rest is a scroll back. It stays put when the controls hide.
+ */
 .chat {
-  grid-area: chat;
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--surface);
-  visibility: hidden;
-  transition: visibility 0s linear var(--slow);
-}
-
-.call.chat-open .chat {
-  visibility: visible;
-  transition: none;
-}
-
-/* Fixed width, so the text doesn't reflow while the cell is growing */
-.chat-inner {
+  --fade: 48px;
   position: absolute;
-  inset: 0 auto 0 0;
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: var(--chat-bottom);
+  z-index: 4;
   display: flex;
   flex-direction: column;
-  width: var(--chat-w);
-  opacity: 0;
-  transform: translateX(24px);
+  gap: 8px;
+  width: min(360px, calc(100% - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  pointer-events: none;
   transition:
     opacity var(--med) var(--ease),
-    transform var(--slow) var(--ease);
+    transform var(--med) var(--ease),
+    visibility 0s linear var(--med);
 }
 
-.call.chat-open .chat-inner {
-  opacity: 1;
-  transform: none;
+.chat:not(.open) {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
 }
 
-.chat header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 8px 10px 18px;
-  font-weight: 650;
+.chat.open {
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease-spring);
 }
 
+/* The empty band at the top is where scrolled-back lines fade out, so a short list shows whole */
 .messages {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 4px 14px 12px;
+  max-height: calc(var(--vv-height, 100dvh) * 0.4);
+  padding-top: var(--fade);
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade));
+  pointer-events: auto;
+}
+
+.messages::-webkit-scrollbar {
+  display: none;
 }
 
 .messages .empty {
-  margin: auto;
-  max-width: 240px;
+  margin: 0;
+  max-width: 260px;
+  color: rgba(255, 255, 255, 0.75);
   font-size: 13px;
-  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  transition: opacity var(--med) var(--ease);
 }
 
+.call.idle .messages .empty {
+  opacity: 0;
+}
+
+/* Theirs: dark glass on the left. Yours: accent glass on the right. */
 .msg {
   align-self: flex-start;
+  flex: none;
   max-width: 85%;
-  padding: 8px 12px 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--glass-border);
   border-radius: 18px 18px 18px 6px;
-  background: var(--surface-3);
+  background: var(--bubble);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   animation: msg-in var(--med) var(--ease);
   transform-origin: bottom left;
 }
 
 .msg.mine {
   align-self: flex-end;
+  border-color: transparent;
   border-radius: 18px 18px 6px 18px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--bubble-mine);
   transform-origin: bottom right;
+}
+
+/* A reaction, or a run of the same one: the emoji big, the count beside it */
+.msg.reaction {
+  padding: 4px 10px;
+  font-size: 22px;
+  line-height: 1.2;
 }
 
 .msg .spoken {
@@ -85,24 +106,34 @@
   opacity: 0.7;
 }
 
+/* Both texts share one cell; the bubble is as wide as the wider, so the crossfade doesn't jump */
+.msg .swap {
+  display: inline-grid;
+}
+
+.msg .swap > span {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--slow) var(--ease),
+    filter var(--slow) var(--ease);
+}
+
+.msg .final,
+.msg .swap.translated .first {
+  opacity: 0;
+  filter: blur(4px);
+}
+
+.msg .swap.translated .final {
+  opacity: 1;
+  filter: none;
+}
+
 .msg .original {
   display: block;
   margin-top: 3px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
-}
-
-.msg time {
-  display: block;
-  margin-top: 1px;
-  color: var(--muted);
-  font-size: 11px;
-  text-align: right;
-}
-
-.msg.mine time,
-.msg.mine .original {
-  color: rgba(255, 255, 255, 0.72);
 }
 
 @keyframes msg-in {
@@ -112,20 +143,34 @@
   }
 }
 
+/* Fades with the pill, but not while it's being typed in or holds a draft */
 .chat form {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
+  pointer-events: auto;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease);
 }
 
+.call.idle .chat form:not(.drafting):not(:focus-within) {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+/* No font-size here: under 16px (base.css) iOS Safari zooms the page in when the field is focused */
 .chat form input {
   flex: 1;
   min-width: 0;
+  border-color: var(--glass-border);
   border-radius: 999px;
   padding: 0 16px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
 }
 
 .chat button.send {
@@ -142,102 +187,19 @@
 }
 
 .chat button.send:disabled {
-  background: var(--surface-3);
-  color: var(--muted);
-  opacity: 1;
-}
-
-/* ---- emoji picker ---- */
-
-button.emoji-toggle {
-  flex: none;
-  width: 40px;
-  min-height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-}
-
-button.emoji-toggle:hover,
-button.emoji-toggle.active {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Spans the form, above it: .emoji itself isn't positioned */
-.emoji-picker {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: calc(100% + 6px);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  background: var(--glass-strong);
+  background: var(--glass);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  animation: rise var(--med) var(--ease-spring);
-}
-
-.emoji-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 6px 6px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.emoji-tabs button {
-  flex: 1;
-  min-height: 36px;
-  padding: 0;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: transparent;
-  font-size: 18px;
-  opacity: 0.55;
-}
-
-.emoji-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--accent);
+  color: var(--muted);
   opacity: 1;
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-  max-height: 210px;
-  padding: 6px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.emoji-grid button {
-  min-height: 38px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.emoji-grid button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.emoji-grid button:active {
-  transform: scale(0.88);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .emoji-picker {
+  .chat,
+  .msg,
+  .msg .swap > span,
+  .chat form {
+    transition: none;
     animation: none;
   }
 }

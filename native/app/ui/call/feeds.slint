@@ -154,6 +154,10 @@ export component Feeds inherits Rectangle {
     in property <bool> self-cam-on;
     // Room the control pill takes at the bottom of the stage; less while the controls are hidden
     in property <length> pill-space: 96px;
+    // Room the rail takes on the right on a phone: tiles in the bottom right, and on a short screen the top right too,
+    // keep clear of it
+    in property <length> rail-bottom;
+    in property <length> rail-top;
     // Picture-in-picture: the stage's video alone
     in property <bool> only-main;
     // tl, tr, bl or br for each tile, remembered across calls
@@ -201,7 +205,7 @@ export component Feeds inherits Rectangle {
         + (peer-tile && corner-peer == corner-screen ? tile-h(peer-aspect) + gap : 0);
 
     pure function tile-x(corner: string, w: length) -> length {
-        corner == "tl" || corner == "bl" ? gap : root.width - w - gap
+        corner == "tl" || corner == "bl" ? gap : root.width - w - gap - (corner == "br" ? rail-bottom : rail-top)
     }
     pure function tile-y(corner: string, h: length, stack: length) -> length {
         corner == "tl" || corner == "tr" ? gap + stack : root.height - h - pill-space - stack

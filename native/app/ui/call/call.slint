@@ -6,10 +6,9 @@ import { Notice } from "notice.slint";
 import { Feeds } from "feeds.slint";
 import { StatsOverlay, StatsView } from "stats-overlay.slint";
 import { DeviceItem } from "../setup/device-row.slint";
-import { ChatPanel, ChatRow } from "../chat/chat.slint";
+import { ChatOverlay, ChatRow } from "../chat/chat.slint";
 import { Button } from "../components/button.slint";
-import { IconButton } from "../components/icon-button.slint";
-import { Subtitles, SubtitleLine } from "subtitles.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
 import { ReactionsOverlay, Floater, Spark } from "reactions.slint";
 
 export { StatsView, ChatRow, Floater, Spark }
@@ -61,9 +60,6 @@ export component CallScreen inherits Rectangle {
     in property <[ChatRow]> chat;
     // The other person's messages so far; what the chat hasn't shown yet is the unread badge
     in property <int> others-count;
-    in property <[SubtitleLine]> subtitles;
-    // "Live subtitles" in Settings
-    in property <bool> subtitles-on;
     in property <bool> transcribe-on;
     // 0 nothing to say, 1 the server has no speech model, 2 out of quota until speech-paused-until (a local time)
     in property <int> speech-notice;
@@ -71,13 +67,11 @@ export component CallScreen inherits Rectangle {
     in property <bool> peer-screenshot;
     in property <[Floater]> floaters;
     in property <[Spark]> sparks;
-    // Sends the index of the reaction picked in the pill's bar
-    callback react(int);
+    // Sends the emoji picked in the pill's emoji panel
+    callback react(string);
     // Where the last screenshot was saved; a new one shows the toast for a while
     in property <string> saved-shot;
     in property <int> shot-failures;
-    // A phone held upright: the chat opens under the video instead of beside it, like the web's STACKED_QUERY
-    in property <bool> stacked;
     // A touch screen, where the chat doesn't focus its box on opening
     in property <bool> touch;
     in property <bool> keyboard-shown;
@@ -107,14 +101,34 @@ export component CallScreen inherits Rectangle {
     property <int> user-rotation: 0;
     changed connected => { if (!connected) { user-rotation = 0; } }
 
-    // Open from the start on a wide window, like the web's (min-width: 900px)
-    in-out property <bool> chat-open: root.width >= 900px;
+    // Over the video from the start, until hidden with the pill's chat button
+    in-out property <bool> chat-open: true;
     property <int> seen-count;
     property <int> unread: chat-open ? 0 : max(0, others-count - seen-count);
     changed others-count => { if (chat-open) { seen-count = others-count; } }
     changed chat-open => { if (chat-open) { seen-count = others-count; } }
-    property <length> chat-width: min(360px, root.width * 0.42);
-    property <length> chat-height: root.height * 0.58;
+    // A phone, upright or on its side, like the web's SHEET_QUERY: the pill is a rail on the right above the chat's
+    // message box, which spans the width, and hang up is alone in the top corner
+    property <bool> rail: root.width < 900px || root.height <= 500px;
+    // Room the pill takes at the bottom of the stage; the tiles sit above it
+    property <length> pill-space: root.rail ? 16px : root.idle ? 20px : 96px;
+    // The chat's message box above the bottom edge
+    property <length> chat-bottom: 30px;
+
+    // Tiles leave the corners the chat covers for the top ones, keeping the corner they were put in for when it's
+    // hidden: the bottom left, and on a phone, where it spans the width, the bottom right too
+    pure function clear-of-chat(corner: string) -> string {
+        if (!root.chat-open) {
+            return corner;
+        }
+        if (corner == "bl") {
+            return "tl";
+        }
+        if (corner == "br" && root.rail) {
+            return "tr";
+        }
+        return corner;
+    }
 
     // The controls fade off the video after a few seconds without input, like the web's useAutoHide; never while
     // waiting, with the pointer on the pill, or with the menu just opened
@@ -176,30 +190,7 @@ export component CallScreen inherits Rectangle {
     opacity: shown ? 1 : 0;
     animate opacity { duration: Theme.slow; easing: Theme.ease; }
 
-    chat := ChatPanel {
-        x: root.stacked ? 0 : root.width - self.width;
-        y: root.stacked ? root.height - self.height : 0;
-        width: root.stacked ? root.width : root.chat-open ? root.chat-width : 0;
-        height: !root.stacked ? root.height : root.chat-open ? root.chat-height : 0;
-        animate width, height { duration: Theme.slow; easing: Theme.ease; }
-        messages: root.chat;
-        open: root.chat-open;
-        stacked: root.stacked;
-        visible: !root.pip;
-        focus-on-open: !root.touch;
-        keyboard-shown: root.keyboard-shown;
-        can-send: !root.reconnecting && !root.starting;
-        send(text) => { root.send-chat(text) }
-        close => { root.chat-open = false; }
-    }
-
-    // Everything but the chat; it narrows, or shortens when stacked, as the chat opens
     stage := Rectangle {
-        x: 0;
-        y: 0;
-        width: root.width - (root.chat-open && !root.pip && !root.stacked ? root.chat-width : 0);
-        height: root.height - (root.chat-open && !root.pip && root.stacked ? root.chat-height : 0);
-        animate width, height { duration: Theme.slow; easing: Theme.ease; }
         clip: true;
 
         // Wakes the controls on any movement over the stage; under everything, so tiles get their own presses. A tap
@@ -223,11 +214,14 @@ export component CallScreen inherits Rectangle {
             peer-cam-on: root.peer-cam-on;
             peer-speaker-off: root.peer-speaker-off;
             self-cam-on: root.cam-on && root.self-video.width > 0;
-            pill-space: root.idle ? 20px : 96px;
+            pill-space: root.pill-space;
+            // Clear of the rail in the bottom right and of hang up in the top right
+            rail-bottom: root.rail ? 64px : 0;
+            rail-top: root.rail ? 64px : 0;
             only-main: root.pip;
-            corner-self: root.corner-self;
-            corner-peer: root.corner-peer;
-            corner-screen: root.corner-screen;
+            corner-self: root.clear-of-chat(root.corner-self);
+            corner-peer: root.clear-of-chat(root.corner-peer);
+            corner-screen: root.clear-of-chat(root.corner-screen);
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
             touched => {
                 root.wake();
@@ -276,6 +270,9 @@ export component CallScreen inherits Rectangle {
         VerticalLayout {
             y: 40px;
             height: self.preferred-height;
+            // Clear of the rail's hang up, on both sides to stay centered
+            padding-left: root.rail ? 70px : 0;
+            padding-right: self.padding-left;
             visible: !root.pip;
             alignment: start;
             spacing: 6px;
@@ -374,17 +371,6 @@ export component CallScreen inherits Rectangle {
             }
         }
 
-        Subtitles {
-            x: (parent.width - self.width) / 2;
-            y: parent.height - self.height - (root.idle ? 28px : 104px);
-            animate y { duration: Theme.med; easing: Theme.ease; }
-            width: min(parent.width * 0.84, 720px);
-            line-width: self.width;
-            visible: root.subtitles-on && connected && !root.pip;
-            lines: root.subtitles;
-            chat-open: root.chat-open;
-        }
-
         StatsOverlay {
             x: 14px;
             y: 40px;
@@ -398,20 +384,43 @@ export component CallScreen inherits Rectangle {
             set-force-relay(relay) => { root.set-force-relay(relay); }
         }
 
+        // Its message box level with the middle of the pill, or under the rail; it stays put when the controls hide
+        chat := ChatOverlay {
+            x: 16px;
+            y: parent.height - self.height - root.chat-bottom;
+            width: root.rail ? parent.width - 32px : min(360px, parent.width - 32px);
+            list-clear: root.rail ? 56px : 0;
+            max-list: parent.height * 0.4;
+            messages: root.chat;
+            open: root.chat-open && !root.pip;
+            idle: root.idle;
+            focus-on-open: !root.touch;
+            keyboard-shown: root.keyboard-shown;
+            can-send: !root.reconnecting && !root.starting;
+            send(text) => { root.send-chat(text) }
+        }
+
         ControlPill {
-            x: (parent.width - self.width) / 2;
-            // Off the video while idle, like the web's .call.idle .pill; tucked lower and smaller over the stacked chat
-            y: parent.height - self.height - (root.stacked && root.chat-open ? 10px : 20px) + (root.idle ? 24px : 0);
-            button-size: root.stacked && root.chat-open ? 42px : root.width < 900px ? 46px : 48px;
-            sheet: root.touch || root.width < 900px;
+            // Centered, unless that would put it over the chat's message box: then it starts past the box's right edge.
+            // Off the video while idle, like the web's .call.idle .pill: down, or off to the right on the rail.
+            x: root.rail ? parent.width - self.width - 12px + (root.idle ? 24px : 0)
+                : root.chat-open && !root.pip ? max((parent.width - self.width) / 2, 392px)
+                : (parent.width - self.width) / 2;
+            // On the rail: just above the message box (44px), or near the edge while the chat is hidden
+            y: !root.rail ? parent.height - self.height - 20px + (root.idle ? 24px : 0)
+                : root.chat-open ? parent.height - self.height - root.chat-bottom - 54px
+                : parent.height - self.height - 16px;
+            rail: root.rail;
+            button-size: root.rail ? 46px : 48px;
+            sheet: root.touch || root.rail;
             area-x: root.absolute-position.x;
             area-y: root.absolute-position.y;
             area-width: root.width;
             area-height: root.height;
-            gap: root.width < 900px ? 6px : 10px;
+            gap: root.rail ? 6px : 10px;
             opacity: root.idle ? 0 : 1;
             visible: !root.pip;
-            animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+            animate x, y, opacity { duration: Theme.med; easing: Theme.ease; }
             hovered(h) => { root.hovering-pill = h; root.wake(); }
             mic-on: root.mic-on;
             has-mic: root.has-mic;
@@ -448,7 +457,7 @@ export component CallScreen inherits Rectangle {
             toggle-share => { root.toggle-share(); }
             transcribe-on: root.transcribe-on;
             can-react: root.connected;
-            react(i) => { root.react(i); }
+            react(e) => { root.react(e); }
             chat-open: root.chat-open;
             unread: root.unread;
             toggle-transcribe => { root.toggle-transcribe(); }
@@ -460,6 +469,23 @@ export component CallScreen inherits Rectangle {
             rotate => { root.user-rotation = Math.mod(root.user-rotation + 90, 360); }
             open-settings => { root.open-settings(); }
             hang-up => { root.hang-up(); }
+        }
+
+        // The rail's hang up, alone in the top corner where it can't be hit going for the send button
+        IconButton {
+            x: parent.width - self.width - 12px + (root.idle ? 24px : 0);
+            y: 40px;
+            size: 46px;
+            icon: Icons.phone-off;
+            label: @tr("Hang up");
+            kind: IconButtonKind.danger;
+            visible: root.rail && !root.pip;
+            opacity: root.idle ? 0 : 1;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+            animate x, opacity { duration: Theme.med; easing: Theme.ease; }
+            clicked => { root.hang-up(); }
         }
     }
 
