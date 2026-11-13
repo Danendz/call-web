@@ -69,6 +69,9 @@ export component AppWindow inherits Window {
     // "Noise suppression" in Settings, remembered between launches
     in property <bool> noise-suppression;
     callback set-noise-suppression(bool);
+    // "modern" or "opengl"; empty on Android, which has no choice
+    in property <string> renderer;
+    callback set-renderer(string);
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
@@ -464,6 +467,7 @@ export component AppWindow inherits Window {
             show-stats: root.show-stats;
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
+            renderer: root.renderer;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;
@@ -483,6 +487,7 @@ export component AppWindow inherits Window {
             set-show-stats(on) => { root.set-show-stats(on); }
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
+            set-renderer(renderer) => { root.set-renderer(renderer); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }
             cancel-download => { root.cancel-model-download(); }

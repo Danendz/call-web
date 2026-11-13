@@ -28,6 +28,10 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "backend-winit",
     # Only for the window attributes hook in window.rs; it's why slint is pinned exactly
     "unstable-winit-030",
+    # Skia over wgpu (Metal, D3D12, Vulkan), OpenGL kept as the fallback; see window.rs. Android stays on OpenGL
+    # until it's tested on a phone, since its backend can't pick at runtime
+    "renderer-skia",
+    "unstable-wgpu-30",
 ] }
 velopack = "=1.2.161"
 

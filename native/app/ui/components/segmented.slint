@@ -1,0 +1,49 @@
+import { Theme } from "../theme.slint";
+
+export struct SegmentOption {
+    id: string,
+    name: string,
+}
+
+// Two options side by side, the picked one on a sliding highlight.
+export component Segmented inherits Rectangle {
+    // Exactly two
+    in property <[SegmentOption]> options;
+    in property <string> value;
+    callback picked(string);
+
+    height: 36px;
+    width: 180px;
+    border-radius: self.height / 2;
+    background: Theme.surface-3;
+
+    Rectangle {
+        y: 3px;
+        x: root.value == root.options[0].id ? 3px : parent.width / 2;
+        width: parent.width / 2 - 3px;
+        height: parent.height - 6px;
+        border-radius: self.height / 2;
+        background: Theme.accent;
+        animate x { duration: Theme.med; easing: Theme.ease-spring; }
+    }
+
+    HorizontalLayout {
+        for option in root.options: TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(option.id); }
+            accessible-role: button;
+            accessible-label: option.name;
+            accessible-checked: root.value == option.id;
+            accessible-action-default => { root.picked(option.id); }
+            Text {
+                text: option.name;
+                color: root.value == option.id ? #fff : Theme.muted;
+                font-size: Theme.font-size-small;
+                font-weight: 550;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                animate color { duration: Theme.fast; easing: Theme.ease; }
+            }
+        }
+    }
+}

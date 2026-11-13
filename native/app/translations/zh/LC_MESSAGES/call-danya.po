@@ -562,3 +562,12 @@ msgstr "在本机上翻译实时字幕？"
 
 msgid "What the other person says shows in your language as they say it. It needs a one-time {} download; you can also do it later in Settings."
 msgstr "对方说的话会在说出时就以你的语言显示。需要一次性下载 {}，也可以稍后在设置中下载。"
+
+msgid "Graphics"
+msgstr "图形"
+
+msgid "Applies after restart."
+msgstr "重启后生效。"
+
+msgid "Modern"
+msgstr "现代"
