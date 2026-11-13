@@ -97,6 +97,7 @@ const en = {
   closeChat: "Close chat",
   noMessages: "No messages yet. They disappear when the room closes.",
   spoken: "Spoken",
+  tapToListen: "Tap to listen",
   message: "Message",
   send: "Send",
 };
@@ -195,6 +196,7 @@ const zh: Strings = {
   closeChat: "关闭聊天",
   noMessages: "还没有消息。房间关闭后消息会消失。",
   spoken: "语音",
+  tapToListen: "点击收听",
   message: "消息",
   send: "发送",
 };

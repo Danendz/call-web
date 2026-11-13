@@ -6,6 +6,7 @@ import { useSubtitles } from "../settings/subtitles";
 import { TranslationOffer } from "../translate/TranslationOffer";
 import { CopyLink } from "../ui/CopyLink";
 import { useT, type Strings } from "../ui/i18n";
+import { useSoundBlocked } from "../ui/Video";
 import "./call.css";
 import { CallTimer } from "./CallTimer";
 import { ControlPill } from "./ControlPill";
@@ -27,6 +28,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   const showStats = useShowStats();
   const subtitles = useSubtitles();
+  const soundBlocked = useSoundBlocked();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   // The feed the user tapped onto the stage; null for the default (their screen, else them)
@@ -156,6 +158,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         <div className="notices">
           {connected && state.callStartedAt !== null && <CallTimer startedAt={state.callStartedAt} />}
           <Fade className="notice" text={banner} />
+          <Fade className="notice" text={soundBlocked ? t.tapToListen : null} />
           <Fade className="notice muted" text={state.peerScreenshot ? t.peerScreenshot : null} />
           <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
           {connected && <TranslationOffer lang={state.lang} />}

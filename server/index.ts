@@ -37,6 +37,8 @@ const socketsPerUser = concurrencyLimit(10);
 // Per member: typing fast is a few messages in 10 s; a renegotiation sends a few dozen ICE candidates.
 // Each chat message is translated by a paid model, so an anonymous room gets half.
 const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(10, 10_000), user: rateLimit(20, 10_000) };
+// Speech to chat posts a line at every pause, so fast talk outruns the typing budget; still capped for the translation.
+const spokenPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(30, 10_000), user: rateLimit(60, 10_000) };
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
 // Live text is sent a few times a second while speaking
@@ -183,7 +185,7 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         if (signalsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "signal", payload: msg.payload });
         break;
       case "chat": {
-        if (!chatPerMember[tier](clientId)) break;
+        if (!(msg.spoken === true ? spokenPerMember : chatPerMember)[tier](clientId)) break;
         const text = typeof msg.text === "string" ? msg.text.trim() : "";
         const liveId = typeof msg.liveId === "string" && msg.liveId.length <= MAX_LIVE_ID_LENGTH ? msg.liveId : undefined;
         if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true, liveId);
