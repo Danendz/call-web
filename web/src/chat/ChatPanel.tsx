@@ -4,6 +4,7 @@ import { MAX_CHAT_LENGTH, type ChatMessage, type Lang } from "../../../shared/pr
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import "./chat.css";
+import { EmojiPicker } from "./EmojiPicker";
 import { readable } from "./readable";
 
 interface Props {
@@ -31,6 +32,18 @@ export function ChatPanel({ open, messages, myId, lang, focusOnOpen, onSend, onC
   useEffect(() => {
     if (open && focusOnOpen) inputRef.current?.focus({ preventScroll: true });
   }, [open, focusOnOpen]);
+
+  // At the caret while typing, else at the end
+  const insert = (emoji: string) => {
+    const input = inputRef.current;
+    const typing = input !== null && document.activeElement === input;
+    const start = typing ? (input.selectionStart ?? draft.length) : draft.length;
+    const end = typing ? (input.selectionEnd ?? start) : start;
+    const next = draft.slice(0, start) + emoji + draft.slice(end);
+    if (next.length > MAX_CHAT_LENGTH) return;
+    setDraft(next);
+    if (typing) requestAnimationFrame(() => input.setSelectionRange(start + emoji.length, start + emoji.length));
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +77,7 @@ export function ChatPanel({ open, messages, myId, lang, focusOnOpen, onSend, onC
           })}
         </div>
         <form onSubmit={submit}>
+          <EmojiPicker onPick={insert} />
           <input
             ref={inputRef}
             value={draft}

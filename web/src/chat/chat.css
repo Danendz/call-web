@@ -113,6 +113,7 @@
 }
 
 .chat form {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -144,4 +145,99 @@
   background: var(--surface-3);
   color: var(--muted);
   opacity: 1;
+}
+
+/* ---- emoji picker ---- */
+
+button.emoji-toggle {
+  flex: none;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+
+button.emoji-toggle:hover,
+button.emoji-toggle.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Spans the form, above it: .emoji itself isn't positioned */
+.emoji-picker {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: rise var(--med) var(--ease-spring);
+}
+
+.emoji-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.emoji-tabs button {
+  flex: 1;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  font-size: 18px;
+  opacity: 0.55;
+}
+
+.emoji-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  opacity: 1;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  max-height: 210px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.emoji-grid button {
+  min-height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.emoji-grid button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.emoji-grid button:active {
+  transform: scale(0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emoji-picker {
+    animation: none;
+  }
 }
