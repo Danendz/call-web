@@ -26,14 +26,14 @@ const EFFECT: Duration = Duration::from_millis(3800);
 const CONFETTI: [u32; 6] = [0xff5d73, 0xffc94d, 0x5dd39e, 0x5aa9ff, 0xb57bff, 0xff9a4d];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Combo {
+pub struct Combo {
     emoji: Reaction,
-    count: u32,
+    pub count: u32,
     at: Instant,
 }
 
 /// One side's run of the same reaction, after another one at `at`.
-fn next_combo(prev: Option<Combo>, emoji: Reaction, at: Instant) -> Combo {
+pub fn next_combo(prev: Option<Combo>, emoji: Reaction, at: Instant) -> Combo {
     let continues = prev.filter(|p| p.emoji == emoji && at.saturating_duration_since(p.at) <= COMBO_GAP);
     Combo { emoji, count: continues.map_or(1, |p| p.count + 1), at }
 }
@@ -46,10 +46,10 @@ enum Effect {
 }
 
 fn big_effect(emoji: Reaction) -> Option<Effect> {
-    match emoji {
-        Reaction::Heart => Some(Effect::Hearts),
-        Reaction::Party => Some(Effect::Confetti),
-        Reaction::Fire => Some(Effect::Flames),
+    match emoji.emoji() {
+        "❤️" => Some(Effect::Hearts),
+        "🎉" => Some(Effect::Confetti),
+        "🔥" => Some(Effect::Flames),
         _ => None,
     }
 }
@@ -209,23 +209,26 @@ impl Rng {
 mod tests {
     use super::*;
 
+    fn r(emoji: &str) -> Reaction {
+        Reaction::parse(emoji).unwrap()
+    }
+
     #[test]
     fn the_same_reaction_in_quick_succession_counts_up() {
         let t = Instant::now();
-        let a = next_combo(None, Reaction::Heart, t);
-        let b = next_combo(Some(a), Reaction::Heart, t + Duration::from_millis(500));
-        let c = next_combo(Some(b), Reaction::Heart, t + Duration::from_millis(1200));
+        let a = next_combo(None, r("❤️"), t);
+        let b = next_combo(Some(a), r("❤️"), t + Duration::from_millis(500));
+        let c = next_combo(Some(b), r("❤️"), t + Duration::from_millis(1200));
         assert_eq!((a.count, b.count, c.count), (1, 2, 3));
     }
 
     #[test]
     fn a_pause_or_another_reaction_starts_over() {
         let t = Instant::now();
-        let a = next_combo(None, Reaction::Heart, t);
-        let b = next_combo(Some(a), Reaction::Fire, t + Duration::from_millis(100));
+        let a = next_combo(None, r("❤️"), t);
+        let b = next_combo(Some(a), r("🔥"), t + Duration::from_millis(100));
         assert_eq!(b.count, 1);
-        let c =
-            next_combo(Some(b), Reaction::Fire, t + Duration::from_millis(100) + COMBO_GAP + Duration::from_millis(1));
+        let c = next_combo(Some(b), r("🔥"), t + Duration::from_millis(100) + COMBO_GAP + Duration::from_millis(1));
         assert_eq!(c.count, 1);
     }
 }

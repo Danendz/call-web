@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+import { EmojiGrid } from "emoji.slint";
 
 // One reaction flying up, like the web's .floater. `x` is a share of the width; `count` how many of the same in a
 // row it ends, shown from 2.
@@ -29,9 +30,8 @@ export struct Spark {
     burns: bool,
 }
 
-// The reactions in the bar, the same as REACTIONS in shared/protocol.ts and `Reaction::ALL`, in their order: the bar
-// sends the index
-export global ReactionChoices {
+// The quick reactions, first in the emoji panel: the same as REACTIONS in shared/protocol.ts and crates/protocol
+global ReactionChoices {
     out property <[string]> emoji: ["❤️", "😂", "👍", "😮", "😢", "🔥", "🎉", "👏"];
 }
 
@@ -149,18 +149,22 @@ export component ReactionsOverlay inherits Rectangle {
     }
 }
 
-// The pill's reaction button and the row of reactions above the pill, like the web's ReactionBar. The row stays open
-// for tapping again and again; a press outside it closes it.
+// The pill's emoji button and its panel, like the web's ReactionBar: the quick reactions, then the grid of the rest.
+// Each tap sends one, which flies over the video and shows in the chat. Stays open for tapping again and again; a
+// press outside it closes it.
 export component ReactionMenu inherits IconButton {
-    // Sends the picked one's index in ReactionChoices
-    callback react(int);
-    // The call screen's place in the window, which the popup covers, and the pill's middle and top in it
+    callback react(string);
+    // The call screen's place in the window, which the popup covers
     in property <length> area-x;
     in property <length> area-y;
     in property <length> area-width;
     in property <length> area-height;
+    // Above the pill, centered on its middle; or, on the rail, to its left from its bottom
+    in property <bool> rail;
     in property <length> anchor-center;
     in property <length> anchor-top;
+    in property <length> anchor-left;
+    in property <length> anchor-bottom;
     out property <bool> open: menu.is-open;
 
     icon: Icons.smile-plus;
@@ -177,45 +181,57 @@ export component ReactionMenu inherits IconButton {
 
         TouchArea { clicked => { menu.close(); } }
 
-        bar := Rectangle {
+        panel := Rectangle {
             property <bool> shown: false;
             init => { shown = true; }
-            width: min(360px, root.area-width - 24px);
-            height: 52px;
-            x: max(12px, min(root.area-width - self.width - 12px, root.anchor-center - self.width / 2));
-            y: root.anchor-top - self.height - 12px + (shown ? 0 : 8px);
+            width: root.rail ? min(340px, root.anchor-left - 20px) : min(360px, root.area-width - 24px);
+            height: content.preferred-height;
+            x: root.rail ? root.anchor-left - self.width - 8px + (shown ? 0 : 8px)
+                : max(12px, min(root.area-width - self.width - 12px, root.anchor-center - self.width / 2));
+            y: (root.rail ? root.anchor-bottom - self.height : root.anchor-top - self.height - 12px) + (shown || root.rail ? 0 : 8px);
             opacity: shown ? 1 : 0;
-            animate y, opacity { duration: Theme.med; easing: Theme.ease-spring; }
-            border-radius: self.height / 2;
+            animate x, y, opacity { duration: Theme.med; easing: Theme.ease-spring; }
+            border-radius: Theme.radius;
             border-width: 1px;
             border-color: Theme.glass-border;
             background: Theme.glass;
             drop-shadow-blur: 30px;
             drop-shadow-offset-y: 10px;
             drop-shadow-color: Theme.shadow;
-            // Presses between the buttons stay in the bar
+            clip: true;
+            accessible-role: groupbox;
+            accessible-label: @tr("React");
+            // Presses between the buttons stay in the panel
             TouchArea { }
 
-            HorizontalLayout {
-                padding: 6px;
-                spacing: 2px;
-                for emoji[i] in ReactionChoices.emoji: Rectangle {
-                    horizontal-stretch: 1;
-                    border-radius: self.height / 2;
-                    background: touch.has-hover ? Theme.menu-hover : transparent;
-                    accessible-role: button;
-                    accessible-label: emoji;
-                    accessible-action-default => { root.react(i); }
-                    Text {
-                        text: emoji;
-                        font-size: 24px;
-                        transform-scale: touch.pressed ? 0.85 : touch.has-hover ? 1.15 : 1;
-                        animate transform-scale { duration: Theme.fast; easing: Theme.ease-spring; }
+            content := VerticalLayout {
+                HorizontalLayout {
+                    padding: 6px;
+                    spacing: 2px;
+                    height: 52px;
+                    for emoji in ReactionChoices.emoji: Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: self.height / 2;
+                        background: touch.has-hover ? Theme.menu-hover : transparent;
+                        accessible-role: button;
+                        accessible-label: emoji;
+                        accessible-action-default => { root.react(emoji); }
+                        Text {
+                            text: emoji;
+                            font-size: 24px;
+                            transform-scale: touch.pressed ? 0.85 : touch.has-hover ? 1.15 : 1;
+                            animate transform-scale { duration: Theme.fast; easing: Theme.ease-spring; }
+                        }
+                        touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.react(emoji); }
+                        }
                     }
-                    touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.react(i); }
-                    }
+                }
+                Rectangle { height: 1px; background: Theme.border; }
+                EmojiGrid {
+                    max-grid: min(210px, root.area-height * 0.3);
+                    picked(e) => { root.react(e); }
                 }
             }
         }

@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
+import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import type { CallController, CallState } from "./controller";
 import { DeviceMenu, type MenuSection } from "./DeviceMenu";
 import type { DeviceOption } from "./media";
@@ -26,7 +27,10 @@ import { ReactionBar } from "./reactions/ReactionBar";
 
 type OpenMenu = "mic" | "cam" | "react" | "more" | null;
 
-/** Floating call controls. The mic and camera chevrons hold device choices; the rest goes in ⋯. */
+/**
+ * Floating call controls. The mic and camera chevrons hold device choices; the rest goes in ⋯. On phones it's a rail
+ * on the right with the chat toggle in ⋯, and hang-up sits alone in the top corner, away from the chat's send button.
+ */
 export function ControlPill({
   controller,
   state,
@@ -57,6 +61,7 @@ export function ControlPill({
   onHover: (hovering: boolean) => void;
 }) {
   const t = useT();
+  const rail = useMediaQuery(SHEET_QUERY);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const menu = (which: Exclude<OpenMenu, null>) => ({
     open: openMenu === which,
@@ -102,7 +107,9 @@ export function ControlPill({
     onSelect: () => controller.toggleTranscribe(),
   };
 
+  const chat: MenuItem = { label: t.chat, icon: <MessageSquare size={18} />, checked: chatOpen, onSelect: onToggleChat };
   const items: MenuItem[] = [
+    ...(rail ? [chat] : []),
     ...(canShare
       ? [
           {
@@ -137,54 +144,57 @@ export function ControlPill({
     </IconButton>
   );
 
+  const hangUp = (
+    <IconButton label={t.hangUp} variant="danger" className="hang-up" onClick={() => controller.hangUp()}>
+      <PhoneOff size={20} />
+    </IconButton>
+  );
+
   return (
-    <div className="pill" onPointerEnter={() => onHover(true)} onPointerLeave={() => onHover(false)}>
-      <DeviceMenu label={t.micOptions} sections={micSections} footer={[speech]} {...menu("mic")}>
-        <IconButton
-          label={micOn ? t.micOff : t.micOn}
-          variant={micGranted && !micOn ? "off" : null}
-          disabled={!micGranted}
-          mark={
-            state.switching.audio ? <Spinner size={11} />
-            : state.speakerOff ? <VolumeOff size={11} />
-            : state.transcribeOn ? <Captions size={11} />
-            : null
-          }
-          onClick={() => controller.toggleMic()}
-        >
-          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-        </IconButton>
-      </DeviceMenu>
-      {camGranted && state.cams.length > 1 ? (
-        <DeviceMenu
-          label={t.camOptions}
-          sections={[{ title: t.camera, items: devices(state.cams, state.camDeviceId, state.switching.video, (id) => void controller.selectDevice("video", id)) }]}
-          {...menu("cam")}
-        >
-          {camButton}
+    <>
+      <div className="pill" onPointerEnter={() => onHover(true)} onPointerLeave={() => onHover(false)}>
+        <DeviceMenu label={t.micOptions} sections={micSections} footer={[speech]} {...menu("mic")}>
+          <IconButton
+            label={micOn ? t.micOff : t.micOn}
+            variant={micGranted && !micOn ? "off" : null}
+            disabled={!micGranted}
+            mark={
+              state.switching.audio ? <Spinner size={11} />
+              : state.speakerOff ? <VolumeOff size={11} />
+              : state.transcribeOn ? <Captions size={11} />
+              : null
+            }
+            onClick={() => controller.toggleMic()}
+          >
+            {micOn ? <Mic size={20} /> : <MicOff size={20} />}
+          </IconButton>
         </DeviceMenu>
-      ) : (
-        camButton
-      )}
-      <ReactionBar
-        disabled={!canReact}
-        onReact={(emoji) => controller.sendReaction(emoji)}
-        {...menu("react")}
-        open={canReact && openMenu === "react"}
-      />
-      <IconButton
-        label={t.chat}
-        variant={chatOpen ? "active" : null}
-        pressed={chatOpen}
-        badge={chatOpen ? 0 : unread}
-        onClick={onToggleChat}
-      >
-        <MessageSquare size={20} />
-      </IconButton>
-      <MoreMenu items={items} {...menu("more")} />
-      <IconButton label={t.hangUp} variant="danger" className="hang-up" onClick={() => controller.hangUp()}>
-        <PhoneOff size={20} />
-      </IconButton>
-    </div>
+        {camGranted && state.cams.length > 1 ? (
+          <DeviceMenu
+            label={t.camOptions}
+            sections={[{ title: t.camera, items: devices(state.cams, state.camDeviceId, state.switching.video, (id) => void controller.selectDevice("video", id)) }]}
+            {...menu("cam")}
+          >
+            {camButton}
+          </DeviceMenu>
+        ) : (
+          camButton
+        )}
+        <ReactionBar
+          disabled={!canReact}
+          onReact={(emoji) => controller.sendReaction(emoji)}
+          {...menu("react")}
+          open={canReact && openMenu === "react"}
+        />
+        {!rail && (
+          <IconButton label={t.chat} variant={chatOpen ? "active" : null} pressed={chatOpen} badge={chatOpen ? 0 : unread} onClick={onToggleChat}>
+            <MessageSquare size={20} />
+          </IconButton>
+        )}
+        <MoreMenu items={items} badge={rail && !chatOpen ? unread : 0} {...menu("more")} />
+        {!rail && hangUp}
+      </div>
+      {rail && hangUp}
+    </>
   );
 }

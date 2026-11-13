@@ -7,8 +7,9 @@ import { DeviceMenu } from "device-menu.slint";
 import { MenuHead, MenuItem } from "menu-panel.slint";
 import { ReactionMenu } from "reactions.slint";
 
-// Floating call controls at the bottom of the stage, like the web's ControlPill. The mic and camera chevrons hold
-// device choices, and speech to chat; the rest goes in ⋯.
+// Floating call controls at the bottom of the stage, like the web's ControlPill, or on a phone a rail on the right.
+// The mic and camera chevrons hold device choices, and speech to chat; the rest goes in ⋯. On the rail the chat toggle
+// is in ⋯ too, and hang up isn't here: the call screen puts it alone in the top corner, away from the send button.
 export component ControlPill inherits Rectangle {
     in property <bool> mic-on;
     in property <bool> has-mic;
@@ -28,7 +29,9 @@ export component ControlPill inherits Rectangle {
     in property <bool> can-rotate;
     in property <bool> transcribe-on;
     in property <bool> can-react;
-    callback react(int);
+    callback react(string);
+    // A column on the right, the chevrons as tabs on its left, like the web's phone layout
+    in property <bool> rail;
     in property <bool> chat-open;
     in property <int> unread;
     in property <bool> can-screenshot;
@@ -60,9 +63,15 @@ export component ControlPill inherits Rectangle {
     callback open-settings();
     callback hang-up();
 
-    width: row.preferred-width;
-    height: row.preferred-height;
-    border-radius: self.height / 2;
+    // Laid out by hand, since it turns from a row into a column
+    property <length> pad: root.rail ? 6px : root.gap < 10px ? 4px : 8px;
+    // The web's extra margin before hang up
+    property <length> before-hang-up: 6px;
+    pure function after(prev-x: length, prev-w: length) -> length { prev-x + prev-w + root.gap }
+
+    width: root.rail ? root.button-size + 2 * root.pad : hang-up-button.x + hang-up-button.width + root.pad;
+    height: root.rail ? more.y + more.height + root.pad : root.button-size + 2 * root.pad;
+    border-radius: min(self.width, self.height) / 2;
     border-width: 1px;
     border-color: Theme.glass-border;
     background: Theme.glass;
@@ -75,131 +84,146 @@ export component ControlPill inherits Rectangle {
     changed busy => { root.hovered(self.busy); }
     hover := TouchArea { }
 
-    row := HorizontalLayout {
-        padding: root.gap < 10px ? 4px : 8px;
-        // The web's extra margin before hang up
-        spacing: root.gap + 6px;
+    mic := DeviceMenu {
+        x: root.pad;
+        y: root.pad;
+        tab: root.rail;
+        size: root.button-size;
+        icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
+        label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
+        kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
+        enabled: has-mic;
+        // A muted speaker matters more than speech to chat
+        mark: speaker-off ? Icons.volume-off : transcribe-on ? Icons.captions : @image-url("");
+        clicked => { root.toggle-mic(); }
+        menu-label: @tr("Microphone and speaker");
+        footer-text: @tr("Speech to chat");
+        footer-icon: Icons.captions;
+        footer-checked: root.transcribe-on;
+        footer-enabled: root.has-mic;
+        footer-activated => { root.toggle-transcribe(); }
+        sheet: root.sheet;
+        area-x: root.area-x;
+        area-y: root.area-y;
+        area-width: root.area-width;
+        area-height: root.area-height;
 
-        HorizontalLayout {
-            spacing: root.gap;
-            mic := DeviceMenu {
-                size: root.button-size;
-                icon: mic-on && has-mic ? Icons.mic : Icons.mic-off;
-                label: mic-on ? @tr("Turn off microphone") : @tr("Turn on microphone");
-                kind: has-mic && !mic-on ? IconButtonKind.off : IconButtonKind.normal;
-                enabled: has-mic;
-                // A muted speaker matters more than speech to chat
-                mark: speaker-off ? Icons.volume-off : transcribe-on ? Icons.captions : @image-url("");
-                clicked => { root.toggle-mic(); }
-                menu-label: @tr("Microphone and speaker");
-                footer-text: @tr("Speech to chat");
-                footer-icon: Icons.captions;
-                footer-checked: root.transcribe-on;
-                footer-enabled: root.has-mic;
-                footer-activated => { root.toggle-transcribe(); }
-                sheet: root.sheet;
-                area-x: root.area-x;
-                area-y: root.area-y;
-                area-width: root.area-width;
-                area-height: root.area-height;
-
-                if root.mics.length > 0: MenuHead { text: @tr("Microphone").to-uppercase(); }
-                for m in root.mics: MenuItem {
-                    text: DeviceName.of(m.label, @tr("Microphone"));
-                    checked: m.id == root.mic-id;
-                    activated => { root.pick-mic(m.id); }
-                }
-                MenuHead {
-                    text: @tr("Speaker").to-uppercase();
-                    toggle-text: @tr("Mute speaker");
-                    toggle-icon: Icons.volume-off;
-                    toggle-on: root.speaker-off;
-                    toggled => { root.toggle-speaker(); }
-                }
-                for s in root.speakers: MenuItem {
-                    text: DeviceName.of(s.label, @tr("Speaker"));
-                    checked: s.id == root.speaker-id;
-                    activated => { root.pick-speaker(s.id); }
-                }
-                // Where a phone plays the call, its mic coming along: "speaker", "earpiece", "bluetooth", "headset"; none
-                // on desktop
-                for id in root.outputs: MenuItem {
-                    icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone
-                        : id == "headset" ? Icons.headphones : Icons.volume-2;
-                    text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece")
-                        : id == "headset" ? @tr("Headset") : @tr("Speaker");
-                    checked: id == root.output;
-                    activated => { root.pick-output(id); }
-                }
-            }
-            cam := DeviceMenu {
-                size: root.button-size;
-                icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
-                label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
-                kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
-                enabled: cam-granted;
-                clicked => { root.toggle-cam(); }
-                has-menu: root.cam-granted && root.cams.length > 1;
-                menu-label: @tr("Choose camera");
-                sheet: root.sheet;
-                area-x: root.area-x;
-                area-y: root.area-y;
-                area-width: root.area-width;
-                area-height: root.area-height;
-
-                MenuHead { text: @tr("Camera").to-uppercase(); }
-                for c in root.cams: MenuItem {
-                    text: DeviceName.of(c.label, @tr("Camera"));
-                    checked: c.id == root.cam-id;
-                    activated => { root.pick-cam(c.id); }
-                }
-            }
-            reactions := ReactionMenu {
-                size: root.button-size;
-                enabled: root.can-react;
-                area-x: root.area-x;
-                area-y: root.area-y;
-                area-width: root.area-width;
-                area-height: root.area-height;
-                // Over the whole pill, not this button
-                anchor-center: root.absolute-position.x - root.area-x + root.width / 2;
-                anchor-top: root.absolute-position.y - root.area-y;
-                react(i) => { root.react(i); }
-            }
-            IconButton {
-                size: root.button-size;
-                icon: Icons.message-square;
-                label: @tr("Chat");
-                kind: chat-open ? IconButtonKind.active : IconButtonKind.normal;
-                badge: chat-open ? 0 : unread;
-                clicked => { root.toggle-chat(); }
-            }
-            more := MoreMenu {
-                size: root.button-size;
-                sheet: root.sheet;
-                area-x: root.area-x;
-                area-y: root.area-y;
-                area-width: root.area-width;
-                area-height: root.area-height;
-                cam-granted: root.cam-granted;
-                portrait: root.portrait;
-                can-rotate: root.can-rotate;
-                can-screenshot: root.can-screenshot;
-                sharing: root.sharing;
-                can-share: root.can-share;
-                screenshot => { root.screenshot(); }
-                toggle-share => { root.toggle-share(); }
-                toggle-portrait => { root.toggle-portrait(); }
-                rotate => { root.rotate(); }
-                open-settings => { root.open-settings(); }
-            }
+        if root.mics.length > 0: MenuHead { text: @tr("Microphone").to-uppercase(); }
+        for m in root.mics: MenuItem {
+            text: DeviceName.of(m.label, @tr("Microphone"));
+            checked: m.id == root.mic-id;
+            activated => { root.pick-mic(m.id); }
         }
-        IconButton {
-            size: root.button-size;
-            icon: Icons.phone-off;
-            label: @tr("Hang up");
-            kind: IconButtonKind.danger;
-            clicked => { root.hang-up(); }
+        MenuHead {
+            text: @tr("Speaker").to-uppercase();
+            toggle-text: @tr("Mute speaker");
+            toggle-icon: Icons.volume-off;
+            toggle-on: root.speaker-off;
+            toggled => { root.toggle-speaker(); }
         }
+        for s in root.speakers: MenuItem {
+            text: DeviceName.of(s.label, @tr("Speaker"));
+            checked: s.id == root.speaker-id;
+            activated => { root.pick-speaker(s.id); }
+        }
+        // Where a phone plays the call, its mic coming along: "speaker", "earpiece", "bluetooth", "headset"; none
+        // on desktop
+        for id in root.outputs: MenuItem {
+            icon: id == "bluetooth" ? Icons.bluetooth : id == "earpiece" ? Icons.phone
+                : id == "headset" ? Icons.headphones : Icons.volume-2;
+            text: id == "bluetooth" ? @tr("Bluetooth") : id == "earpiece" ? @tr("Phone earpiece")
+                : id == "headset" ? @tr("Headset") : @tr("Speaker");
+            checked: id == root.output;
+            activated => { root.pick-output(id); }
+        }
+    }
+    cam := DeviceMenu {
+        x: root.rail ? root.pad : after(mic.x, mic.width);
+        y: root.rail ? after(mic.y, mic.height) : root.pad;
+        tab: root.rail;
+        size: root.button-size;
+        icon: cam-on && cam-granted ? Icons.video : Icons.video-off;
+        label: cam-on ? @tr("Turn off camera") : @tr("Turn on camera");
+        kind: cam-granted && !cam-on ? IconButtonKind.off : IconButtonKind.normal;
+        enabled: cam-granted;
+        clicked => { root.toggle-cam(); }
+        has-menu: root.cam-granted && root.cams.length > 1;
+        menu-label: @tr("Choose camera");
+        sheet: root.sheet;
+        area-x: root.area-x;
+        area-y: root.area-y;
+        area-width: root.area-width;
+        area-height: root.area-height;
+
+        MenuHead { text: @tr("Camera").to-uppercase(); }
+        for c in root.cams: MenuItem {
+            text: DeviceName.of(c.label, @tr("Camera"));
+            checked: c.id == root.cam-id;
+            activated => { root.pick-cam(c.id); }
+        }
+    }
+    reactions := ReactionMenu {
+        x: root.rail ? root.pad : after(cam.x, cam.width);
+        y: root.rail ? after(cam.y, cam.height) : root.pad;
+        size: root.button-size;
+        enabled: root.can-react;
+        area-x: root.area-x;
+        area-y: root.area-y;
+        area-width: root.area-width;
+        area-height: root.area-height;
+        // Over the whole pill, not this button; on the rail, beside the whole rail
+        rail: root.rail;
+        anchor-center: root.absolute-position.x - root.area-x + root.width / 2;
+        anchor-top: root.absolute-position.y - root.area-y;
+        anchor-left: root.absolute-position.x - root.area-x;
+        anchor-bottom: root.absolute-position.y - root.area-y + root.height;
+        react(e) => { root.react(e); }
+    }
+    chat-button := IconButton {
+        x: after(reactions.x, reactions.width);
+        y: root.pad;
+        visible: !root.rail;
+        size: root.button-size;
+        icon: Icons.message-square;
+        label: @tr("Chat");
+        kind: chat-open ? IconButtonKind.active : IconButtonKind.normal;
+        badge: chat-open ? 0 : unread;
+        clicked => { root.toggle-chat(); }
+    }
+    more := MoreMenu {
+        x: root.rail ? root.pad : after(chat-button.x, chat-button.width);
+        y: root.rail ? after(reactions.y, reactions.height) : root.pad;
+        chat-item: root.rail;
+        chat-open: root.chat-open;
+        badge: root.rail && !root.chat-open ? root.unread : 0;
+        toggle-chat => { root.toggle-chat(); }
+        size: root.button-size;
+        sheet: root.sheet;
+        area-x: root.area-x;
+        area-y: root.area-y;
+        area-width: root.area-width;
+        area-height: root.area-height;
+        cam-granted: root.cam-granted;
+        portrait: root.portrait;
+        can-rotate: root.can-rotate;
+        can-screenshot: root.can-screenshot;
+        sharing: root.sharing;
+        can-share: root.can-share;
+        screenshot => { root.screenshot(); }
+        toggle-share => { root.toggle-share(); }
+        toggle-portrait => { root.toggle-portrait(); }
+        rotate => { root.rotate(); }
+        open-settings => { root.open-settings(); }
+    }
+    hang-up-button := IconButton {
+        x: after(more.x, more.width) + root.before-hang-up;
+        y: root.pad;
+        visible: !root.rail;
+        width: root.button-size + 12px;
+        size: root.button-size;
+        icon: Icons.phone-off;
+        label: @tr("Hang up");
+        kind: IconButtonKind.danger;
+        clicked => { root.hang-up(); }
     }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChatPanel } from "../chat/ChatPanel";
+import { ChatOverlay } from "../chat/ChatOverlay";
+import { useReactionRuns } from "../chat/useReactionRuns";
 import { SettingsSheet } from "../settings/SettingsSheet";
 import { useShowStats } from "../settings/stats";
 import { useSubtitles } from "../settings/subtitles";
@@ -18,15 +19,14 @@ import { isRearCamera } from "./media";
 import { Reactions } from "./reactions/Reactions";
 import { captureCall, saveImage, screenshotName, type Shot } from "./screenshot";
 import { StatsOverlay } from "./StatsOverlay";
-import { Subtitles } from "./Subtitles";
 import { useAutoHide } from "./useAutoHide";
-import { useCorners } from "./useDragCorner";
-import { STACKED_QUERY, useMediaQuery } from "../ui/useMediaQuery";
+import { useCorners, type Corner } from "./useDragCorner";
+import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import { useVisualViewport } from "./useVisualViewport";
 
 export function CallView({ controller, state, roomUrl }: { controller: CallController; state: CallState; roomUrl: string }) {
   const t = useT();
-  const [chatOpen, setChatOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
+  const [chatOpen, setChatOpen] = useState(true);
   const showStats = useShowStats();
   const subtitles = useSubtitles();
   const soundBlocked = useSoundBlocked();
@@ -39,9 +39,11 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoveringPill, setHoveringPill] = useState(false);
   const [flash, setFlash] = useState(0);
-  const stacked = useMediaQuery(STACKED_QUERY);
+  const narrow = useMediaQuery(SHEET_QUERY);
   const finePointer = useMediaQuery("(pointer: fine)");
   useVisualViewport();
+
+  const reactions = useReactionRuns(controller.onReaction, state.chat.length);
 
   const othersCount = state.chat.filter((m) => m.from !== state.myId).length;
   useEffect(() => {
@@ -62,8 +64,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
 
   const connected = state.phase === "in-call" && !!state.remoteStream;
   const remoteScreen = connected ? state.remoteScreen : null;
-  const compact = stacked && chatOpen;
-  const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !settingsOpen && !hoveringPill && !compact);
+  const { idle, wake, sleep } = useAutoHide(connected && !menuOpen && !settingsOpen && !hoveringPill);
 
   const onPointerDown = (e: React.PointerEvent) => {
     // On touch, tapping the bare video toggles the controls, like in phone call apps
@@ -71,6 +72,9 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
     if (e.pointerType !== "mouse" && onVideo && !idle) sleep();
     else wake();
   };
+
+  // Tiles leave the corners the chat covers for the top ones, keeping the corner they were put in for when it's hidden
+  const tileCorners = chatOpen ? clearOfChat(corners, narrow) : corners;
 
   const banner = statusBanner(state, t);
   const camOn = state.camAccess === "granted" && state.camOn;
@@ -83,7 +87,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
   });
   // Tapping a tile swaps it with the stage: the video that was there takes the tile's corner
   const pick = (key: FeedKey) => {
-    setCorner(layout.main, corners[key]);
+    setCorner(layout.main, tileCorners[key]);
     setPicked(key);
   };
 
@@ -109,7 +113,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         main,
         tiles: layout.tiles.flatMap((key) => {
           const shot = shots[key];
-          return shot ? [{ ...shot, corner: corners[key] }] : [];
+          return shot ? [{ ...shot, corner: tileCorners[key] }] : [];
         }),
         elapsedMs: state.callStartedAt === null ? 0 : performance.now() - state.callStartedAt,
       });
@@ -123,7 +127,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
 
   return (
     <div
-      className={`call ${chatOpen ? "chat-open" : ""} ${idle ? "idle" : ""}`}
+      className={`call ${idle ? "idle" : ""} ${chatOpen ? "chat-open" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={(e) => e.pointerType === "mouse" && wake()}
       onKeyDown={wake}
@@ -139,7 +143,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           speakerId={state.speakerDeviceId}
           remoteSpeakerOff={state.remoteSpeakerOff}
           layout={layout}
-          corners={corners}
+          corners={tileCorners}
           remoteRotation={remoteRotation}
           onPick={pick}
           onMove={setCorner}
@@ -166,9 +170,17 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
           {connected && <TranslationOffer lang={state.lang} />}
         </div>
-        {subtitles && (
-          <Subtitles messages={state.chat} live={state.live} myId={state.myId} lang={state.lang} chatOpen={chatOpen} />
-        )}
+        <ChatOverlay
+          open={chatOpen}
+          messages={state.chat}
+          reactions={reactions}
+          live={state.live}
+          myId={state.myId}
+          lang={state.lang}
+          liveOn={subtitles}
+          focusOnOpen={finePointer}
+          onSend={(t) => controller.sendChat(t)}
+        />
         <StatsOverlay
           // While relay is forced the stats stay up: their switch is the way back
           open={showStats || state.forceRelay}
@@ -195,19 +207,17 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
         />
       </div>
 
-      <ChatPanel
-        open={chatOpen}
-        messages={state.chat}
-        myId={state.myId}
-        lang={state.lang}
-        focusOnOpen={finePointer}
-        onSend={(t) => controller.sendChat(t)}
-        onClose={() => setChatOpen(false)}
-      />
-
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} lang={state.lang} onLang={(l) => controller.setLang(l)} />
     </div>
   );
+}
+
+/** The chat covers the bottom-left corner, and on phones, where it spans the width, the bottom-right too. */
+function clearOfChat<K extends string>(corners: Record<K, Corner>, narrow: boolean): Record<K, Corner> {
+  const moved: Partial<Record<Corner, Corner>> = narrow ? { bl: "tl", br: "tr" } : { bl: "tl" };
+  const out = { ...corners };
+  for (const key in out) out[key] = moved[out[key]] ?? out[key];
+  return out;
 }
 
 function statusBanner(state: CallState, t: Strings): string | null {

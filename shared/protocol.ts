@@ -8,9 +8,11 @@ export const ROOM_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
 export const MAX_LIVE_LENGTH = 500;
 export const MAX_LIVE_ID_LENGTH = 64;
 
-// What can be sent as a reaction: it flies over both sides' video and isn't stored. The server drops anything else.
+// What can be sent as a reaction: it flies over both sides' video and shows in their chat, and isn't stored. These
+// are the quick ones, first in the picker; any emoji in its grid (`EMOJI_GROUPS`) can be sent too. The server drops
+// anything else.
 export const REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🔥", "🎉", "👏"] as const;
-export type Reaction = (typeof REACTIONS)[number];
+export type Reaction = string;
 
 // The two languages the chat is translated between, also what each side's speech is recognized in.
 export const LANGS = ["zh", "en"] as const;

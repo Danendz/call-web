@@ -7,9 +7,9 @@ mod bridge;
 mod chat;
 mod friends;
 mod reactions;
+mod readable;
 mod screenshot;
 mod settings;
-mod subtitles;
 mod translate;
 #[cfg(not(target_os = "android"))]
 mod update;
@@ -195,9 +195,8 @@ pub fn run() -> anyhow::Result<()> {
     });
     ui.on_react({
         let engine = engine.clone();
-        move |index| {
-            // The bar's index into ReactionChoices, which lists them in this order
-            if let Some(&emoji) = usize::try_from(index).ok().and_then(|i| Reaction::ALL.get(i)) {
+        move |emoji| {
+            if let Some(emoji) = Reaction::parse(&emoji) {
                 engine.send(Command::SendReaction(emoji));
             }
         }

@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 
-// The chat picker's emoji, the same as the web's web/src/chat/emoji.ts: the ones people use most, not the whole of
-// Unicode. Change both together.
+// The emoji panel's grid, under the quick reactions: the same as shared/emoji.ts and `EMOJI` in crates/protocol, the
+// ones people use most, not the whole of Unicode. Each can be sent as a reaction. Change them together.
 
 export struct EmojiGroup {
     icon: string,
@@ -56,26 +56,21 @@ export global Emoji {
     ];
 }
 
-// The picker's panel: a tab per group and the group's emoji in a grid, as many 38px cells across as fit
+// A tab per group and the group's emoji in a grid, as many 38px cells across as fit; the emoji panel holds it
 export component EmojiGrid inherits Rectangle {
     callback picked(string);
+    // How tall the grid may grow before it scrolls
+    in property <length> max-grid: 210px;
     property <int> group: 0;
     property <int> columns: max(1, floor((self.width - 12px) / 38px));
     property <length> cell: (self.width - 12px) / columns;
 
-    border-radius: Theme.radius;
-    border-width: 1px;
-    border-color: Theme.glass-border;
-    background: Theme.glass;
-    drop-shadow-blur: 30px;
-    drop-shadow-offset-y: 10px;
-    drop-shadow-color: Theme.shadow;
     clip: true;
 
     VerticalLayout {
         HorizontalLayout {
-            padding: 6px;
-            padding-bottom: 0;
+            padding-left: 6px;
+            padding-right: 6px;
             spacing: 2px;
             for g[i] in Emoji.groups: Rectangle {
                 height: 36px;
@@ -101,7 +96,7 @@ export component EmojiGrid inherits Rectangle {
         }
         Rectangle { height: 1px; background: Theme.border; }
         Flickable {
-            height: min(210px, grid.height + 12px);
+            height: min(root.max-grid, grid.height + 12px);
             content-height: grid.height + 12px;
             grid := Rectangle {
                 x: 6px;
