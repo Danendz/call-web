@@ -212,6 +212,8 @@ select {
   background: var(--surface-2);
   color: var(--text);
   font: inherit;
+  /* iOS Safari zooms the page into any field under 16px when it's focused */
+  font-size: 16px;
   transition:
     border-color var(--fast) var(--ease),
     background-color var(--fast) var(--ease);

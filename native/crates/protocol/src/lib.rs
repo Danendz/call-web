@@ -27,6 +27,53 @@ pub fn is_room_id(id: &str) -> bool {
     (6..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
+/// What can be sent as a reaction: it flies over both sides' video and isn't stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Reaction {
+    #[serde(rename = "❤️")]
+    Heart,
+    #[serde(rename = "😂")]
+    Laugh,
+    #[serde(rename = "👍")]
+    ThumbsUp,
+    #[serde(rename = "😮")]
+    Wow,
+    #[serde(rename = "😢")]
+    Sad,
+    #[serde(rename = "🔥")]
+    Fire,
+    #[serde(rename = "🎉")]
+    Party,
+    #[serde(rename = "👏")]
+    Clap,
+}
+
+impl Reaction {
+    pub const ALL: [Reaction; 8] = [
+        Reaction::Heart,
+        Reaction::Laugh,
+        Reaction::ThumbsUp,
+        Reaction::Wow,
+        Reaction::Sad,
+        Reaction::Fire,
+        Reaction::Party,
+        Reaction::Clap,
+    ];
+
+    pub fn emoji(self) -> &'static str {
+        match self {
+            Reaction::Heart => "❤️",
+            Reaction::Laugh => "😂",
+            Reaction::ThumbsUp => "👍",
+            Reaction::Wow => "😮",
+            Reaction::Sad => "😢",
+            Reaction::Fire => "🔥",
+            Reaction::Party => "🎉",
+            Reaction::Clap => "👏",
+        }
+    }
+}
+
 /// The two languages the chat is translated between, also what each side's speech is recognized in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -125,6 +172,9 @@ pub enum ClientMessage {
     Ping,
     /// Tells the other person you saved a picture of the call.
     Screenshot,
+    Reaction {
+        emoji: Reaction,
+    },
     /// What you're sending, which the tracks alone can't say. Sent on every change and whenever the peer
     /// connection is (re)made. `screen` is the id of the stream the shared screen arrives in.
     Media {
@@ -181,6 +231,9 @@ pub enum ServerMessage {
     },
     Pong,
     Screenshot,
+    Reaction {
+        emoji: Reaction,
+    },
     Media {
         cam_on: bool,
         screen: Option<String>,

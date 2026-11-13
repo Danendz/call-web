@@ -15,6 +15,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::chat::{Chat, local_time};
 use crate::megabytes;
+use crate::reactions::Reactions;
 use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState, StatsView};
 
 /// What the bridge keeps on the UI thread between states.
@@ -24,6 +25,7 @@ pub struct Bridge {
     cams: Rc<VecModel<DeviceItem>>,
     screen_sources: Rc<VecModel<DeviceItem>>,
     chat: RefCell<Chat>,
+    reactions: RefCell<Reactions>,
     /// Where the translation models are kept
     data_dir: Option<PathBuf>,
     /// What translating subtitles depends on from the last state, for when the switch changes in between
@@ -48,6 +50,7 @@ impl Bridge {
             cams,
             screen_sources,
             chat: RefCell::new(Chat::new(ui, lang)),
+            reactions: RefCell::new(Reactions::new(ui)),
             data_dir,
             last: RefCell::new((Phase::Start, lang, ModelStatus::Missing)),
             call_started: Rc::default(),
@@ -55,6 +58,10 @@ impl Bridge {
     }
 
     pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
+        if let ChatEvent::Reaction { emoji, mine } = event {
+            self.reactions.borrow_mut().add(emoji, mine);
+            return;
+        }
         self.chat.borrow_mut().event(ui, event);
     }
 

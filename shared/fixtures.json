@@ -67,6 +67,10 @@
       "type": "screenshot"
     },
     {
+      "type": "reaction",
+      "emoji": "❤️"
+    },
+    {
       "type": "media",
       "camOn": true,
       "screen": null
@@ -92,6 +96,16 @@
     "LANGS": [
       "zh",
       "en"
+    ],
+    "REACTIONS": [
+      "❤️",
+      "😂",
+      "👍",
+      "😮",
+      "😢",
+      "🔥",
+      "🎉",
+      "👏"
     ],
     "TRANSCRIBE_SAMPLE_RATE": 16000,
     "MAX_UTTERANCE_S": 30,
@@ -237,6 +251,10 @@
     },
     {
       "type": "screenshot"
+    },
+    {
+      "type": "reaction",
+      "emoji": "❤️"
     },
     {
       "type": "media",

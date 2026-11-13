@@ -43,6 +43,7 @@ fn main() {
         ChatEvent::Added(m) => tracing::info!("chat from {}: {}", m.from, m.text),
         ChatEvent::Translated { id, translation } => tracing::info!("chat {id} translated: {:?}", translation.text),
         ChatEvent::Live { id, text } => tracing::info!("live {id}: {text}"),
+        ChatEvent::Reaction { emoji, mine } => tracing::info!("reaction {} (mine: {mine})", emoji.emoji()),
     };
     let engine = Engine::start(
         server,

@@ -15,6 +15,7 @@ import type { SpeechNotice } from "./speech/transcriber";
 import { Fade } from "./Fade";
 import { arrangeFeeds, DEFAULT_CORNERS, Feeds, type FeedKey } from "./Feeds";
 import { isRearCamera } from "./media";
+import { Reactions } from "./reactions/Reactions";
 import { captureCall, saveImage, screenshotName, type Shot } from "./screenshot";
 import { StatsOverlay } from "./StatsOverlay";
 import { Subtitles } from "./Subtitles";
@@ -153,6 +154,8 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           </div>
         )}
 
+        <Reactions controller={controller} />
+
         {flash > 0 && <div key={flash} className="shot-flash" aria-hidden />}
 
         <div className="notices">
@@ -182,6 +185,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           unread={unread}
           canRotate={connected}
           onRotate={() => setRemoteRotation((r) => (r + 90) % 360)}
+          canReact={connected}
           canScreenshot={canScreenshot}
           onScreenshot={takeScreenshot}
           onToggleChat={() => setChatOpen((v) => !v)}

@@ -144,6 +144,19 @@ pub(crate) fn open_picture(uri: &str) {
     });
 }
 
+/// A short buzz, for the other person's reaction.
+pub(crate) fn vibrate(ms: i64) {
+    with_java(|env, shim, context| {
+        env.call_static_method(
+            shim,
+            "vibrate",
+            "(Landroid/content/Context;J)V",
+            &[JValue::Object(context), JValue::Long(ms)],
+        )
+        .map(drop)
+    });
+}
+
 /// Takes in the window, and wires up what Android does for it.
 pub(crate) fn attach(ui: &AppWindow, settings: &Rc<RefCell<crate::settings::Settings>>) {
     UI.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));

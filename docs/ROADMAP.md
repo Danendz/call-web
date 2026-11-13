@@ -20,6 +20,7 @@ When a feature here is finished, mark it `[x]` in the same PR that ships it.
 - [x] Screen share alongside the camera, draggable tiles
 - [x] Switch mic, camera and speaker during a call from the control pill (bottom sheets on narrow screens), mute the speaker with the other person seeing it, speech to chat in the mic menu (Web + Native; Android picks the route, a headset bringing its own mic)
 - [x] Settings as a sheet over the screen (from the bottom on narrow screens, a side panel on the right otherwise), opened from ⋯ in a call and from a gear on the first screen (setup on the web, start on native): connection stats (remembered), "I speak", and on native the speech model (Web + Native)
+- [~] Emoji reactions and a chat emoji picker (Web + Native): a reaction bar in the control pill sends one of a fixed set, relayed and never stored, which floats up over both sides' video; the same one tapped fast becomes a combo (×N and a burst), and every fifth ❤️, 🎉 or 🔥 fills the screen with hearts, confetti or flames. Android vibrates on the other person's. The chat has a grid of ~140 common emoji. Left: checking that the native app draws color emoji on macOS, Windows and Android.
 
 ## Phase 1 — Call quality (Web + Native)
 

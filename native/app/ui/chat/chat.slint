@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
-import { IconButton } from "../components/icon-button.slint";
+import { IconButton, IconButtonKind } from "../components/icon-button.slint";
+import { EmojiGrid } from "emoji.slint";
 
 // One message as the bridge words it: the other person's in your language with what they wrote under it, your own
 // as written (the web's readable())
@@ -208,6 +209,15 @@ export component ChatPanel inherits Rectangle {
                 padding-left: 12px;
                 padding-right: 12px;
                 spacing: 8px;
+                emoji-button := IconButton {
+                    icon: Icons.smile;
+                    label: @tr("Emoji");
+                    size: 40px;
+                    y: 2px;
+                    transparent: !picker.is-open;
+                    kind: picker.is-open ? IconButtonKind.active : IconButtonKind.normal;
+                    clicked => { picker.show(); }
+                }
                 Rectangle {
                     height: 44px;
                     horizontal-stretch: 1;
@@ -266,6 +276,26 @@ export component ChatPanel inherits Rectangle {
             }
         }
 
+    }
+
+    // The emoji grid above the message box, like the web's EmojiPicker. Stays open so several can be picked in a row;
+    // its presses don't take focus, so the keyboard stays up.
+    picker := PopupWindow {
+        x: 8px;
+        y: emoji-button.absolute-position.y - root.absolute-position.y - self.height - 14px;
+        width: root.width - 16px;
+        height: emoji-grid.preferred-height;
+        close-policy: close-on-click-outside;
+
+        emoji-grid := EmojiGrid {
+            picked(e) => { root.insert-emoji(e); }
+        }
+    }
+
+    // At the end of the draft, with the caret after it
+    function insert-emoji(e: string) {
+        input.text += e;
+        input.set-selection-offsets(2147483647, 2147483647);
     }
 
     // Focus the message box when the chat opens, as the web does on a desktop, and let go of it when it closes

@@ -84,6 +84,7 @@ const en = {
   rotateVideo: "Rotate their video",
   screenshot: "Screenshot",
   peerScreenshot: "The other person took a screenshot",
+  react: "React",
 
   starting: "Starting…",
   waitingForPeer: "Waiting for the other person to join…",
@@ -100,6 +101,7 @@ const en = {
   tapToListen: "Tap to listen",
   message: "Message",
   send: "Send",
+  emoji: "Emoji",
 };
 
 export type Strings = typeof en;
@@ -183,6 +185,7 @@ const zh: Strings = {
   rotateVideo: "旋转对方画面",
   screenshot: "截图",
   peerScreenshot: "对方截了一张图",
+  react: "表情回应",
 
   starting: "正在启动…",
   waitingForPeer: "等待对方加入…",
@@ -199,6 +202,7 @@ const zh: Strings = {
   tapToListen: "点击收听",
   message: "消息",
   send: "发送",
+  emoji: "表情",
 };
 
 export const STRINGS: Record<Lang, Strings> = { en, zh };

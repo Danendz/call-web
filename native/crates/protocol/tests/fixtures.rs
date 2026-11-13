@@ -55,6 +55,10 @@ fn constants() {
     assert_eq!(c["TRANSCRIBE_SAMPLE_RATE"], TRANSCRIBE_SAMPLE_RATE);
     assert_eq!(c["MAX_UTTERANCE_S"], MAX_UTTERANCE_S);
     assert_eq!(c["LANGS"], serde_json::to_value(Lang::ALL).unwrap());
+    assert_eq!(c["REACTIONS"], serde_json::to_value(Reaction::ALL).unwrap());
+    for r in Reaction::ALL {
+        assert_eq!(serde_json::to_value(r).unwrap(), r.emoji());
+    }
     assert_eq!(c["USERNAME_RE"], USERNAME_PATTERN, "update is_username along with the pattern");
     assert_eq!(c["MIN_PASSWORD_LENGTH"], MIN_PASSWORD_LENGTH);
     assert_eq!(c["MAX_PASSWORD_LENGTH"], MAX_PASSWORD_LENGTH);

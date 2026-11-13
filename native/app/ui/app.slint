@@ -11,11 +11,11 @@ import { CallOverlay } from "friends/call-overlay.slint";
 import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
-import { CallScreen, CallLink, StatsView, ChatRow } from "call/call.slint";
+import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark } from "call/call.slint";
 import { SubtitleLine } from "call/subtitles.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, ModelState, SubtitleLine, FriendRow, MissedRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, SubtitleLine, FriendRow, MissedRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -80,6 +80,9 @@ export component AppWindow inherits Window {
     in property <int> speech-notice;
     in property <string> speech-paused-until;
     in property <bool> peer-screenshot;
+    in property <[Floater]> floaters;
+    in property <[Spark]> sparks;
+    callback react(int);
     in property <string> saved-shot;
     // Counts screenshots that couldn't be saved, so each one shows its toast
     in property <int> shot-failures;
@@ -376,6 +379,9 @@ export component AppWindow inherits Window {
             speech-notice: root.speech-notice;
             speech-paused-until: root.speech-paused-until;
             peer-screenshot: root.peer-screenshot;
+            floaters: root.floaters;
+            sparks: root.sparks;
+            react(i) => { root.react(i); }
             saved-shot: root.saved-shot;
             shot-failures: root.shot-failures;
             screenshot(feed, rotation) => { root.screenshot(feed, rotation); }

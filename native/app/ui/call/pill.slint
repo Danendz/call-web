@@ -5,6 +5,7 @@ import { DeviceItem, DeviceName } from "../setup/device-row.slint";
 import { MoreMenu } from "more-menu.slint";
 import { DeviceMenu } from "device-menu.slint";
 import { MenuHead, MenuItem } from "menu-panel.slint";
+import { ReactionMenu } from "reactions.slint";
 
 // Floating call controls at the bottom of the stage, like the web's ControlPill. The mic and camera chevrons hold
 // device choices, and speech to chat; the rest goes in ⋯.
@@ -26,6 +27,8 @@ export component ControlPill inherits Rectangle {
     in property <bool> portrait;
     in property <bool> can-rotate;
     in property <bool> transcribe-on;
+    in property <bool> can-react;
+    callback react(int);
     in property <bool> chat-open;
     in property <int> unread;
     in property <bool> can-screenshot;
@@ -68,7 +71,7 @@ export component ControlPill inherits Rectangle {
     drop-shadow-color: Theme.shadow;
 
     // The controls stay up while the pointer is on the pill or its menu is open
-    property <bool> busy: hover.has-hover || mic.open || cam.open || more.open;
+    property <bool> busy: hover.has-hover || mic.open || cam.open || reactions.open || more.open;
     changed busy => { root.hovered(self.busy); }
     hover := TouchArea { }
 
@@ -150,6 +153,18 @@ export component ControlPill inherits Rectangle {
                     checked: c.id == root.cam-id;
                     activated => { root.pick-cam(c.id); }
                 }
+            }
+            reactions := ReactionMenu {
+                size: root.button-size;
+                enabled: root.can-react;
+                area-x: root.area-x;
+                area-y: root.area-y;
+                area-width: root.area-width;
+                area-height: root.area-height;
+                // Over the whole pill, not this button
+                anchor-center: root.absolute-position.x - root.area-x + root.width / 2;
+                anchor-top: root.absolute-position.y - root.area-y;
+                react(i) => { root.react(i); }
             }
             IconButton {
                 size: root.button-size;

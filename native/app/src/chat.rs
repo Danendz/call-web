@@ -46,6 +46,8 @@ impl Chat {
                 self.subtitles.live(id, text, &self.messages, &self.my_id, self.lang);
                 return;
             }
+            // The bridge flies these; they're never part of the chat
+            ChatEvent::Reaction { .. } => return,
             ChatEvent::Translated { id, translation } => {
                 let Some(index) = self.messages.iter().position(|m| m.id == id) else { return };
                 let Some(message) = self.messages.get_mut(index) else { return };
