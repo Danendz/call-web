@@ -3,6 +3,22 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.3.2 — 2026-11-13
+
+Chat now floats over the video, with reactions and subtitles in the same place.
+
+### New
+
+- Pick any emoji as a reaction: the controls hold 8 quick reactions and a full emoji grid
+- Phones and short screens: call controls sit in a rail on the right, with hang up alone in the top corner
+
+### Changed
+
+- Chat floats over the video in see-through bubbles, the other person's on the left and yours on the right, older ones fading out at the top
+- Spoken lines and live subtitles show in the chat instead of a separate subtitles strip
+- Reactions show in the chat, and sending the same one again grows its count in place (❤️ ×5)
+- The message box sits level with the call controls
+
 ## 0.3.1 — 2026-11-13
 
 Emoji reactions during a call, and emoji in chat.
