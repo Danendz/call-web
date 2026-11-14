@@ -30,7 +30,7 @@ pub use protocol::{
     ApiErrorCode, CallEndReason, ChatMessage, FriendState, FriendsLists, FullReason, Lang, MAX_CHAT_LENGTH,
     MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, MissedCall, OpenRoom, Presence, Reaction, TranslatedText, Translation,
 };
-pub use speech::{LiveModel, Model, ModelStatus, SpeechNotice, Utterance};
+pub use speech::{Model, ModelStatus, SpeechNotice};
 pub use stats::{CallStats, Path, VideoStats};
 pub use translate::{Pair, Translator, TranslatorEvent};
 pub use video::{Chroma, Feed, Frame, Planes, VideoSink};

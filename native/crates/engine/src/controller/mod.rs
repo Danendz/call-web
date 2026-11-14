@@ -88,8 +88,6 @@ struct Controller {
     speech_rx: mpsc::UnboundedReceiver<SpeechEvent>,
     /// Set to stop the SenseVoice download that's running
     model_cancel: Option<Arc<AtomicBool>>,
-    /// The same for the live model
-    live_cancel: Option<Arc<AtomicBool>>,
     /// Where the models are kept; None where there's no data folder
     data_dir: Option<PathBuf>,
     translation_cancel: Option<Arc<AtomicBool>>,
@@ -132,8 +130,8 @@ impl Controller {
         let screen = LocalScreen::new(media.factory());
         let translation = translate::status(data_dir.as_deref(), lang);
         let model = speech::status(data_dir.as_deref(), Model::SenseVoice);
-        let fetch_decoder = speech::drop_old_decoder(data_dir.as_deref());
-        let live = speech::status(data_dir.as_deref(), Model::Live);
+        // Whoever had the old live model downloaded wanted live subtitles on this device: SenseVoice does them now
+        let fetch_model = speech::drop_old_live(data_dir.as_deref()) || speech::lacks_vad(data_dir.as_deref());
         let state = State {
             phase: Phase::Start,
             lang,
@@ -167,7 +165,6 @@ impl Controller {
             speech_notice: None,
             model,
             on_device,
-            live,
             live_subtitles: false,
             translation,
         };
@@ -192,7 +189,6 @@ impl Controller {
             remote_audio: Vec::new(),
             speech_rx,
             model_cancel: None,
-            live_cancel: None,
             data_dir,
             translation_cancel: None,
             direct_retries: 0,
@@ -209,8 +205,8 @@ impl Controller {
             peer_tx,
             peer_rx,
         };
-        if fetch_decoder {
-            controller.download_model(Model::Live);
+        if fetch_model {
+            controller.download_model(Model::SenseVoice);
         }
         controller
     }
@@ -330,12 +326,8 @@ impl Controller {
             Command::DownloadModel(model) => self.download_model(model),
             Command::CancelModelDownload(model) => self.cancel_model_download(model),
             Command::DeleteModel(model) => self.delete_model(model),
-            Command::SetLiveSubtitles(on) => {
-                self.state.live_subtitles = on;
-                if !on {
-                    self.transcriber.release();
-                }
-            }
+            // The same model recognizes either way, so it stays loaded
+            Command::SetLiveSubtitles(on) => self.state.live_subtitles = on,
             Command::DownloadTranslation => self.download_translation(),
             Command::DeleteTranslation => self.delete_translation(),
             Command::SetOnDevice(on) => {

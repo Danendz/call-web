@@ -363,7 +363,6 @@ pub fn run() -> anyhow::Result<()> {
         }
     });
     ui.set_model_size(megabytes(Model::SenseVoice.size()).into());
-    ui.set_live_size(megabytes(Model::Live.size()).into());
     // Asked once, where there's somewhere to keep the models
     ui.set_live_prompt(data_dir.is_some() && !settings.borrow().live_prompt_seen);
     ui.on_dismiss_live_prompt({
@@ -401,13 +400,10 @@ pub fn run() -> anyhow::Result<()> {
     ui.on_download_model(send(Command::DownloadModel(Model::SenseVoice)));
     ui.on_cancel_model_download(send(Command::CancelModelDownload(Model::SenseVoice)));
     ui.on_delete_model(send(Command::DeleteModel(Model::SenseVoice)));
-    ui.on_download_live(send(Command::DownloadModel(Model::Live)));
-    ui.on_cancel_live_download(send(Command::CancelModelDownload(Model::Live)));
-    ui.on_delete_live(send(Command::DeleteModel(Model::Live)));
     ui.on_download_pack({
         let engine = engine.clone();
         move || {
-            engine.send(Command::DownloadModel(Model::Live));
+            engine.send(Command::DownloadModel(Model::SenseVoice));
             engine.send(Command::DownloadTranslation);
         }
     });

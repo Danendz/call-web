@@ -94,9 +94,7 @@ pub struct State {
     pub model: ModelStatus,
     /// Speech goes to the on-device model once it's ready, instead of the server
     pub on_device: bool,
-    /// The live model, where there's a data folder to keep it in
-    pub live: ModelStatus,
-    /// Live subtitles are on: once the live model is there, it recognizes your speech and sends it as you speak
+    /// Live subtitles are on: your speech goes out as you speak, recognized on this device or by the server
     pub live_subtitles: bool,
     /// The translation model for live subtitles in `lang`, where there's a data folder to keep it in
     pub translation: ModelStatus,

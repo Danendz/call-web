@@ -1,9 +1,9 @@
 //! Speech to chat: what you say becomes chat messages. The mic comes from the call's capture after WebRTC's echo
 //! cancellation, noise suppression and gain control, as the web transcribes the track it sends, so the other
 //! person's voice from your speakers isn't transcribed as yours. Then it's cut into utterances, which go to a
-//! [`Recognizer`]: with live subtitles, the streaming model on this device, which sends what you're saying as you say
-//! it; otherwise SenseVoice on this device once it's downloaded and picked, or the server's `/ws/speech`, streamed
-//! while you speak like the web's server path.
+//! [`Recognizer`]: SenseVoice on this device once it's downloaded and picked, or the server's `/ws/speech`, streamed
+//! while you speak like the web's server path. With live subtitles either one also sends what you're saying as you
+//! say it, each pause ending a line.
 
 mod live;
 mod local;
@@ -23,13 +23,13 @@ use url::Url;
 
 pub use crate::download::ModelStatus;
 use crate::media::{MicFrame, MicTap};
-pub use live::{LiveModel, Utterance};
 pub use model::Model;
 pub(crate) use model::{
-    delete as delete_model, dir as model_dir, download as download_model, drop_old_decoder, is_ready as model_ready,
+    delete as delete_model, dir as model_dir, download as download_model, drop_old_live, is_ready as model_ready,
+    lacks_vad,
 };
 
-use live::{Live, LoadedLive};
+use live::Live;
 use local::{Loaded, Local};
 use socket::SpeechSocket;
 use utterance::{CHUNK, Detector, Event};
@@ -87,15 +87,10 @@ pub(crate) struct Params {
     pub lang: Lang,
     /// The mic's name, as for the level meter
     pub mic: Option<String>,
-    /// The model on this device to use, when there is one
-    pub local: Option<OnDevice>,
-}
-
-/// Which model on this device recognizes speech, and its folder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum OnDevice {
-    SenseVoice(PathBuf),
-    Live(PathBuf),
+    /// SenseVoice's folder, when it recognizes speech on this device
+    pub local: Option<PathBuf>,
+    /// Live subtitles: what you're saying goes out as you say it
+    pub live: bool,
 }
 
 pub(crate) struct Transcriber {
@@ -106,7 +101,6 @@ pub(crate) struct Transcriber {
     paused_until: Arc<AtomicU64>,
     unavailable: bool,
     loaded: Loaded,
-    loaded_live: LoadedLive,
     /// The model didn't load this launch: the server it is
     local_failed: bool,
 }
@@ -131,7 +125,6 @@ impl Transcriber {
             paused_until: Arc::default(),
             unavailable: false,
             loaded: Loaded::default(),
-            loaded_live: LoadedLive::default(),
             local_failed: false,
         }
     }
@@ -147,14 +140,12 @@ impl Transcriber {
         self.running = None;
         let Some(params) = params else { return };
         let (recognizer, paused_until): (Box<dyn Recognizer>, _) = match &params.local {
-            Some(on_device) => {
-                let started: Result<Box<dyn Recognizer>, String> = match on_device {
-                    OnDevice::SenseVoice(dir) => {
-                        Local::start(dir.clone(), params.lang, self.loaded.clone(), self.events.clone())
-                            .map(|r| Box::new(r) as Box<dyn Recognizer>)
-                    }
-                    OnDevice::Live(dir) => Live::start(dir.clone(), self.loaded_live.clone(), self.events.clone())
-                        .map(|r| Box::new(r) as Box<dyn Recognizer>),
+            Some(dir) => {
+                let (dir, lang, loaded, events) = (dir.clone(), params.lang, self.loaded.clone(), self.events.clone());
+                let started: Result<Box<dyn Recognizer>, String> = if params.live {
+                    Live::start(dir, lang, loaded, events).map(|r| Box::new(r) as Box<dyn Recognizer>)
+                } else {
+                    Local::start(dir, lang, loaded, events).map(|r| Box::new(r) as Box<dyn Recognizer>)
                 };
                 match started {
                     // The server's quota doesn't apply here
@@ -166,7 +157,8 @@ impl Transcriber {
                 }
             }
             None => {
-                (Box::new(SpeechSocket::connect(params.url.clone(), self.events.clone())), self.paused_until.clone())
+                let socket = SpeechSocket::connect(params.url.clone(), params.live, self.events.clone());
+                (Box::new(socket), self.paused_until.clone())
             }
         };
         match start(&params, recognizer, self.tap.as_ref(), paused_until) {
@@ -186,13 +178,10 @@ impl Transcriber {
         self.running = None;
     }
 
-    /// Frees the loaded models (a few hundred MB), once the call is over or a model is gone.
-    /// A recording still running holds the live models; its thread gives them back when it ends.
+    /// Frees the loaded model (a few hundred MB), once the call is over or the model is gone.
     pub(crate) fn release(&mut self) {
-        // Each is dropped by the end of its statement, before giving back
-        let local = self.loaded.lock().ok().and_then(|mut l| l.take()).is_some();
-        let live = self.loaded_live.lock().ok().and_then(|mut l| l.take()).and_then(Arc::into_inner).is_some();
-        if local || live {
+        // Dropped by the end of the statement, before giving back
+        if self.loaded.lock().ok().and_then(|mut l| l.take()).is_some() {
             crate::memory::give_back();
         }
     }

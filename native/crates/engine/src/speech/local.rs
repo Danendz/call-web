@@ -16,8 +16,8 @@ use super::{Out, Recognizer, SpeechEvent};
 // A phone has fewer big cores and is also encoding video; two decode an utterance in a fraction of its length
 const THREADS: i32 = if cfg!(target_os = "android") { 2 } else { 4 };
 
-/// The loaded model, kept between recordings: loading takes over a second on a phone. SenseVoice is told the
-/// language, so a change of language loads it again.
+/// The loaded model, kept between recordings: loading takes over a second on a phone. Live subtitles use the same
+/// one. SenseVoice is told the language, so a change of language loads it again.
 pub(crate) type Loaded = Arc<Mutex<Option<(Lang, OfflineRecognizer)>>>;
 
 pub(crate) struct Local {
@@ -82,7 +82,7 @@ fn run(
     }
 }
 
-fn load(dir: &Path, lang: Lang, loaded: &Loaded) -> Result<(), String> {
+pub(super) fn load(dir: &Path, lang: Lang, loaded: &Loaded) -> Result<(), String> {
     let mut slot = loaded.lock().map_err(|_| "the model's lock is poisoned".to_owned())?;
     if slot.as_ref().is_some_and(|(l, _)| *l == lang) {
         return Ok(());
@@ -111,7 +111,7 @@ fn load(dir: &Path, lang: Lang, loaded: &Loaded) -> Result<(), String> {
     Ok(())
 }
 
-fn decode(loaded: &Loaded, pcm: &[f32]) -> Option<String> {
+pub(super) fn decode(loaded: &Loaded, pcm: &[f32]) -> Option<String> {
     let slot = loaded.lock().ok()?;
     let (_, recognizer) = slot.as_ref()?;
     let started = Instant::now();

@@ -91,7 +91,7 @@ export component AppWindow inherits Window {
     // Counts screenshots that couldn't be saved, so each one shows its toast
     in property <int> shot-failures;
     in property <string> version;
-    // SenseVoice, the on-device speech model for when live subtitles are off, in Settings
+    // SenseVoice, the on-device speech model, in Settings; live subtitles use it too
     in property <ModelState> model-state;
     in property <int> model-progress;
     in property <string> model-size;
@@ -100,14 +100,7 @@ export component AppWindow inherits Window {
     callback cancel-model-download();
     callback delete-model();
     callback set-on-device(bool);
-    // The live speech model, which sends what you say as you say it
-    in property <ModelState> live-state;
-    in property <int> live-progress;
-    in property <string> live-size;
-    callback download-live();
-    callback cancel-live-download();
-    callback delete-live();
-    // Live speech and this language's translation together, asked for once on the start screen
+    // SenseVoice and this language's translation together, asked for once on the start screen
     in property <ModelState> pack-state;
     in property <int> pack-progress;
     in property <string> pack-size;
@@ -480,12 +473,6 @@ export component AppWindow inherits Window {
             translation-state: root.translation-state;
             translation-progress: root.translation-progress;
             translation-size: root.translation-size;
-            live-state: root.live-state;
-            live-progress: root.live-progress;
-            live-size: root.live-size;
-            download-live => { root.download-live(); }
-            cancel-live-download => { root.cancel-live-download(); }
-            delete-live => { root.delete-live(); }
             download-translation => { root.download-translation(); }
             delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }

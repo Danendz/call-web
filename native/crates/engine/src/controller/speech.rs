@@ -9,7 +9,7 @@ use std::time::Duration;
 use protocol::{ClientMessage, MAX_CHAT_LENGTH, MAX_LIVE_LENGTH, SpeechServerMessage};
 
 use super::{Controller, Internal, Phase};
-use crate::speech::{self, Model, ModelStatus, OnDevice, Params, SpeechEvent, SpeechNotice};
+use crate::speech::{self, Model, ModelStatus, Params, SpeechEvent, SpeechNotice};
 
 impl Controller {
     /// Starts or stops the recording; only while someone is there to read it, and never while muted, like the web.
@@ -31,15 +31,10 @@ impl Controller {
         url.set_path("/ws/speech");
         url.query_pairs_mut().clear().append_pair("room", room).append_pair("token", token);
         let mic = self.state.mic_id.as_ref().and_then(|id| self.state.mics.iter().find(|d| &d.id == id));
-        // Live subtitles want text while you speak, which only the live model gives
-        let local = if self.state.live_subtitles && self.state.live == ModelStatus::Ready {
-            self.model_dir(Model::Live).map(OnDevice::Live)
-        } else if self.state.on_device && self.state.model == ModelStatus::Ready {
-            self.model_dir(Model::SenseVoice).map(OnDevice::SenseVoice)
-        } else {
-            None
-        };
-        Some(Params { url, lang: self.state.lang, mic: mic.map(|d| d.label.clone()), local })
+        let on_device = self.state.on_device && self.state.model == ModelStatus::Ready;
+        let local = on_device.then(|| self.model_dir(Model::SenseVoice)).flatten();
+        let live = self.state.live_subtitles;
+        Some(Params { url, lang: self.state.lang, mic: mic.map(|d| d.label.clone()), local, live })
     }
 
     pub(super) fn speech_event(&mut self, event: SpeechEvent) {
@@ -82,7 +77,6 @@ impl Controller {
     fn model_slot(&mut self, model: Model) -> (&mut ModelStatus, &mut Option<Arc<AtomicBool>>) {
         match model {
             Model::SenseVoice => (&mut self.state.model, &mut self.model_cancel),
-            Model::Live => (&mut self.state.live, &mut self.live_cancel),
         }
     }
 
@@ -161,10 +155,14 @@ impl Controller {
     }
 }
 
-/// Removes the old int8 decoder of a live model downloaded before it changed. True when there was one: the model then
-/// only lacks the new decoder (13 MB), to fetch on its own.
-pub(super) fn drop_old_decoder(data_dir: Option<&Path>) -> bool {
-    data_dir.is_some_and(|d| speech::drop_old_decoder(&speech::model_dir(d, Model::Live)))
+/// Removes the old live model; true when there was one.
+pub(super) fn drop_old_live(data_dir: Option<&Path>) -> bool {
+    data_dir.is_some_and(speech::drop_old_live)
+}
+
+/// SenseVoice is there but for the VAD that came with it later, which makes it whole
+pub(super) fn lacks_vad(data_dir: Option<&Path>) -> bool {
+    data_dir.is_some_and(|d| speech::lacks_vad(&speech::model_dir(d, Model::SenseVoice)))
 }
 
 /// Whether `model` is all there in the data folder

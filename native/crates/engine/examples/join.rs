@@ -8,8 +8,8 @@
 //! speech to chat on (with `CALL_FAKE_MIC=<file.wav>` it speaks that file). `SHARE=1` shares the screen once in the
 //! call (with `CALL_FAKE_SCREEN=1` a test pattern). `DATA_DIR=<folder>` recognizes speech on this machine with the
 //! model in `<folder>/models/`, as the app does once it's downloaded; with `DOWNLOAD=1` it downloads the model there
-//! first, from the server. `LIVE=1` turns live subtitles on, so speech goes to the live model there instead and is
-//! sent as live text while it's said. `CODEC=h264` or `CODEC=vp8` picks the video codec as Settings does (default
+//! first, from the server. `LIVE=1` turns live subtitles on, so what's said also goes out as live text while it's said,
+//! each pause ending a line. `CODEC=h264` or `CODEC=vp8` picks the video codec as Settings does (default
 //! auto), and `SWITCH=<codec>` changes it 10 s into its stay, as Settings does mid-call; the stats it logs name the
 //! codec in use.
 
@@ -61,14 +61,13 @@ fn main() {
                 let _ = say_tx.send(text.clone());
             }
             tracing::info!(
-                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={} model={:?} live={:?}",
+                "phase={:?} link={:?} reconnecting={} in_call_for={:?} mics={} model={:?}",
                 state.phase,
                 state.link,
                 state.reconnecting,
                 state.call_started.map(|at| at.elapsed().as_secs()),
                 state.mics.len(),
                 state.model,
-                state.live
             );
         },
         |stats| {
@@ -85,7 +84,7 @@ fn main() {
     let live = std::env::var_os("LIVE").is_some();
     engine.send(Command::SetLiveSubtitles(live));
     if std::env::var_os("DOWNLOAD").is_some() {
-        engine.send(Command::DownloadModel(if live { Model::Live } else { Model::SenseVoice }));
+        engine.send(Command::DownloadModel(Model::SenseVoice));
     }
     engine.send(Command::SetVideoCodec(codec("CODEC").unwrap_or(VideoCodec::Auto)));
     // Stats come only while asked for, like the overlay; they name the codec in use

@@ -25,10 +25,11 @@ pub(crate) struct SpeechSocket {
 }
 
 impl SpeechSocket {
-    /// `url` is the full `/ws/speech?room=&token=` address; the server's notices come back through `notices`.
-    pub(crate) fn connect(url: Url, notices: mpsc::UnboundedSender<SpeechEvent>) -> Self {
+    /// `url` is the full `/ws/speech?room=&token=` address; the server's notices come back through `notices`. With
+    /// `live`, the server also sends the line being said to the other person as it grows, for live subtitles.
+    pub(crate) fn connect(url: Url, live: bool, notices: mpsc::UnboundedSender<SpeechEvent>) -> Self {
         let (out, rx) = mpsc::unbounded_channel();
-        tokio::spawn(run(url, rx, notices));
+        tokio::spawn(run(url, live, rx, notices));
         Self { out }
     }
 }
@@ -39,7 +40,7 @@ impl Recognizer for SpeechSocket {
     }
 }
 
-async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::UnboundedSender<SpeechEvent>) {
+async fn run(url: Url, live: bool, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::UnboundedSender<SpeechEvent>) {
     let mut retry_at = Instant::now();
     // The first connect goes out at once, like the web's connect(): the first utterance doesn't wait for the
     // handshake, and a server without speech says so before anyone speaks. After a drop, the next utterance
@@ -75,7 +76,7 @@ async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::Unb
             }
         };
         for msg in queue {
-            if ws.send(encode(msg)).await.is_err() {
+            if ws.send(encode(msg, live)).await.is_err() {
                 retry_at = Instant::now() + RETRY;
                 continue 'connect;
             }
@@ -84,7 +85,7 @@ async fn run(url: Url, mut out: mpsc::UnboundedReceiver<Out>, notices: mpsc::Unb
             tokio::select! {
                 msg = out.recv() => match msg {
                     Some(msg) => {
-                        if ws.send(encode(msg)).await.is_err() {
+                        if ws.send(encode(msg, live)).await.is_err() {
                             // An utterance cut off by the drop is lost: the server only transcribes what it saw
                             // start and end
                             retry_at = Instant::now() + RETRY;
@@ -120,10 +121,10 @@ fn size(msg: &Out) -> usize {
     }
 }
 
-fn encode(msg: Out) -> Message {
+fn encode(msg: Out, live: bool) -> Message {
     let json = |m: SpeechClientMessage| Message::text(serde_json::to_string(&m).unwrap_or_default());
     match msg {
-        Out::Start(lang) => json(SpeechClientMessage::Start { lang, live: None }),
+        Out::Start(lang) => json(SpeechClientMessage::Start { lang, live: live.then_some(true) }),
         Out::End => json(SpeechClientMessage::End),
         Out::Cancel => json(SpeechClientMessage::Cancel),
         // 16-bit little-endian, what the server reads
