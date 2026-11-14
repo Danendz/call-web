@@ -1,4 +1,47 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+
+// iOS refuses sound that doesn't start right after a tap, and the call's media arrives seconds after one.
+// Such a video plays muted so its picture shows, until the next tap turns its sound on.
+const soundBlocked = new Set<HTMLVideoElement>();
+const listeners = new Set<() => void>();
+const changed = () => listeners.forEach((l) => l());
+
+function blockSound(v: HTMLVideoElement) {
+  if (soundBlocked.size === 0) {
+    // Events that count as a user gesture: pointerup for touch, keydown for keyboards
+    document.addEventListener("pointerup", unblockSound, true);
+    document.addEventListener("keydown", unblockSound, true);
+  }
+  soundBlocked.add(v);
+  changed();
+}
+
+function unblock(v: HTMLVideoElement) {
+  if (soundBlocked.delete(v)) changed();
+  if (soundBlocked.size === 0) {
+    document.removeEventListener("pointerup", unblockSound, true);
+    document.removeEventListener("keydown", unblockSound, true);
+  }
+}
+
+function unblockSound() {
+  for (const v of soundBlocked) {
+    unblock(v);
+    v.muted = false;
+    v.play().catch((err) => console.warn("sound still blocked", err));
+  }
+}
+
+/** True while a video plays muted because the browser blocked its sound; any tap turns it on. */
+export function useSoundBlocked(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => soundBlocked.size > 0,
+  );
+}
 
 /**
  * Plays a stream. onAspect reports width/height of the frames, again whenever the source changes shape.
@@ -23,13 +66,31 @@ export function Video({
   onAspect?: (aspect: number) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (ref.current && ref.current.srcObject !== stream) ref.current.srcObject = stream;
-  }, [stream]);
   // React doesn't keep the muted property in sync after the first render
   useEffect(() => {
-    if (ref.current) ref.current.muted = !!muted;
+    const v = ref.current;
+    if (!v) return;
+    if (muted) unblock(v);
+    v.muted = !!muted || soundBlocked.has(v);
   }, [muted]);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    if (v.srcObject !== stream) v.srcObject = stream;
+    // autoPlay alone fails silently when the sound is blocked, leaving a black, paused video
+    v.play().catch((err) => {
+      if (err?.name !== "NotAllowedError" || v.muted) return;
+      v.muted = true;
+      blockSound(v);
+      v.play().catch((err) => console.warn("video blocked", err));
+    });
+  }, [stream]);
+  useEffect(() => {
+    const v = ref.current;
+    return () => {
+      if (v) unblock(v);
+    };
+  }, []);
   useEffect(() => {
     const v = ref.current;
     if (!v || sinkId === undefined || !("setSinkId" in v)) return;

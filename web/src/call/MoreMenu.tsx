@@ -19,14 +19,25 @@ export interface MenuItem {
 }
 
 /** The ⋯ button and its menu with the controls that don't fit in the pill. Picking an action closes it. */
-export function MoreMenu({ items, open, onOpenChange }: { items: MenuItem[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function MoreMenu({
+  items,
+  badge,
+  open,
+  onOpenChange,
+}: {
+  items: MenuItem[];
+  /** Unread messages, when the chat toggle is one of the items */
+  badge?: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const close = () => onOpenChange(false);
 
   return (
     <div className="more" ref={ref}>
-      <IconButton label={t.more} variant={open ? "active" : null} expanded={open} onClick={() => onOpenChange(!open)}>
+      <IconButton label={t.more} variant={open ? "active" : null} expanded={open} badge={badge} onClick={() => onOpenChange(!open)}>
         <Ellipsis size={22} />
       </IconButton>
       <MenuPanel label={t.more} open={open} onClose={close} within={ref}>

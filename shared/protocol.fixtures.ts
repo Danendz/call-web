@@ -4,6 +4,7 @@
 // these honest.
 
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, USERNAME_RE } from "./api.js";
+import { EMOJI_GROUPS } from "./emoji.js";
 import {
   LANGS,
   MAX_CHAT_LENGTH,
@@ -11,6 +12,7 @@ import {
   MAX_LIVE_LENGTH,
   MAX_STREAM_ID_LENGTH,
   MAX_UTTERANCE_S,
+  REACTIONS,
   ROOM_ID_RE,
   TRANSCRIBE_SAMPLE_RATE,
   type ClientMessage,
@@ -28,6 +30,8 @@ export const constants = {
   MAX_STREAM_ID_LENGTH,
   ROOM_ID_RE: ROOM_ID_RE.source,
   LANGS,
+  REACTIONS,
+  EMOJI: EMOJI_GROUPS.flatMap((g) => g.emoji),
   TRANSCRIBE_SAMPLE_RATE,
   MAX_UTTERANCE_S,
   USERNAME_RE: USERNAME_RE.source,
@@ -53,6 +57,7 @@ export const clientMessages = [
   { type: "leave" },
   { type: "ping" },
   { type: "screenshot" },
+  { type: "reaction", emoji: "❤️" },
   { type: "media", camOn: true, screen: null },
   { type: "media", camOn: false, screen: "{6f1c2c9e-0000-4000-8000-000000000000}" },
   { type: "media", camOn: true, screen: null, speakerOff: true },
@@ -94,6 +99,7 @@ export const serverMessages = [
   { type: "chat-live", id: "l1", text: "can you", lang: "en" },
   { type: "pong" },
   { type: "screenshot" },
+  { type: "reaction", emoji: "❤️" },
   { type: "media", camOn: true, screen: "s1" },
   { type: "media", camOn: true, screen: null, speakerOff: true },
   { type: "error", message: "bad message" },

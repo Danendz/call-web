@@ -2,6 +2,10 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+// Only `npm run dev:server` sets it, so local testing isn't cut off; `npm start` (production) never does
+const unlimited = process.env.NO_RATE_LIMITS === "1";
+if (unlimited) console.warn("NO_RATE_LIMITS=1: rate and connection limits are off");
+
 /** The caller's IP. Railway's edge sets X-Real-IP; without it (a local run) the socket's address. */
 export function clientIp(req: IncomingMessage): string {
   const real = req.headers["x-real-ip"];
@@ -23,6 +27,7 @@ export function rateLimit(max: number, windowMs: number): (key: string, cost?: n
   }, windowMs).unref();
 
   return (key, cost = 1) => {
+    if (unlimited) return true;
     const now = Date.now();
     let w = windows.get(key);
     if (!w || w.resetAt <= now) {
@@ -40,7 +45,7 @@ export function concurrencyLimit(max: number) {
   return {
     acquire(key: string): boolean {
       const n = open.get(key) ?? 0;
-      if (n >= max) return false;
+      if (n >= max && !unlimited) return false;
       open.set(key, n + 1);
       return true;
     },

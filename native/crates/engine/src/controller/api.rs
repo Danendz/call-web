@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-use protocol::{ChatMessage, FullReason, Lang, Translation};
+use protocol::{ChatMessage, FullReason, Lang, Reaction, Translation};
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -136,6 +136,8 @@ pub enum Command {
     SendChat(String),
     /// Tells the other person a picture of the call was saved
     NotifyScreenshot,
+    /// Flies over both sides' video; only in a call
+    SendReaction(Reaction),
     SetTranscribe(bool),
     /// Downloads an on-device speech model, picking up where an earlier try stopped
     DownloadModel(Model),
@@ -171,6 +173,11 @@ pub enum ChatEvent {
     Live {
         id: String,
         text: String,
+    },
+    /// A reaction to fly over the video: one we sent, or one from the other person. Never stored.
+    Reaction {
+        emoji: Reaction,
+        mine: bool,
     },
 }
 

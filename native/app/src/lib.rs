@@ -6,9 +6,10 @@ mod android;
 mod bridge;
 mod chat;
 mod friends;
+mod reactions;
+mod readable;
 mod screenshot;
 mod settings;
-mod subtitles;
 mod translate;
 #[cfg(not(target_os = "android"))]
 mod update;
@@ -22,7 +23,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use bridge::Bridge;
-use engine::{Command, Engine, Lang, Model, room};
+use engine::{Command, Engine, Lang, Model, Reaction, room};
 use settings::Settings;
 use url::Url;
 
@@ -228,6 +229,14 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SendChat(text.into()));
             // The box clears; the message shows once the server echoes it back, as on the web
             true
+        }
+    });
+    ui.on_react({
+        let engine = engine.clone();
+        move |emoji| {
+            if let Some(emoji) = Reaction::parse(&emoji) {
+                engine.send(Command::SendReaction(emoji));
+            }
         }
     });
     ui.on_toggle_transcribe({

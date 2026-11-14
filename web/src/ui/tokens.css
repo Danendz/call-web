@@ -22,6 +22,9 @@
   --glass-strong: rgba(20, 21, 26, 0.82);
   --glass-border: rgba(255, 255, 255, 0.1);
   --blur: blur(18px) saturate(160%);
+  /* Chat bubbles over the video: theirs, yours */
+  --bubble: rgba(12, 13, 17, 0.5);
+  --bubble-mine: rgba(76, 125, 255, 0.62);
 
   --radius-sm: 10px;
   --radius: 14px;

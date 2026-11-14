@@ -27,6 +27,50 @@ pub fn is_room_id(id: &str) -> bool {
     (6..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
+/// The quick reactions, first in the picker: `REACTIONS` in protocol.ts.
+pub const REACTIONS: [&str; 8] = ["❤️", "😂", "👍", "😮", "😢", "🔥", "🎉", "👏"];
+
+/// The picker's grid, any of which can be sent as a reaction too: `EMOJI_GROUPS` in shared/emoji.ts, in its order.
+pub const EMOJI: [&str; 146] = [
+    "😀", "😁", "😂", "🤣", "😊", "😇", "🙂", "😉", "😍", "🥰", "😘", "😋", "😛", "😜", "🤪", "😎", "🤩", "🥳", "😏",
+    "😌", "😴", "🤔", "🤨", "😐", "🙄", "😬", "😮", "😲", "🥺", "😢", "😭", "😤", "😡", "🤯", "😳", "😱", "🤗", "🤭",
+    "🫡", "😷", "👍", "👎", "👌", "✌️", "🤞", "🤟", "🤙", "👋", "👏", "🙌", "🙏", "💪", "🫶", "👀", "🤝", "✋", "👉",
+    "👈", "☝️", "🤷", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "💕", "💖", "💘", "💋", "✨", "💯", "🔥",
+    "⭐", "💫", "💥", "💤", "🐱", "🐶", "🐼", "🐻", "🐰", "🦊", "🐨", "🐯", "🐷", "🐸", "🐧", "🐥", "🦄", "🐝", "🦋",
+    "🌸", "🌹", "🌻", "🌈", "☀️", "🌙", "❄️", "🍕", "🍔", "🍟", "🍜", "🍣", "🥟", "🍚", "🍰", "🎂", "🍩", "🍪", "🍫",
+    "🍓", "🍉", "🍑", "🥑", "☕", "🧋", "🍵", "🍺", "🍷", "🥂", "🎉", "🎁", "🎈", "🎮", "🎧", "🎵", "📷", "💻", "📱",
+    "✈️", "🚗", "🏠", "⚽", "🏀", "🏆", "💰", "⏰", "📅", "✅", "❌", "❓", "❗",
+];
+
+/// What can be sent as a reaction: one of [`REACTIONS`] or [`EMOJI`]. It flies over both sides' video and shows in
+/// their chat, and isn't stored. Anything else doesn't parse, so a message carrying it is dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reaction(&'static str);
+
+impl Reaction {
+    /// The allowed emoji equal to `emoji`, if it is one
+    pub fn parse(emoji: &str) -> Option<Self> {
+        REACTIONS.iter().chain(EMOJI.iter()).find(|&&e| e == emoji).map(|&e| Reaction(e))
+    }
+
+    pub fn emoji(self) -> &'static str {
+        self.0
+    }
+}
+
+impl Serialize for Reaction {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Reaction {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let emoji = String::deserialize(deserializer)?;
+        Reaction::parse(&emoji).ok_or_else(|| serde::de::Error::custom("not an allowed reaction"))
+    }
+}
+
 /// The two languages the chat is translated between, also what each side's speech is recognized in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -125,6 +169,9 @@ pub enum ClientMessage {
     Ping,
     /// Tells the other person you saved a picture of the call.
     Screenshot,
+    Reaction {
+        emoji: Reaction,
+    },
     /// What you're sending, which the tracks alone can't say. Sent on every change and whenever the peer
     /// connection is (re)made. `screen` is the id of the stream the shared screen arrives in.
     Media {
@@ -181,6 +228,9 @@ pub enum ServerMessage {
     },
     Pong,
     Screenshot,
+    Reaction {
+        emoji: Reaction,
+    },
     Media {
         cam_on: bool,
         screen: Option<String>,

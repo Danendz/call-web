@@ -1,91 +1,122 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
-import { IconButton } from "../components/icon-button.slint";
 
-// One message as the bridge words it: the other person's in your language with what they wrote under it, your own
-// as written (the web's readable())
+// One line as the bridge words it (the web's useFeed): the other person's in your language with what they wrote
+// under it, your own as written, and what they're saying right now as the last one
 export struct ChatRow {
-    id: string,
+    // What showed when it came: their spoken words translated on this device when it can be
+    first: string,
+    // The server's translation, which crossfades over `first`
     text: string,
+    translated: bool,
     original: string,
     mine: bool,
     spoken: bool,
-    time: string,
+    // What they're saying right now
+    live: bool,
+    // Waiting the few ms its translation here takes, rather than flash the original
+    pending: bool,
+    // A reaction, or a run of the same one: the emoji big
+    reaction: bool,
 }
 
-// A bubble that rises in like the web's msg-in
+// See-through like the web's: theirs dark on the left, yours accent on the right. Rises in like msg-in, and fades
+// out as it nears the top of the list, where the web masks it.
 component Bubble inherits HorizontalLayout {
     in property <ChatRow> message;
     in property <length> max-bubble;
-    property <bool> shown: false;
-    init => { shown = true; }
+    // Where the top of the list is, from the bubble's own top: it fades over the band below it
+    in property <length> from-top;
+    in property <length> fade;
+    property <bool> entered;
+    init => { entered = true; }
+    property <bool> shown: entered && !message.pending;
 
     alignment: message.mine ? end : start;
     Rectangle {
         max-width: root.max-bubble;
-        // Your own tail at the bottom right, theirs at the bottom left
         border-top-left-radius: 18px;
         border-top-right-radius: 18px;
         border-bottom-left-radius: message.mine ? 18px : 6px;
         border-bottom-right-radius: message.mine ? 6px : 18px;
-        background: message.mine ? Theme.accent : Theme.surface-3;
-        opacity: shown ? 1 : 0;
+        background: message.mine ? Theme.bubble-mine : Theme.bubble;
+        border-width: message.mine ? 0px : 1px;
+        border-color: Theme.glass-border;
+        opacity: (shown ? 1 : 0) * clamp((root.from-top + self.height / 2) / root.fade, 0, 1);
         transform-scale: shown ? 1 : 0.96;
         transform-origin: { x: message.mine ? self.width : 0, y: self.height };
-        animate opacity, transform-scale { duration: Theme.med; easing: Theme.ease; }
+        animate transform-scale { duration: Theme.med; easing: Theme.ease; }
         accessible-role: text;
-        accessible-label: message.text;
+        accessible-label: message.translated ? message.text : message.first;
 
         VerticalLayout {
-            padding-left: 12px;
-            padding-right: 12px;
-            padding-top: 8px;
-            padding-bottom: 6px;
-            spacing: 2px;
+            padding-left: message.reaction ? 10px : 12px;
+            padding-right: message.reaction ? 10px : 12px;
+            padding-top: message.reaction ? 4px : 7px;
+            padding-bottom: message.reaction ? 4px : 7px;
+            spacing: 3px;
             HorizontalLayout {
                 spacing: 5px;
                 if message.spoken: Image {
                     source: Icons.mic;
-                    colorize: message.mine ? #ffffffb8 : Theme.muted;
+                    colorize: #ffffffb3;
                     width: 13px;
                     height: 13px;
                     y: 3px;
                     accessible-role: image;
                     accessible-label: @tr("Spoken");
                 }
-                Text {
-                    text: message.text;
-                    color: message.mine ? #fff : Theme.text;
-                    wrap: word-wrap;
+                // The translation crossfades over what was shown first, both in one box so it doesn't jump
+                Rectangle {
+                    horizontal-stretch: 1;
+                    preferred-width: max(first-text.preferred-width, final-text.preferred-width);
+                    min-height: max(first-text.preferred-height, final-text.preferred-height);
+                    first-text := Text {
+                        y: 0;
+                        width: parent.width;
+                        text: message.first;
+                        color: #fff;
+                        font-size: message.reaction ? 22px : Theme.font-size;
+                        wrap: word-wrap;
+                        opacity: message.translated ? 0 : 1;
+                        animate opacity { duration: Theme.slow; easing: Theme.ease; }
+                    }
+                    final-text := Text {
+                        y: 0;
+                        width: parent.width;
+                        text: message.translated ? message.text : "";
+                        color: #fff;
+                        wrap: word-wrap;
+                        opacity: message.translated ? 1 : 0;
+                        animate opacity { duration: Theme.slow; easing: Theme.ease; }
+                    }
                 }
             }
             if message.original != "": Text {
                 text: message.original;
-                color: message.mine ? #ffffffb8 : Theme.muted;
+                color: #ffffffb3;
                 font-size: 12px;
                 wrap: word-wrap;
-            }
-            Text {
-                text: message.time;
-                color: message.mine ? #ffffffb8 : Theme.muted;
-                font-size: 11px;
-                horizontal-alignment: right;
             }
         }
     }
 }
 
-// The chat beside the stage, or under it on a phone held upright, like the web's ChatPanel. It keeps its draft while
-// closed.
-export component ChatPanel inherits Rectangle {
+// The chat over the video in the lower left, like the web's ChatOverlay: no panel, only bubbles, the oldest fading
+// out at the top and the rest a scroll back. It keeps its draft while hidden.
+export component ChatOverlay inherits Rectangle {
     in property <[ChatRow]> messages;
     in property <bool> open;
     in property <bool> can-send;
-    in property <bool> stacked;
+    // The controls faded off the video: so does the message box, unless it's in use
+    in property <bool> idle;
+    // How tall the list may grow before it scrolls
+    in property <length> max-list;
+    // Room the messages leave on the right, for the phone's rail above the message box
+    in property <length> list-clear;
     // Only with a mouse and keyboard: on a touch screen focusing would pop the on-screen keyboard over the call
     in property <bool> focus-on-open: true;
-    // The on-screen keyboard is up; once it's put away (Back, or its own button) the box lets go too, so Back reaches
-    // the chat next
+    // The on-screen keyboard is up; once it's put away (Back, or its own button) the box lets go too
     in property <bool> keyboard-shown;
     changed keyboard-shown => {
         if (!keyboard-shown && input.has-focus) {
@@ -93,86 +124,51 @@ export component ChatPanel inherits Rectangle {
         }
     }
     callback send(string) -> bool;
-    callback close();
 
-    background: Theme.surface;
-    clip: true;
+    // Where scrolled-back lines fade out
+    property <length> fade: 48px;
+    property <bool> holding: input.has-focus || input.text != "";
+
+    height: content.preferred-height;
+    opacity: open ? 1 : 0;
+    visible: self.opacity > 0;
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
     accessible-role: groupbox;
     accessible-label: @tr("Chat");
 
     // Lets go of the message box, which puts the on-screen keyboard away. Focus moves to the chat itself rather than
-    // nowhere, so the phone's Back key still reaches it.
+    // nowhere, so the phone's Back key still reaches the window.
     public function blur() {
         keys.focus();
     }
 
-    // The phone's Back key closes the chat
     keys := FocusScope {
-        key-pressed(event) => {
-            if (event.text == Key.Back && root.open) {
-                root.close();
-                return accept;
-            }
-            reject
-        }
+        content := VerticalLayout {
+            y: root.open ? 0 : 12px;
+            animate y { duration: Theme.med; easing: Theme.ease; }
+            spacing: 8px;
 
-        // Fixed width inside, so the text doesn't reflow while the panel opens; it slides in like .chat-inner, upward when
-        // stacked
-        inner := VerticalLayout {
-            x: open || stacked ? 0 : 24px;
-            y: open || !stacked ? 0 : 32px;
-            width: root.width;
-            height: root.height;
-            opacity: open ? 1 : 0;
-            animate x, y { duration: Theme.slow; easing: Theme.ease; }
-            animate opacity { duration: Theme.med; easing: Theme.ease; }
-
-            HorizontalLayout {
-                padding-top: 10px;
-                padding-bottom: 10px;
-                padding-left: 18px;
-                padding-right: 8px;
-                Text {
-                    text: @tr("Chat");
-                    color: Theme.text;
-                    font-weight: 650;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                IconButton {
-                    icon: Icons.x;
-                    label: @tr("Close chat");
-                    size: 36px;
-                    transparent: true;
-                    clicked => { root.close(); }
-                }
-            }
-
-            // In place of the list until the first message, so it doesn't size the list
-            if messages.length == 0: Rectangle {
-                vertical-stretch: 1;
-                TouchArea { clicked => { root.blur(); } }
-                Text {
-                    width: min(240px, parent.width - 28px);
-                    text: @tr("No messages yet. They disappear when the room closes.");
-                    color: Theme.muted;
-                    font-size: 13px;
-                    wrap: word-wrap;
-                    horizontal-alignment: center;
-                }
+            if messages.length == 0: Text {
+                text: @tr("No messages yet. They disappear when the room closes.");
+                width: root.width - root.list-clear;
+                color: #ffffffbf;
+                font-size: 13px;
+                wrap: word-wrap;
+                opacity: root.idle ? 0 : 1;
+                animate opacity { duration: Theme.med; easing: Theme.ease; }
             }
             list := Flickable {
-                vertical-stretch: 1;
-                // Takes no room until there's something in it
-                max-height: messages.length == 0 ? 0px : 100000px;
+                // Grows with its lines, then scrolls; the band at the top is where lines fade, so a short list shows whole
+                height: min(column.preferred-height, root.max-list);
                 content-height: column.preferred-height;
                 property <int> count: messages.length;
-                // New messages scroll into view, smoothly, like the web's scrollTo
-                changed count => { stick.running = true; }
-                changed height => { stick.running = true; }
-                animate content-y { duration: Theme.med; easing: Theme.ease; }
+                // New lines scroll into view, like the web's: unless scrolled back to read
+                property <bool> stuck: true;
+                changed content-y => { self.stuck = self.content-y <= self.height - self.content-height + 24px; }
+                changed count => { if (self.stuck) { stick.running = true; } }
+                changed content-height => { if (self.stuck) { stick.running = true; } }
 
-                // A tap between the messages puts the keyboard away
+                // A tap between the lines puts the keyboard away
                 TouchArea {
                     width: list.width;
                     height: max(list.height, column.preferred-height);
@@ -180,41 +176,30 @@ export component ChatPanel inherits Rectangle {
                 }
                 column := VerticalLayout {
                     width: list.width;
-                    padding-left: 14px;
-                    padding-right: 14px;
-                    padding-top: 4px;
-                    padding-bottom: 12px;
+                    padding-top: root.fade;
+                    padding-right: root.list-clear;
                     spacing: 6px;
                     for row in messages: Bubble {
                         message: row;
-                        max-bubble: (root.width - 28px) * 0.85;
+                        max-bubble: (root.width - root.list-clear) * 0.85;
+                        from-top: self.y + list.content-y;
+                        fade: root.fade;
                     }
                 }
             }
-            // The column's height settles a frame after a row is added, so the scroll waits for it
-            stick := Timer {
-                interval: 16ms;
-                running: false;
-                triggered => {
-                    self.running = false;
-                    list.content-y = min(0px, list.height - list.content-height);
-                }
-            }
 
-            Rectangle { height: 1px; background: Theme.border; }
-
+            // Stays while typing even when the controls fade
             HorizontalLayout {
-                padding: 10px;
-                padding-left: 12px;
-                padding-right: 12px;
                 spacing: 8px;
+                opacity: root.idle && !root.holding ? 0 : 1;
+                animate opacity { duration: Theme.med; easing: Theme.ease; }
                 Rectangle {
                     height: 44px;
                     horizontal-stretch: 1;
                     border-radius: self.height / 2;
                     border-width: 1px;
-                    border-color: input.has-focus ? Theme.accent : Theme.border;
-                    background: Theme.surface-2;
+                    border-color: input.has-focus ? Theme.accent : Theme.glass-border;
+                    background: Theme.glass;
                     animate border-color { duration: Theme.fast; easing: Theme.ease; }
                     Text {
                         x: 16px;
@@ -240,7 +225,7 @@ export component ChatPanel inherits Rectangle {
                     height: 44px;
                     border-radius: self.height / 2;
                     property <bool> enabled: root.can-send && input.text != "";
-                    background: !enabled ? Theme.surface-3 : touch.has-hover ? Theme.accent-hover : Theme.accent;
+                    background: !enabled ? Theme.glass : touch.has-hover ? Theme.accent-hover : Theme.accent;
                     animate background { duration: Theme.fast; easing: Theme.ease; }
                     accessible-role: button;
                     accessible-label: @tr("Send");
@@ -250,6 +235,7 @@ export component ChatPanel inherits Rectangle {
                     clicked => {
                         if (self.enabled && root.send(input.text)) {
                             input.text = "";
+                            list.stuck = true;
                         }
                     }
                     Image {
@@ -265,10 +251,19 @@ export component ChatPanel inherits Rectangle {
                 }
             }
         }
-
     }
 
-    // Focus the message box when the chat opens, as the web does on a desktop, and let go of it when it closes
+    // The list's height settles a frame after a row is added, so the scroll waits for it
+    stick := Timer {
+        interval: 16ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            list.content-y = min(0px, list.height - list.content-height);
+        }
+    }
+
+    // Focus the message box when the chat is shown again, as the web does on a desktop, and let go of it when hidden
     changed open => {
         if (open && focus-on-open) {
             input.focus();

@@ -107,7 +107,7 @@ export function useQuickTranslations(texts: string[], lang: Lang, on: boolean): 
   const [translator, setTranslator] = useState<Translator | null>(null);
   useEffect(() => {
     if (!on || !ready) return;
-    // The engine and model take a few hundred MB, so they're only kept while subtitles are up
+    // The engine and model take a few hundred MB, so they're only kept while live subtitles are on
     const t = new Translator(pair);
     setTranslator(t);
     return () => {

@@ -38,39 +38,51 @@ export component DeviceMenu inherits Rectangle {
         }
     }
 
-    width: row.preferred-width;
-    height: row.preferred-height;
-    border-radius: self.height / 2;
-    background: has-menu ? Theme.split : transparent;
+    // On the rail: the chevron is a small tab on the button's left, pointing at where its sheet's choices are
+    in property <bool> tab;
+    property <length> chevron-width: root.size < 48px ? 22px : 26px;
 
-    row := HorizontalLayout {
-        IconButton {
-            icon: root.icon;
-            label: root.label;
-            kind: root.kind;
-            enabled: root.enabled;
-            size: root.size;
-            mark: root.mark;
-            clicked => { root.clicked(); }
+    width: root.has-menu && !root.tab ? root.size + root.chevron-width : root.size;
+    height: root.size;
+    border-radius: self.height / 2;
+    background: has-menu && !tab ? Theme.split : transparent;
+
+    IconButton {
+        x: 0;
+        icon: root.icon;
+        label: root.label;
+        kind: root.kind;
+        enabled: root.enabled;
+        size: root.size;
+        mark: root.mark;
+        clicked => { root.clicked(); }
+    }
+    if root.has-menu: Rectangle {
+        x: root.tab ? -self.width - 2px : root.size;
+        y: (root.height - self.height) / 2;
+        width: root.tab ? 20px : root.chevron-width;
+        height: root.tab ? 40px : root.size;
+        border-top-left-radius: root.tab ? self.height / 2 : 0;
+        border-bottom-left-radius: root.tab ? self.height / 2 : 0;
+        border-width: root.tab ? 1px : 0;
+        border-color: Theme.glass-border;
+        background: root.tab ? Theme.glass : transparent;
+        accessible-role: button;
+        accessible-label: root.menu-label;
+        accessible-action-default => { menu.show(); }
+        Image {
+            // Off center toward the button, like the web's padding-right
+            x: root.tab ? (parent.width - self.width) / 2 : (parent.width - 4px - self.width) / 2;
+            source: Icons.chevron-up;
+            colorize: touch.has-hover || menu.is-open ? Theme.text : Theme.muted;
+            width: 16px;
+            height: 16px;
+            transform-rotation: root.tab ? -90deg : 0deg;
+            animate colorize { duration: Theme.fast; easing: Theme.ease; }
         }
-        if root.has-menu: Rectangle {
-            width: root.size < 48px ? 22px : 26px;
-            accessible-role: button;
-            accessible-label: root.menu-label;
-            accessible-action-default => { menu.show(); }
-            Image {
-                // Off center toward the button, like the web's padding-right
-                x: (parent.width - 4px - self.width) / 2;
-                source: Icons.chevron-up;
-                colorize: touch.has-hover || menu.is-open ? Theme.text : Theme.muted;
-                width: 16px;
-                height: 16px;
-                animate colorize { duration: Theme.fast; easing: Theme.ease; }
-            }
-            touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { menu.show(); }
-            }
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { menu.show(); }
         }
     }
 
