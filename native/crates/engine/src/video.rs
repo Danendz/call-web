@@ -80,48 +80,61 @@ impl<'a> Frame<'a> {
         CONVERT_US.record(started.elapsed().as_micros());
     }
 
-    /// Hands `f` the frame as I420, for a shader to turn into RGBA. A VP8 frame is I420 already and is only borrowed;
-    /// any other is copied into one first (a decoded H.264 frame on macOS is NV12), which still costs far less than
-    /// converting to RGBA. Timed like [`Self::write_rgba`], `f` included. None for a format there's no copy for.
-    pub fn with_i420<R>(&self, f: impl FnOnce(&I420<'_>) -> R) -> Option<R> {
+    /// Hands `f` the frame's YUV planes, for a shader to turn into RGBA. I420 (VP8) and NV12 (hardware decoders such
+    /// as Media Foundation's) are only borrowed; any other format, like macOS's `CVPixelBuffer`, is copied into I420
+    /// first, which still costs far less than converting to RGBA.
+    /// Timed like [`Self::write_rgba`], `f` included. None for a format there's no copy for.
+    pub fn with_planes<R>(&self, f: impl FnOnce(&Planes<'_>) -> R) -> Option<R> {
         let started = Instant::now();
+        let (width, height) = (self.width(), self.height());
         let b = self.buffer;
-        let copied;
-        let buf = match b.as_i420() {
-            Some(buf) => buf,
-            None => {
-                copied = if let Some(buf) = b.as_nv12() {
-                    buf.to_i420()
-                } else if let Some(buf) = b.as_native() {
-                    buf.to_i420()
-                } else if let Some(buf) = b.as_i420a() {
-                    buf.to_i420()
-                } else if let Some(buf) = b.as_i422() {
-                    buf.to_i420()
-                } else if let Some(buf) = b.as_i444() {
-                    buf.to_i420()
-                } else {
-                    b.as_i010()?.to_i420()
-                };
-                &copied
-            }
+        let result = if let Some(buf) = b.as_nv12() {
+            let (y, uv) = buf.data();
+            let (y_stride, uv_stride) = buf.strides();
+            f(&Planes { width, height, y, y_stride, chroma: Chroma::Nv12 { uv, stride: uv_stride } })
+        } else {
+            let copied;
+            let buf = match b.as_i420() {
+                Some(buf) => buf,
+                None => {
+                    copied = if let Some(buf) = b.as_native() {
+                        buf.to_i420()
+                    } else if let Some(buf) = b.as_i420a() {
+                        buf.to_i420()
+                    } else if let Some(buf) = b.as_i422() {
+                        buf.to_i420()
+                    } else if let Some(buf) = b.as_i444() {
+                        buf.to_i420()
+                    } else {
+                        b.as_i010()?.to_i420()
+                    };
+                    &copied
+                }
+            };
+            let (y, u, v) = buf.data();
+            let (y_stride, u_stride, v_stride) = buf.strides();
+            f(&Planes { width, height, y, y_stride, chroma: Chroma::I420 { u, v, u_stride, v_stride } })
         };
-        let (y, u, v) = buf.data();
-        let result = f(&I420 { width: self.width(), height: self.height(), y, u, v, strides: buf.strides() });
         CONVERT_US.record(started.elapsed().as_micros());
         Some(result)
     }
 }
 
-/// A frame's three planes: Y at full size, U and V at half the width and height, rounded up.
-pub struct I420<'a> {
+/// A frame's planes: Y at full size, chroma at half the width and height, rounded up.
+pub struct Planes<'a> {
     pub width: u32,
     pub height: u32,
     pub y: &'a [u8],
-    pub u: &'a [u8],
-    pub v: &'a [u8],
-    /// Bytes from one row to the next in Y, U and V
-    pub strides: (u32, u32, u32),
+    /// Bytes from one row to the next
+    pub y_stride: u32,
+    pub chroma: Chroma<'a>,
+}
+
+pub enum Chroma<'a> {
+    /// U and V in planes of their own
+    I420 { u: &'a [u8], v: &'a [u8], u_stride: u32, v_stride: u32 },
+    /// U and V interleaved in one plane, two bytes a sample
+    Nv12 { uv: &'a [u8], stride: u32 },
 }
 
 /// Where frames go to be shown. Called on video threads, so it must be quick and must not queue: keep the newest

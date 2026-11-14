@@ -104,6 +104,7 @@ pub fn watch_renderer(ui: &crate::ui::AppWindow, settings: &Rc<RefCell<Settings>
             let _ = RENDERER.set(name);
             tracing::info!("drawing with {name}");
         }
+        RenderingState::RenderingTeardown => crate::gpu::stop(),
         RenderingState::AfterRendering if !drew => {
             drew = true;
             let Ok(mut settings) = settings.try_borrow_mut() else { return };
