@@ -1,5 +1,6 @@
 import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, Reaction, ServerMessage } from "../../../shared/protocol";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
+import { getSubtitles, onSubtitlesChange } from "../settings/subtitles";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
   BROWSER_AUDIO,
@@ -163,6 +164,7 @@ export class CallController {
   });
 
   private stopNoiseListener: () => void;
+  private stopSubtitlesListener: () => void;
 
   constructor(private roomId: string) {
     this.signaling = new Signaling(
@@ -172,12 +174,15 @@ export class CallController {
     );
     if (getNoiseSuppression()) preloadDenoise();
     this.stopNoiseListener = onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+    // Live subtitles change how speech is recognized
+    this.stopSubtitlesListener = onSubtitlesChange(() => this.set({}));
   }
 
   /** The page moved away from this room: leave it and let go of camera and mic. */
   dispose(): void {
     this.disposed = true;
     this.stopNoiseListener();
+    this.stopSubtitlesListener();
     this.teardown(true);
   }
 
@@ -202,7 +207,8 @@ export class CallController {
     const { transcribeOn, micOn, phase, localStream, lang } = this.state;
     // Only while someone is there to read it, and never while muted
     const speaking = transcribeOn && micOn && phase === "in-call";
-    this.transcriber.sync((speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null, lang);
+    const track = (speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null;
+    this.transcriber.sync(track, lang, getSubtitles());
     for (const l of this.listeners) l();
   }
 

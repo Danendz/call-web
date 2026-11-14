@@ -38,14 +38,14 @@ export interface ChatMessage {
 }
 
 // /ws/speech?room=&token= carries one utterance at a time: "start", its audio as binary frames while it's
-// being said, then "end" to transcribe it or "cancel" to drop it. Lines reach the chat in the order they ended.
-export type SpeechClientMessage = { type: "start"; lang: Lang } | { type: "end" } | { type: "cancel" };
+// being said, then "end" to transcribe it or "cancel" to drop it. A pause in the speech also ends a line, so one
+// utterance can post a few. Lines reach the chat in the order they ended. `live`: send the line being said to the
+// other person as it grows (chat-live), for live subtitles.
+export type SpeechClientMessage = { type: "start"; lang: Lang; live?: boolean } | { type: "end" } | { type: "cancel" };
 
 export type SpeechServerMessage =
-  // Every speech model is out of quota until this epoch ms
-  | { type: "paused"; until: number }
-  // The server has no speech model configured
-  | { type: "unavailable" };
+  // The server's speech model couldn't be loaded
+  { type: "unavailable" };
 
 export interface IceServerConfig {
   urls: string[];

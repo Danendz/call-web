@@ -26,11 +26,16 @@ export function setSubtitles(on: boolean): void {
   listeners.forEach((l) => l());
 }
 
-function subscribe(listener: () => void): () => void {
+export function getSubtitles(): boolean {
+  return subtitles;
+}
+
+/** Calls `listener` on every change; returns what stops it. */
+export function onSubtitlesChange(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
 export function useSubtitles(): boolean {
-  return useSyncExternalStore(subscribe, () => subtitles);
+  return useSyncExternalStore(onSubtitlesChange, getSubtitles);
 }

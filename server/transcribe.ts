@@ -1,203 +1,110 @@
-// Speech to chat for browsers whose own recognition doesn't work (in China it goes to Google): the
-// client streams each utterance over /ws/speech while it's being said, Groq Whisper transcribes it once
-// it ends, and it's posted to the room's chat as if the speaker had typed it. Streaming means only the
-// last moment of audio is still on its way when the speaker stops, which matters on links out of China
+// Speech to chat on the server, for browsers whose own recognition doesn't work (in China it goes to Google), for
+// live subtitles from a browser, and for the native app without its on-device model: the client streams each
+// utterance over /ws/speech while it's being said, and each line comes back to be posted to the room's chat as if the
+// speaker had typed it. When the client asks for live text, the line so far also goes to the other person as it
+// grows. The recognizing itself is in the speech service (speechService.ts), which sleeps while nobody uses it: here
+// the member and their limits are checked, and each socket is passed through to one of its own there.
 
-import type { WebSocket } from "ws";
+import WebSocket from "ws";
 import {
   LANGS,
+  MAX_CHAT_LENGTH,
+  MAX_LIVE_LENGTH,
   MAX_UTTERANCE_S,
   TRANSCRIBE_SAMPLE_RATE,
   type Lang,
   type SpeechClientMessage,
   type SpeechServerMessage,
 } from "../shared/protocol.js";
-import { createQuota, failIfNotOk } from "./llm.js";
-import { rateLimit, type Tier } from "./limits.js";
-import { memberByToken, postChat, tierOf } from "./rooms.js";
+import { rateLimit } from "./limits.js";
+import { memberByToken, postChat, relayToPeer, tierOf } from "./rooms.js";
+import type { SpeechDownstreamMessage, SpeechUpstreamMessage } from "./speechService.js";
 
-const GROQ_URL = "https://api.groq.com/openai/v1";
-// Each has its own free quota (2h of audio an hour): when large-v3 runs out, turbo still has its own
-const WHISPER_MODELS = ["whisper-large-v3", "whisper-large-v3-turbo"] as const;
-const TIMEOUT_MS = 15_000;
+// The speech service on the private network; a local run has it on this machine
+const SPEECH_URL = `ws://${process.env.SPEECH_HOST || "localhost"}:${process.env.SPEECH_PORT || 8090}`;
+const SPEECH_AUTH = `Bearer ${process.env.SPEECH_SECRET ?? ""}`;
+// Waking the speech service from sleep takes a few seconds
+const CONNECT_TIMEOUT_MS = 30_000;
 // 16-bit mono at the agreed rate; audio past this is dropped
 const MAX_UTTERANCE_BYTES = MAX_UTTERANCE_S * TRANSCRIBE_SAMPLE_RATE * 2;
-// Less than this is a click, not worth a request
-const MIN_UTTERANCE_BYTES = TRANSCRIBE_SAMPLE_RATE * 2 * 0.2;
 // The client sends ~25 frames a second; a cap on the count keeps tiny frames from costing more than their bytes
 const MAX_UTTERANCE_FRAMES = 2000;
-// Whisper's own guesses that a segment is made up, at the cutoffs Whisper itself uses: noise, a low
-// average log-probability of its tokens (unsure), or text that compresses too well (a phrase on repeat)
-const NO_SPEECH_PROB = 0.6;
-const MIN_AVG_LOGPROB = -1;
-const MAX_COMPRESSION_RATIO = 2.4;
-// A line that's only a filler: in the chat it's noise even when it was really said, since it was heard anyway
-const FILLER_RE = /^(?:嗯|啊|哦|呃|额|唔|mm+|hm+|uh+|um+|ah+|oh+|huh|mhm)+$/;
-// What Whisper says most often when it hears only noise (video endings). Said on purpose it's usually
-// longer, so as a whole line it's dropped when the audio was short or Whisper wasn't sure
-const THANKS_RE =
-  /^(?:(?:thank you|thanks)(?: (?:so much|very much|all|everyone|for watching|for listening))? ?)+$|^(?:谢谢|感谢)+(?:大家|你|您)?(?:的)?(?:观看|收看|收听)?$/;
-// Preroll and the closing pause are ~1.1s of this, so it's about 1.4s of speech
-const SHORT_AUDIO_S = 2.5;
-const SURE_AVG_LOGPROB = -0.5;
-// One utterance every couple of seconds of nonstop talking; past that someone is spending the quota.
-// An anonymous room gets half, and an hour of audio a day per IP.
-const uploadsPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(15, 60_000), user: rateLimit(30, 60_000) };
+// Nobody talks for longer than they're in the call, so more audio than time is someone spending the server's CPU.
+// An anonymous room's IP gets an hour of audio a day.
+const secondsPerMember = rateLimit(90, 60_000);
 const anonSecondsPerIp = rateLimit(60 * 60, 24 * 60 * 60_000);
-// What Whisper makes up from noise it was trained on (video subtitles credits)
-const HALLUCINATION_RE = /amara\.org|字幕由|明镜与点点|點點栏目|请不吝点赞/i;
-
-class OutOfQuota extends Error {
-  constructor(readonly until: number) {
-    super("Transcribe: every model is out of quota");
-  }
-}
-
-const withQuota = createQuota(WHISPER_MODELS);
-const key = process.env.GROQ_API_KEY;
-if (!key) console.warn("GROQ_API_KEY not set: speech is transcribed only in browsers that can do it themselves");
-
-interface Segment {
-  text: string;
-  no_speech_prob?: number;
-  avg_logprob?: number;
-  compression_ratio?: number;
-}
-
-/** Why a segment or the whole line was dropped; only these go to the log, never the text. */
-type Dropped = Record<"noise" | "unsure" | "repeat" | "credits" | "filler" | "thanks", number>;
-
-function keep(segments: Segment[], lang: Lang, seconds: number, dropped: Dropped): string {
-  const kept = segments.filter((s) => {
-    const reason =
-      (s.no_speech_prob ?? 0) >= NO_SPEECH_PROB
-        ? "noise"
-        : (s.avg_logprob ?? 0) < MIN_AVG_LOGPROB
-          ? "unsure"
-          : (s.compression_ratio ?? 0) > MAX_COMPRESSION_RATIO
-            ? "repeat"
-            : HALLUCINATION_RE.test(s.text)
-              ? "credits"
-              : null;
-    if (reason) dropped[reason]++;
-    return !reason;
-  });
-  const text = kept
-    .map((s) => s.text.trim())
-    .join(lang === "zh" ? "" : " ")
-    .trim();
-  const words = text.toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, " ").trim();
-  if (FILLER_RE.test(words.replace(/ /g, ""))) {
-    if (words) dropped.filler++;
-    return "";
-  }
-  const sure = kept.every((s) => (s.avg_logprob ?? 0) >= SURE_AVG_LOGPROB);
-  if (THANKS_RE.test(words) && (seconds < SHORT_AUDIO_S || !sure)) {
-    dropped.thanks++;
-    return "";
-  }
-  return text;
-}
-
-async function transcribe(
-  wav: Buffer,
-  lang: Lang,
-  seconds: number,
-): Promise<{ text: string; model: string; dropped: Dropped }> {
-  return withQuota(
-    async (model) => {
-      const form = new FormData();
-      form.append("file", new Blob([wav], { type: "audio/wav" }), "speech.wav");
-      form.append("model", model);
-      form.append("language", lang);
-      form.append("temperature", "0");
-      form.append("response_format", "verbose_json");
-      const res = await fetch(`${GROQ_URL}/audio/transcriptions`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}` },
-        body: form,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      await failIfNotOk(res, "Transcribe");
-      const reply = (await res.json()) as { segments?: Segment[] };
-      const dropped: Dropped = { noise: 0, unsure: 0, repeat: 0, credits: 0, filler: 0, thanks: 0 };
-      const text = keep(Array.isArray(reply.segments) ? reply.segments : [], lang, seconds, dropped);
-      return { text, model, dropped };
-    },
-    ({ until }) => Promise.reject(new OutOfQuota(until)),
-  );
-}
-
-function wavFrom(pcm: Buffer): Buffer {
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16); // fmt chunk size
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(1, 22); // mono
-  header.writeUInt32LE(TRANSCRIBE_SAMPLE_RATE, 24);
-  header.writeUInt32LE(TRANSCRIBE_SAMPLE_RATE * 2, 28); // bytes per second
-  header.writeUInt16LE(2, 32); // bytes per frame
-  header.writeUInt16LE(16, 34); // bits per sample
-  header.write("data", 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
-}
 
 function send(ws: WebSocket, msg: SpeechServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+}
+
+function cut(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max) : text;
 }
 
 /** A /ws/speech socket, already upgraded. Only a member of the room holding its token may use it. */
 export function onSpeechConnection(ws: WebSocket, roomId: string, token: string, ip: string): void {
   const clientId = memberByToken(roomId, token);
   if (!clientId) return ws.close(4003, "not in this room");
-  if (!key) {
-    send(ws, { type: "unavailable" });
-    return ws.close(1000);
-  }
 
-  let utterance: { lang: Lang; chunks: Buffer[]; bytes: number; startedAt: number } | null = null;
-  // Each line is transcribed as soon as it ends, but posted only after the ones before it
-  let posted = Promise.resolve();
+  // The seat may have been given up since the socket opened
+  const member = () => memberByToken(roomId, token) === clientId;
+  let utterance: { bytes: number; frames: number } | null = null;
+  // Of the last utterance: its lines come back after it ended
+  let lang: Lang = "en";
 
-  const finish = (lang: Lang, pcm: Buffer, startedAt: number) => {
-    const endedAt = Date.now();
-    const seconds = pcm.length / (TRANSCRIBE_SAMPLE_RATE * 2);
-    const transcribed = transcribe(wavFrom(pcm), lang, seconds).then(
-      (result) => {
-        // Timings and drop counts only, never what was said. span against audio shows how far the stream fell behind
-        const dropped = Object.entries(result.dropped)
-          .filter(([, n]) => n)
-          .map(([reason, n]) => `${reason}:${n}`)
-          .join(",");
-        console.info(
-          `transcribe lang=${lang} audio=${seconds.toFixed(1)}s span=${endedAt - startedAt}ms whisper=${Date.now() - endedAt}ms model=${result.model} chars=${result.text.length} dropped=${dropped || "-"}`,
-        );
-        return result.text;
-      },
-      (error: unknown) => {
-        if (error instanceof OutOfQuota) send(ws, { type: "paused", until: error.until });
-        else console.warn((error as Error).message);
-        return "";
-      },
-    );
-    posted = posted.then(async () => {
-      const text = await transcribed;
-      if (text) postChat(roomId, clientId, text, true);
-    });
+  // Opened now, so a sleeping speech service is awake by the first utterance. What the client sends meanwhile waits,
+  // bound by the member's audio limit.
+  const upstream = new WebSocket(SPEECH_URL, { headers: { authorization: SPEECH_AUTH }, handshakeTimeout: CONNECT_TIMEOUT_MS });
+  const waiting: (Buffer | string)[] = [];
+  const forward = (data: Buffer | string) => {
+    if (upstream.readyState === upstream.OPEN) upstream.send(data);
+    else if (upstream.readyState === upstream.CONNECTING) waiting.push(data);
+  };
+  const command = (msg: SpeechUpstreamMessage) => forward(JSON.stringify(msg));
+
+  upstream.on("open", () => {
+    for (const data of waiting) upstream.send(data);
+    waiting.length = 0;
+  });
+  upstream.on("message", (data, isBinary) => {
+    if (isBinary) return;
+    let msg: SpeechDownstreamMessage;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch {
+      return;
+    }
+    if (typeof msg !== "object" || msg === null || !member()) return;
+    if (msg.type === "unavailable") send(ws, msg);
+    else if (msg.type === "live" && typeof msg.id === "string" && typeof msg.text === "string")
+      relayToPeer(roomId, clientId, { type: "chat-live", id: msg.id, text: cut(msg.text, MAX_LIVE_LENGTH), lang });
+    else if (msg.type === "line" && typeof msg.text === "string")
+      postChat(roomId, clientId, cut(msg.text, MAX_CHAT_LENGTH), true, typeof msg.liveId === "string" ? msg.liveId : undefined);
+  });
+  // A refused connection has only a code, no message
+  upstream.on("error", (err: NodeJS.ErrnoException) => console.warn("speech service:", err.code ?? err.message));
+  // The client reconnects with its next utterance, and that dials the speech service again: after a redeploy, or
+  // while it was down
+  upstream.on("close", () => ws.close(1011, "speech service closed"));
+  ws.on("close", () => upstream.close());
+
+  const audio = (data: Buffer) => {
+    if (!utterance || utterance.frames >= MAX_UTTERANCE_FRAMES) return;
+    // 16-bit samples: an odd byte at the end is half of one
+    const bytes = Math.min(data.length, MAX_UTTERANCE_BYTES - utterance.bytes) & ~1;
+    if (bytes <= 0) return;
+    const seconds = bytes / (TRANSCRIBE_SAMPLE_RATE * 2);
+    if (!secondsPerMember(clientId, seconds)) return;
+    if (tierOf(roomId) !== "user" && !anonSecondsPerIp(ip, seconds)) return;
+    utterance.bytes += bytes;
+    utterance.frames++;
+    forward(data.subarray(0, bytes));
   };
 
   ws.on("message", (data, isBinary) => {
     if (isBinary) {
-      if (!utterance || !Buffer.isBuffer(data) || utterance.chunks.length >= MAX_UTTERANCE_FRAMES) return;
-      const room = MAX_UTTERANCE_BYTES - utterance.bytes;
-      if (room <= 0) return;
-      const chunk = data.length > room ? data.subarray(0, room) : data;
-      utterance.chunks.push(chunk);
-      utterance.bytes += chunk.length;
+      if (Buffer.isBuffer(data)) audio(data);
       return;
     }
 
@@ -211,28 +118,24 @@ export function onSpeechConnection(ws: WebSocket, roomId: string, token: string,
     if (typeof msg !== "object" || msg === null) return;
     switch (msg.type) {
       case "start":
-        utterance = LANGS.includes(msg.lang) ? { lang: msg.lang, chunks: [], bytes: 0, startedAt: Date.now() } : null;
+        if (!LANGS.includes(msg.lang)) {
+          command({ type: "cancel" });
+          utterance = null;
+          break;
+        }
+        command({ type: "start", lang: msg.lang, live: msg.live === true });
+        utterance = { bytes: 0, frames: 0 };
+        lang = msg.lang;
         break;
       case "cancel":
+        command({ type: "cancel" });
         utterance = null;
         break;
-      case "end": {
-        const done = utterance;
+      case "end":
+        if (!member()) return ws.close(4003, "not in this room");
+        command({ type: "end" });
         utterance = null;
-        if (!done || done.bytes < MIN_UTTERANCE_BYTES) break;
-        // The seat may have been given up since the socket opened
-        if (memberByToken(roomId, token) !== clientId) return ws.close(4003, "not in this room");
-        const tier = tierOf(roomId) ?? "anon";
-        const pcm = Buffer.concat(done.chunks);
-        if (!uploadsPerMember[tier](clientId)) break;
-        if (tier === "anon" && !anonSecondsPerIp(ip, pcm.length / (TRANSCRIBE_SAMPLE_RATE * 2))) break;
-        // 16-bit samples: an odd byte at the end is half of one
-        finish(done.lang, pcm.length % 2 ? pcm.subarray(0, -1) : pcm, done.startedAt);
         break;
-      }
     }
-  });
-  ws.on("close", () => {
-    utterance = null;
   });
 }
