@@ -6,6 +6,8 @@ mod android;
 mod bridge;
 mod chat;
 mod friends;
+#[cfg(not(target_os = "android"))]
+mod gpu;
 mod reactions;
 mod readable;
 mod screenshot;
@@ -13,7 +15,7 @@ mod settings;
 mod translate;
 #[cfg(not(target_os = "android"))]
 mod update;
-mod video;
+pub(crate) mod video;
 #[cfg(not(target_os = "android"))]
 pub mod window;
 
@@ -102,6 +104,8 @@ pub fn run() -> anyhow::Result<()> {
     });
     #[cfg(not(target_os = "android"))]
     window::watch_shown(&ui);
+    #[cfg(not(target_os = "android"))]
+    window::watch_renderer(&ui, &settings);
     let chat_weak = ui.as_weak();
     let stats_weak = ui.as_weak();
     let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
@@ -259,9 +263,9 @@ pub fn run() -> anyhow::Result<()> {
                 "self" => ui.get_self_video(),
                 _ => ui.get_peer_video(),
             };
-            let Some(main) = main.to_rgba8() else { return };
+            let Some(main) = video::Pixels::of(&main) else { return };
             // Your own camera rides along as a tile, unless it's what's on the stage
-            let tile = (feed != "self" && ui.get_cam_on()).then(|| ui.get_self_video().to_rgba8()).flatten();
+            let tile = (feed != "self" && ui.get_cam_on()).then(|| video::Pixels::of(&ui.get_self_video())).flatten();
             let picture = screenshot::Picture {
                 main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
                 tile: tile.map(|frame| screenshot::Shot {
@@ -465,6 +469,26 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetNoiseSuppression(on));
         }
     });
+    // Desktop only: Android always draws with OpenGL, and an empty value hides the choice
+    #[cfg(not(target_os = "android"))]
+    {
+        ui.set_renderer(renderer_code(settings.borrow().renderer).into());
+        ui.on_set_renderer({
+            let settings = settings.clone();
+            let weak = ui.as_weak();
+            move |code| {
+                let renderer = if code == "opengl" { settings::Renderer::OpenGl } else { settings::Renderer::Modern };
+                if let Some(ui) = weak.upgrade() {
+                    ui.set_renderer(renderer_code(renderer).into());
+                }
+                let mut settings = settings.borrow_mut();
+                settings.renderer = renderer;
+                // Picked again by hand, wgpu gets another try
+                settings.wgpu = settings::WgpuCheck::Untested;
+                settings.save();
+            }
+        });
+    }
     ui.on_set_portrait({
         let engine = engine.clone();
         let settings = settings.clone();
@@ -525,6 +549,14 @@ pub fn lang_code(lang: Lang) -> &'static str {
     match lang {
         Lang::Zh => "zh",
         Lang::En => "en",
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn renderer_code(renderer: settings::Renderer) -> &'static str {
+    match renderer {
+        settings::Renderer::Modern => "modern",
+        settings::Renderer::OpenGl => "opengl",
     }
 }
 

@@ -21,6 +21,17 @@ For scale, the headless `join` peer used 14–21% for the same call with no UI. 
 1. **Video went CPU → RGBA → fresh buffer → GPU every frame.** Each 720p frame allocated a new 3.7 MB `SharedPixelBuffer`, libyuv converted into it, and Skia uploaded the whole RGBA texture. At 30 fps that's ~110 MB/s of allocation, memset and conversion per feed, and the upload was the hottest user-space frame.
    - *Shipped:* a few reused buffers per feed (`make_mut_bytes`; Slint copies only if the UI still holds one), and the self-view mirrored at draw time.
    - *Next:* the wgpu renderer with video handed in as YUV planes and converted by a shader. This removes the CPU conversion and uploads 2.7× less. A YUV shader on the current OpenGL renderer was ruled out because Skia doesn't restore GL state after an outside draw and Android drops the context in the background. The upload is still the hottest frame after buffer reuse.
+   - *Shipped (step 1):* Skia draws over wgpu (Metal on macOS) on desktop, with OpenGL as a fallback, CPU video unchanged. Same method as the baseline, OpenGL build vs wgpu build, a few runs each:
+
+     | Screen | OpenGL | wgpu (Metal) |
+     |---|---|---|
+     | Start screen, idle | 0.5–0.6%, 138–146 MB | 0.5–0.6%, 103–107 MB |
+     | Setup screen | 1.7–6.3%, 144–333 MB | 2.5–7.4%, 84–302 MB |
+     | In a call | 13.6–24.1%, 775–811 MB | 14.5–15.5%, 386–513 MB |
+
+     CPU is unchanged. The memory drop in a call may partly be Metal's GPU memory being counted differently in `vmmap`'s physical footprint. Setup varies on both, depending on when the camera preview starts inside the sample.
+
+   - *Shipped (step 2):* with wgpu, each frame's Y, U and V planes go up as they are and a shader turns them into the texture Slint draws (`app/src/gpu.rs`); OpenGL and Android keep converting on the CPU. Measured on an M-series Mac with `sample` in a call receiving a 1280×800 test screen at up to 60 fps plus camera both ways, on VP8: conversion and Skia's RGBA upload were 7% of the app's busy CPU on the CPU path and disappear on the GPU one. Small, because libyuv converts a 1280×800 frame in ~0.2 ms with NEON. VP8's software encoder and decoder were 64–73%: hardware H.264 (the video codec setting) is the bigger win. `CALL_CPU_VIDEO=1` keeps the CPU path for comparing.
 
 2. **Frames were converted when nobody would see them.** *Shipped:* a feed isn't converted while the window is minimized or covered, or while picture-in-picture shows a different feed.
 

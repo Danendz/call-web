@@ -5,17 +5,17 @@
 #[cfg(not(target_os = "android"))]
 use std::path::{Path, PathBuf};
 
+use crate::video::Pixels;
 use chrono::{Datelike, Local};
 use engine::Lang;
 use skia_safe::{
     AlphaType, Color, Color4f, ColorType, Data, Font, FontMgr, FontStyle, Image, ImageInfo, Paint, RRect, Rect,
     SamplingOptions, canvas::SrcRectConstraint, image_filters, images, jpeg_encoder, surfaces,
 };
-use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 /// One video in the picture, as it shows on screen.
 pub struct Shot {
-    pub frame: SharedPixelBuffer<Rgba8Pixel>,
+    pub frame: Pixels,
     /// Clockwise degrees, a multiple of 90
     pub rotation: i32,
     /// Your own camera, flipped like a mirror as the screen shows it
@@ -93,7 +93,8 @@ fn free_name(dir: &Path, stem: &str) -> PathBuf {
     path
 }
 
-fn image(frame: &SharedPixelBuffer<Rgba8Pixel>) -> Option<Image> {
+fn image(frame: &Pixels) -> Option<Image> {
+    let frame = frame.to_buffer()?;
     let (w, h) = (i32::try_from(frame.width()).ok()?, i32::try_from(frame.height()).ok()?);
     let info = ImageInfo::new((w, h), ColorType::RGBA8888, AlphaType::Unpremul, None);
     images::raster_from_data(&info, Data::new_copy(frame.as_bytes()), frame.width() as usize * 4)

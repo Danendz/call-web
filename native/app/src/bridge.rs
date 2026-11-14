@@ -260,9 +260,17 @@ fn stats_view(stats: Option<&CallStats>, trying_direct: bool) -> StatsView {
         video_in: fmt_video(s.video_in.as_ref()).into(),
         video_out: fmt_video(s.video_out.as_ref()).into(),
         limited_by: s.video_out.as_ref().and_then(|v| v.limited_by).unwrap_or_default().into(),
-        convert: format!("{:.1} ms, {:.0}% copied", s.convert_ms, crate::video::copied_percent()).into(),
+        convert: format!("{} · {:.1} ms, {:.0}% copied", renderer_name(), s.convert_ms, crate::video::copied_percent())
+            .into(),
         camera: format!("{:.1} ms", s.camera_ms).into(),
     }
+}
+
+fn renderer_name() -> &'static str {
+    #[cfg(target_os = "android")]
+    return "OpenGL";
+    #[cfg(not(target_os = "android"))]
+    crate::window::renderer_name()
 }
 
 fn empty_stats() -> StatsView {

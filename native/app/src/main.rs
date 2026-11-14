@@ -10,5 +10,12 @@ fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
     call_danya::window::select_backend().context("no usable graphics backend")?;
-    call_danya::run()
+    let result = call_danya::run();
+    if let Err(e) = &result
+        && call_danya::window::relaunch_if_wgpu_failed()
+    {
+        tracing::warn!("restarted with OpenGL after: {e:#}");
+        return Ok(());
+    }
+    result
 }
