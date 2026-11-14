@@ -19,7 +19,7 @@ export type SpeechDownstreamMessage =
   | { type: "line"; text: string; liveId?: string };
 
 // Both services get it from the Railway config; a local run leaves it empty on both sides
-const SECRET = Buffer.from(`Bearer ${process.env.SPEECH_SECRET ?? ""}`);
+const SECRET = Buffer.from(process.env.SPEECH_SECRET ?? "");
 // Pings keep the service awake through a long silence in a call: Railway counts only what the service sends
 const PING_MS = 30_000;
 // Decodes waiting on the one recognizer: past this it's too far behind, and new utterances are ignored
@@ -29,7 +29,8 @@ let models: Speech | null | undefined;
 void speech.then((loaded) => (models = loaded));
 
 function authorized(header: string | undefined): boolean {
-  const got = Buffer.from(header ?? "");
+  // Only the token: an empty one leaves "Bearer " with a trailing space, which HTTP trims
+  const got = Buffer.from((header ?? "").replace(/^Bearer\s*/, ""));
   return got.length === SECRET.length && timingSafeEqual(got, SECRET);
 }
 

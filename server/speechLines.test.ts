@@ -8,16 +8,16 @@ import { Utterance, type Decoder, type Vad } from "./speechLines.js";
 const chunk = (s: number) => new Float32Array(Math.round(s * TRANSCRIBE_SAMPLE_RATE));
 
 function fakeVad() {
-  const vad = { speaking: false, ended: false, open: false };
+  const vad = { speaking: false, ended: null as number | null, open: false };
   const api: Vad = {
     accept() {},
     ended() {
       const ended = vad.ended;
-      vad.ended = false;
+      vad.ended = null;
       return ended;
     },
     flush() {
-      vad.ended ||= vad.open;
+      if (vad.open) vad.ended = Infinity;
       vad.open = false;
     },
     speaking: () => vad.speaking,
@@ -64,7 +64,7 @@ test("each pause ends a line, posted in order with the live text it replaces", a
   u.audio(chunk(0.5));
   assert.equal(await dec.next(), 0.5); // live decode of the first line
   vad.speaking = false;
-  vad.ended = true;
+  vad.ended = Infinity;
   u.audio(chunk(0.1)); // the pause ends it
   vad.speaking = true;
   u.audio(chunk(0.5)); // the next line, no live decode yet: the first line's is waiting
@@ -75,6 +75,25 @@ test("each pause ends a line, posted in order with the live text it replaces", a
   await dec.next();
   await dec.next("嗯。"); // a filler alone isn't posted
   assert.deepEqual(s.out, ["live L1 0.5s", "line L1 0.6s"]);
+});
+
+test("a line ends where speech did, and the next one keeps its start", async () => {
+  const { vad, api: vadApi } = fakeVad();
+  const dec = fakeDecoder();
+  const s = sink();
+  const u = new Utterance(vadApi, dec.api, false, s.api, () => "L");
+
+  vad.speaking = true;
+  u.audio(chunk(1));
+  // The VAD sees the pause only once the next line has begun: speech ended 0.6 s in
+  vad.ended = 0.6 * TRANSCRIBE_SAMPLE_RATE;
+  u.audio(chunk(0.2));
+  vad.open = true;
+  u.end();
+
+  // The first line keeps 0.3 s past its end; the other 0.3 s starts the next
+  assert.equal(await dec.next(), 0.9);
+  assert.equal(await dec.next(), 0.3);
 });
 
 test("live text isn't decoded again while the decoder is behind, and a stale result is dropped", async () => {
@@ -92,7 +111,7 @@ test("live text isn't decoded again while the decoder is behind, and a stale res
   u.audio(chunk(0.5)); // caught up: decodes the whole line so far
   assert.equal(dec.pending.length, 1);
 
-  vad.ended = true;
+  vad.ended = Infinity;
   u.audio(chunk(0.1)); // the line ends before its last live decode is back
   await dec.next("stale");
   await dec.next("done");

@@ -45,6 +45,8 @@ declare module "sherpa-onnx-node" {
     acceptWaveform(samples: Float32Array): void;
     isEmpty(): boolean;
     isDetected(): boolean;
+    /** The oldest speech segment; `start` counts samples since the VAD was created */
+    front(enableExternalBuffer?: boolean): { start: number; samples: Float32Array };
     pop(): void;
     flush(): void;
   }

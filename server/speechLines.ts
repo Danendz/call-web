@@ -8,8 +8,12 @@ import { TRANSCRIBE_SAMPLE_RATE } from "../shared/protocol.js";
 /** Where speech is in the audio. */
 export interface Vad {
   accept(samples: Float32Array): void;
-  /** Speech ended since the last call: a pause ended it, or it ran too long. */
-  ended(): boolean;
+  /**
+   * Where speech ended since the last call, in samples since the utterance started; null when it didn't. A pause or
+   * running too long ends it. The VAD says so only once the pause is long enough, by which time the next line may
+   * have started.
+   */
+  ended(): number | null;
   /** Ends the speech still going on, so the next ended() says so. */
   flush(): void;
   /** Someone is speaking right now. */
@@ -39,6 +43,9 @@ const LONG_LINE_S = 5;
 // Audio kept from before the VAD says speech started, which it says a little late: without it, the first syllable
 // is cut
 const KEEP_BEFORE_SPEECH_S = 0.5;
+// Kept past where the VAD says speech ended: most of the pause it waited for. SenseVoice reads a line better with
+// some silence after it, but the next line can start within the pause's last tenth of a second.
+const KEEP_AFTER_SPEECH_S = 0.3;
 // A line that's only a filler: in the chat it's noise even when it was really said, since it was heard anyway
 const FILLER_RE = /^(?:嗯|啊|哦|呃|额|唔|mm+|hm+|uh+|um+|ah+|oh+|huh|mhm)+$/;
 
@@ -61,6 +68,8 @@ export class Utterance {
   // The audio since the last line ended
   private chunks: Float32Array[] = [];
   private samples = 0;
+  // Where `chunks` starts, in samples since the utterance started
+  private start = 0;
   // `samples` when live text was last decoded
   private decodedAt = 0;
   private liveId: string | null = null;
@@ -82,10 +91,13 @@ export class Utterance {
     this.vad.accept(samples);
     this.chunks.push(samples);
     this.samples += samples.length;
-    if (this.vad.ended()) this.finishLine();
+    const end = this.vad.ended();
+    if (end !== null) this.finishLine(end);
     if (!this.vad.speaking()) {
       while (this.chunks.length > 1 && this.samples - this.chunks[0].length >= KEEP_BEFORE_SPEECH_S * RATE) {
-        this.samples -= this.chunks.shift()!.length;
+        const dropped = this.chunks.shift()!.length;
+        this.samples -= dropped;
+        this.start += dropped;
       }
       this.decodedAt = 0;
     } else if (this.live) this.decodeLive();
@@ -95,7 +107,8 @@ export class Utterance {
   end(): void {
     if (this.done) return;
     this.vad.flush();
-    if (this.vad.ended()) this.finishLine();
+    // Nothing more is coming: it all goes in this line
+    if (this.vad.ended() !== null) this.finishLine(Infinity);
     this.stop();
   }
 
@@ -111,14 +124,19 @@ export class Utterance {
     this.liveId = null;
   }
 
-  private finishLine(): void {
+  /** Ends the line where speech ended; what came after it starts the next one. */
+  private finishLine(end: number): void {
     const liveId = this.liveId ?? undefined;
-    const seconds = this.samples / RATE;
-    const text = this.decoder.decode(concat(this.chunks, this.samples));
+    const audio = concat(this.chunks, this.samples);
+    const cut = Math.min(this.samples, Math.max(0, end - this.start) + Math.round(KEEP_AFTER_SPEECH_S * RATE));
+    const seconds = cut / RATE;
+    const text = this.decoder.decode(audio.subarray(0, cut));
     this.liveId = null;
     this.lineNo++;
-    this.chunks = [];
-    this.samples = this.decodedAt = 0;
+    this.chunks = cut < this.samples ? [audio.slice(cut)] : [];
+    this.samples -= cut;
+    this.start += cut;
+    this.decodedAt = 0;
     const cutAt = Date.now();
     this.posted = Promise.all([text, this.posted]).then(([text]) => {
       const kept = clean(text);

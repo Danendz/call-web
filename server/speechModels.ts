@@ -141,9 +141,13 @@ async function load(): Promise<Speech> {
       return {
         accept: (samples) => vad.acceptWaveform(samples),
         ended() {
-          const ended = !vad.isEmpty();
-          while (!vad.isEmpty()) vad.pop();
-          return ended;
+          let end: number | null = null;
+          while (!vad.isEmpty()) {
+            const segment = vad.front(false);
+            end = segment.start + segment.samples.length;
+            vad.pop();
+          }
+          return end;
         },
         flush: () => vad.flush(),
         speaking: () => vad.isDetected(),
