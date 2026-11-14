@@ -33,7 +33,7 @@ pub use protocol::{
 pub use speech::{LiveModel, Model, ModelStatus, SpeechNotice, Utterance};
 pub use stats::{CallStats, Path, VideoStats};
 pub use translate::{Pair, Translator, TranslatorEvent};
-pub use video::{Feed, Frame, I420, VideoSink};
+pub use video::{Chroma, Feed, Frame, Planes, VideoSink};
 
 /// Hands WebRTC the JavaVM and app context on Android. Call it on a Java thread, before the engine starts: WebRTC
 /// finds its Java classes through that thread's class loader.

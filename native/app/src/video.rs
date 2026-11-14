@@ -15,19 +15,28 @@ use crate::ui::AppWindow;
 
 type Buffer = SharedPixelBuffer<Rgba8Pixel>;
 
-/// A converted frame: pixels in memory, or a texture on the GPU.
+/// A converted frame: pixels in memory, or a texture on the GPU with the device it was made on.
 pub enum Pixels {
     Cpu(Buffer),
     #[cfg(not(target_os = "android"))]
-    Gpu(slint::wgpu_30::wgpu::Texture),
+    Gpu(wgpu::Texture, wgpu::Device),
 }
 
+#[cfg(not(target_os = "android"))]
+use slint::wgpu_30::wgpu;
+/// The device the GPU converts on; Android has none
+#[cfg(not(target_os = "android"))]
+type Device = wgpu::Device;
+#[cfg(target_os = "android")]
+type Device = std::convert::Infallible;
+
 impl Pixels {
-    fn fits(&self, width: u32, height: u32, gpu: bool) -> bool {
+    /// Whether this can be written again with a frame of this size: by the CPU, or by the GPU on `device`
+    fn fits(&self, width: u32, height: u32, device: Option<&Device>) -> bool {
         match self {
-            Self::Cpu(b) => !gpu && b.width() == width && b.height() == height,
+            Self::Cpu(b) => device.is_none() && b.width() == width && b.height() == height,
             #[cfg(not(target_os = "android"))]
-            Self::Gpu(t) => gpu && t.width() == width && t.height() == height,
+            Self::Gpu(t, d) => device == Some(d) && t.width() == width && t.height() == height,
         }
     }
 
@@ -38,7 +47,7 @@ impl Pixels {
         }
         #[cfg(not(target_os = "android"))]
         if let Some(texture) = image.to_wgpu_30_texture() {
-            return Some(Self::Gpu(texture));
+            return Some(Self::Gpu(texture, crate::gpu::converter()?.device().clone()));
         }
         None
     }
@@ -48,7 +57,8 @@ impl Pixels {
         match self {
             Self::Cpu(b) => Some(b.clone()),
             #[cfg(not(target_os = "android"))]
-            Self::Gpu(t) => crate::gpu::converter()?.read(t),
+            // A texture from a renderer since torn down can't be read
+            Self::Gpu(t, d) => crate::gpu::converter().filter(|c| c.device() == d)?.read(t),
         }
     }
 
@@ -56,7 +66,7 @@ impl Pixels {
         match self {
             Self::Cpu(b) => Image::from_rgba8(b.clone()),
             #[cfg(not(target_os = "android"))]
-            Self::Gpu(t) => Image::try_from(t.clone()).unwrap_or_default(),
+            Self::Gpu(t, _) => Image::try_from(t.clone()).unwrap_or_default(),
         }
     }
 }
@@ -91,10 +101,10 @@ impl Slot {
         })
     }
 
-    /// A spare of this size and kind. Spares that don't fit (the camera switched) are dropped.
-    fn take(&self, width: u32, height: u32, gpu: bool) -> Option<Pixels> {
+    /// A spare of this size and kind. Spares that don't fit (the camera switched, or the renderer) are dropped.
+    fn take(&self, width: u32, height: u32, device: Option<&Device>) -> Option<Pixels> {
         let mut spare = self.spare.lock().ok()?;
-        spare.retain(|p| p.fits(width, height, gpu));
+        spare.retain(|p| p.fits(width, height, device));
         spare.pop()
     }
 
@@ -200,17 +210,17 @@ impl VideoSink for SlintSink {
         let (width, height) = (frame.width(), frame.height());
         #[cfg(not(target_os = "android"))]
         if let Some(gpu) = crate::gpu::converter() {
-            let texture = match slot.take(width, height, true) {
-                Some(Pixels::Gpu(texture)) => texture,
+            let texture = match slot.take(width, height, Some(gpu.device())) {
+                Some(Pixels::Gpu(texture, _)) => texture,
                 _ => gpu.texture(width, height),
             };
             let Ok(mut planes) = slot.planes.lock() else { return };
-            if frame.with_i420(|i420| gpu.convert(&mut planes, i420, &texture)) == Some(true) {
-                self.show(feed, Pixels::Gpu(texture), frame.rotation());
+            if frame.with_planes(|yuv| gpu.convert(&mut planes, yuv, &texture)) == Some(true) {
+                self.show(feed, Pixels::Gpu(texture, gpu.device().clone()), frame.rotation());
             }
             return;
         }
-        let mut buffer = match slot.take(width, height, false) {
+        let mut buffer = match slot.take(width, height, None) {
             Some(Pixels::Cpu(buffer)) => buffer,
             _ => Buffer::new(width, height),
         };
