@@ -19,6 +19,9 @@ export component SettingsSheet inherits Rectangle {
     in property <bool> show-stats;
     in property <bool> record-stats;
     in property <bool> can-show-files;
+    in property <bool> sharpen-video;
+    in property <bool> compare-upscaling;
+    in property <int> frame-saved;
     in property <bool> subtitles-on;
     in property <bool> noise-suppression;
     // "auto", "h264" or "vp8"
@@ -54,6 +57,9 @@ export component SettingsSheet inherits Rectangle {
     callback set-show-stats(bool);
     callback set-record-stats(bool);
     callback show-stats-files();
+    callback set-sharpen-video(bool);
+    callback set-compare-upscaling(bool);
+    callback save-frame();
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
     callback set-video-codec(string);
@@ -284,6 +290,24 @@ export component SettingsSheet inherits Rectangle {
                                 }
                             }
                         }
+                        // Upscaling runs on the GPU path, which a phone doesn't have
+                        if root.renderer != "": Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        if root.renderer != "": SettingRow {
+                            title: @tr("Sharpen video");
+                            detail: root.renderer == "opengl" ? @tr("Only with Modern graphics.")
+                                : @tr("Sharper when their video comes in smaller than it shows here.");
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    label: @tr("Sharpen video");
+                                    checked: root.sharpen-video;
+                                    toggled => { root.set-sharpen-video(!root.sharpen-video); }
+                                }
+                            }
+                        }
                         Rectangle {
                             height: 1px;
                             background: Theme.border;
@@ -491,8 +515,13 @@ export component SettingsSheet inherits Rectangle {
                     DebugSection {
                         record-stats: root.record-stats;
                         can-show-files: root.can-show-files;
+                        can-upscale: root.renderer == "modern";
+                        compare-upscaling: root.compare-upscaling;
+                        frame-saved: root.frame-saved;
                         set-record-stats(on) => { root.set-record-stats(on); }
                         show-stats-files => { root.show-stats-files(); }
+                        set-compare-upscaling(on) => { root.set-compare-upscaling(on); }
+                        save-frame => { root.save-frame(); }
                     }
                 }
             }

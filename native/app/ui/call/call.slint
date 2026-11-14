@@ -3,7 +3,7 @@ import { Icons } from "../components/icons.slint";
 import { CopyLink } from "../components/copy-link.slint";
 import { ControlPill } from "pill.slint";
 import { Notice } from "notice.slint";
-import { Feeds } from "feeds.slint";
+import { Feeds, VideoBox } from "feeds.slint";
 import { StatsOverlay, StatsView } from "stats-overlay.slint";
 import { DeviceItem } from "../setup/device-row.slint";
 import { ChatOverlay, ChatRow } from "../chat/chat.slint";
@@ -11,7 +11,7 @@ import { Button } from "../components/button.slint";
 import { IconButton, IconButtonKind } from "../components/icon-button.slint";
 import { ReactionsOverlay, Floater, Spark } from "reactions.slint";
 
-export { StatsView, ChatRow, Floater, Spark }
+export { StatsView, ChatRow, Floater, Spark, VideoBox }
 
 export enum CallLink { none, connecting, connected, unstable, failed }
 
@@ -94,6 +94,7 @@ export component CallScreen inherits Rectangle {
     callback close-screen-picker();
     callback corner-moved(string, string);
     callback feeds-seen(bool, bool, bool);
+    callback video-box(string, VideoBox);
     // Whether the stats overlay is up, so the engine samples stats every second only then
     callback stats-shown(bool);
     callback show-shot();
@@ -233,6 +234,7 @@ export component CallScreen inherits Rectangle {
             corner-screen: root.clear-of-chat(root.corner-screen);
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
             seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
+            video-box(feed, box) => { root.video-box(feed, box); }
             touched => {
                 root.wake();
                 chat.blur();

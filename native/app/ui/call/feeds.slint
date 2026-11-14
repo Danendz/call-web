@@ -16,6 +16,14 @@ component CamOff inherits Rectangle {
     }
 }
 
+// How a video shows on screen, in physical pixels: its image box, and whether the picture fills it (cut to fit)
+// rather than fitting inside it. The app upscales the other person's video to it (Settings' "Sharpen video").
+export struct VideoBox {
+    width: float,
+    height: float,
+    cover: bool,
+}
+
 // One video, on the stage or as a tile. It keeps its element whatever its role, so moving between spots animates,
 // like the web's Feed. A tile follows the pointer while dragged and reports the corner it's dropped nearest; a tap
 // that barely moves picks it for the stage.
@@ -39,6 +47,11 @@ component Feed inherits Rectangle {
     callback picked();
     callback dropped(string);
     callback touched();
+    callback box-changed(VideoBox);
+
+    out property <VideoBox> box: { width: picture.width / 1phx, height: picture.height / 1phx, cover: !main };
+    changed box => { root.box-changed(root.box); }
+    init => { root.box-changed(root.box); }
 
     property <bool> dragging;
     property <length> drag-x;
@@ -69,7 +82,7 @@ component Feed inherits Rectangle {
     accessible-description: label;
     accessible-action-default => { if (!main) { root.picked(); } }
 
-    Image {
+    picture := Image {
         width: root.turned ? parent.height : parent.width;
         height: root.turned ? parent.width : parent.height;
         source: root.source;
@@ -172,6 +185,8 @@ export component Feeds inherits Rectangle {
     callback touched();
     // Which feeds are drawn (yours, theirs, their screen), so the others aren't converted
     callback seen(bool, bool, bool);
+    // "peer" or "screen", and how it shows now
+    callback video-box(string, VideoBox);
     // The feed on the stage, as `main` says it; the parent reads it for screenshots
     out property <string> main-feed: main;
 
@@ -251,6 +266,7 @@ export component Feeds inherits Rectangle {
         picked => { pick("peer", corner-peer); }
         dropped(corner) => { root.corner-moved("peer", corner); }
         touched => { root.touched(); }
+        box-changed(box) => { root.video-box("peer", box); }
     }
     screen := Feed {
         source: screen-video;
@@ -266,6 +282,7 @@ export component Feeds inherits Rectangle {
         picked => { pick("screen", corner-screen); }
         dropped(corner) => { root.corner-moved("screen", corner); }
         touched => { root.touched(); }
+        box-changed(box) => { root.video-box("screen", box); }
     }
     you := Feed {
         source: self-video;

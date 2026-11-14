@@ -38,6 +38,9 @@ pub struct Settings {
     /// "Record call stats" in Settings' Debug group: each call's stats go into a file
     #[serde(default)]
     pub record_stats: bool,
+    /// "Sharpen video" in Settings: the other person's video upscaled with FSR where it's drawn bigger than it came
+    #[serde(default = "yes")]
+    pub sharpen_video: bool,
     /// "Live subtitles" in Settings: the last spoken lines over the video
     #[serde(default = "yes")]
     pub subtitles: bool,
@@ -199,6 +202,7 @@ impl Default for Settings {
             live_prompt_seen: false,
             show_stats: false,
             record_stats: false,
+            sharpen_video: true,
             subtitles: true,
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,

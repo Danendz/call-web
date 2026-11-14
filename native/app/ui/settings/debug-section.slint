@@ -10,6 +10,13 @@ export component DebugSection inherits VerticalLayout {
     in property <bool> can-show-files;
     callback set-record-stats(bool);
     callback show-stats-files();
+    // Video is upscaled here ("Sharpen video" on the GPU path)
+    in property <bool> can-upscale;
+    in property <bool> compare-upscaling;
+    // What the last "Save frame" did: 1 saved, 2 nothing upscaled, 3 failed
+    in property <int> frame-saved;
+    callback set-compare-upscaling(bool);
+    callback save-frame();
 
     in-out property <bool> open;
 
@@ -73,6 +80,42 @@ export component DebugSection inherits VerticalLayout {
                 text: @tr("Show files");
                 height-hint: 38px;
                 clicked => { root.show-stats-files(); }
+            }
+        }
+        if root.can-upscale: Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+        if root.can-upscale: SettingRow {
+            title: @tr("Compare upscaling");
+            detail: @tr("Their video without sharpening on the left half, with it on the right.");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Compare upscaling");
+                    checked: root.compare-upscaling;
+                    toggled => { root.set-compare-upscaling(!root.compare-upscaling); }
+                }
+            }
+        }
+        if root.can-upscale: Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+        if root.can-upscale: SettingRow {
+            title: @tr("Save frame");
+            detail: root.frame-saved == 1 ? @tr("Saved as it came, stretched, and sharpened.")
+                : root.frame-saved == 2 ? @tr("Their video isn't upscaled now: it shows at the size it comes in or smaller.")
+                : root.frame-saved == 3 ? @tr("Couldn't save the frame.")
+                : @tr("Their video's current frame as PNGs, without and with sharpening.");
+            detail-color: root.frame-saved == 3 ? Theme.danger-text : Theme.muted;
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: @tr("Save");
+                    height-hint: 38px;
+                    clicked => { root.save-frame(); }
+                }
             }
         }
     }
