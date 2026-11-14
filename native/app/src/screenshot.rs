@@ -18,6 +18,8 @@ pub struct Shot {
     pub frame: SharedPixelBuffer<Rgba8Pixel>,
     /// Clockwise degrees, a multiple of 90
     pub rotation: i32,
+    /// Your own camera, flipped like a mirror as the screen shows it
+    pub mirrored: bool,
 }
 
 pub struct Picture {
@@ -106,7 +108,7 @@ fn draw(picture: &Picture) -> Option<Data> {
     let (wf, hf) = (w as f32, h as f32);
     let short = wf.min(hf);
     let margin = (short * 0.03).round();
-    draw_cover(canvas, &main, picture.main.rotation, Rect::from_xywh(0.0, 0.0, wf, hf));
+    draw_cover(canvas, &main, &picture.main, Rect::from_xywh(0.0, 0.0, wf, hf));
 
     if let Some(tile) = &picture.tile
         && let Some(small) = image(&tile.frame)
@@ -117,7 +119,7 @@ fn draw(picture: &Picture) -> Option<Data> {
         let rect = Rect::from_xywh(wf - tw - margin, hf - th - margin, tw, th);
         canvas.save();
         canvas.clip_rrect(RRect::new_rect_xy(rect, tw.min(th) * 0.08, tw.min(th) * 0.08), None, true);
-        draw_cover(canvas, &small, tile.rotation, rect);
+        draw_cover(canvas, &small, tile, rect);
         canvas.restore();
     }
 
@@ -146,8 +148,9 @@ fn draw(picture: &Picture) -> Option<Data> {
     jpeg_encoder::encode_image(None, &surface.image_snapshot(), &options)
 }
 
-/// Fills the box with the image, cropping what overflows, turned as the screen shows it.
-fn draw_cover(canvas: &skia_safe::Canvas, image: &Image, rotation: i32, rect: Rect) {
+/// Fills the box with the image, cropping what overflows, turned and mirrored as the screen shows it.
+fn draw_cover(canvas: &skia_safe::Canvas, image: &Image, shot: &Shot, rect: Rect) {
+    let rotation = shot.rotation;
     let (iw, ih) = (image.width() as f32, image.height() as f32);
     // The box as the unturned image sees it
     let (bw, bh) = if rotation % 180 != 0 { (rect.height(), rect.width()) } else { (rect.width(), rect.height()) };
@@ -156,6 +159,10 @@ fn draw_cover(canvas: &skia_safe::Canvas, image: &Image, rotation: i32, rect: Re
     let src = Rect::from_xywh((iw - sw) / 2.0, (ih - sh) / 2.0, sw, sh);
     canvas.save();
     canvas.translate((rect.center_x(), rect.center_y()));
+    // Before the turn, so it flips the upright picture
+    if shot.mirrored {
+        canvas.scale((-1.0, 1.0));
+    }
     canvas.rotate(rotation as f32, None);
     let dst = Rect::from_xywh(-bw / 2.0, -bh / 2.0, bw, bh);
     let mut paint = Paint::default();

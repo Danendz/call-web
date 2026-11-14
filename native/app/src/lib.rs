@@ -227,8 +227,12 @@ pub fn run() -> anyhow::Result<()> {
             // Your own camera rides along as a tile, unless it's what's on the stage
             let tile = (feed != "self" && ui.get_cam_on()).then(|| ui.get_self_video().to_rgba8()).flatten();
             let picture = screenshot::Picture {
-                main: screenshot::Shot { frame: main, rotation },
-                tile: tile.map(|frame| screenshot::Shot { frame, rotation: ui.get_self_frame_rotation() }),
+                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
+                tile: tile.map(|frame| screenshot::Shot {
+                    frame,
+                    rotation: ui.get_self_frame_rotation(),
+                    mirrored: true,
+                }),
                 elapsed: ui.get_elapsed().to_string(),
                 lang: parse_lang(&ui.get_lang()),
             };

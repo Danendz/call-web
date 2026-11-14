@@ -41,6 +41,9 @@ export component Preview inherits Rectangle {
         source: video;
         image-fit: cover;
         transform-rotation: root.video-rotation * 1deg;
+        // Your own picture shows like a mirror, as on the web. Slint scales after turning, so this flips the upright
+        // picture whatever the rotation
+        transform-scale-x: -1;
         opacity: showing ? 1 : 0;
         animate opacity { duration: Theme.med; easing: Theme.ease; }
     }

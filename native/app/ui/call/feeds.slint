@@ -30,6 +30,8 @@ component Feed inherits Rectangle {
     in property <length> home-height;
     // Clockwise degrees
     in property <int> rotation;
+    // Your own camera shows like a mirror, as on the web
+    in property <bool> mirror;
     in property <bool> off;
     in property <string> label;
     // Why a small red mark sits in the corner (they muted your sound); none while empty
@@ -74,6 +76,8 @@ component Feed inherits Rectangle {
         // The stage shows all of the picture; a tile fills itself
         image-fit: main ? contain : cover;
         transform-rotation: root.rotation * 1deg;
+        // Slint scales after turning, so this flips the upright picture whatever the rotation
+        transform-scale-x: root.mirror ? -1 : 1;
     }
     CamOff {
         shown: root.off;
@@ -255,6 +259,7 @@ export component Feeds inherits Rectangle {
     you := Feed {
         source: self-video;
         rotation: self-rotation;
+        mirror: true;
         main: main == "self";
         hidden: !has-self || (only-main && main != "self");
         off: !self-cam-on;
