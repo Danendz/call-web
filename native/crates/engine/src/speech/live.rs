@@ -31,8 +31,9 @@ const VAD_BUFFER_S: f32 = 40.0;
 // cut. More than the server keeps: each utterance here starts with the detector's preroll, and the VAD takes up to
 // half a second of it to be sure.
 const KEEP_BEFORE_SPEECH_S: f32 = 1.0;
-// Kept past where the VAD says speech ended, so the last sound isn't clipped
-const KEEP_AFTER_SPEECH_S: f32 = 0.2;
+// Kept past where the VAD says speech ended: most of the pause it waited for. SenseVoice reads a line better with
+// some silence after it, but the next line can start within the pause's last tenth of a second.
+const KEEP_AFTER_SPEECH_S: f32 = 0.3;
 
 /// The recognizer for a recording: decodes on a thread of its own so the mic is never held up.
 pub(crate) struct Live {
@@ -385,8 +386,8 @@ mod tests {
         lines.handle(audio(0.2));
         vad.0.borrow_mut().open = true;
         lines.handle(Out::End);
-        // The first line keeps 0.2 s past its end; the other 0.4 s starts the next
-        assert_eq!(*log.borrow(), ["line 0.8s replaces=false", "line 0.4s replaces=false"]);
+        // The first line keeps 0.3 s past its end; the other 0.3 s starts the next
+        assert_eq!(*log.borrow(), ["line 0.9s replaces=false", "line 0.3s replaces=false"]);
     }
 
     #[test]
