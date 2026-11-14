@@ -311,10 +311,10 @@ index d33322f..dfae43a 100644
  pub mod desktop_capturer;
 diff --git a/src/media_foundation_encoder.cpp b/src/media_foundation_encoder.cpp
 new file mode 100644
-index 0000000..243dbcf
+index 0000000..e809326
 --- /dev/null
 +++ b/src/media_foundation_encoder.cpp
-@@ -0,0 +1,766 @@
+@@ -0,0 +1,778 @@
 +// Hardware H.264 through Media Foundation. Windows has no WebRTC encoder that
 +// reaches the GPU's video engine (NVENC here is Linux only), so without this a
 +// Windows call encodes VP8 in software, the call's biggest CPU cost.
@@ -381,6 +381,11 @@ index 0000000..243dbcf
 +// Frames waiting for their output. A hardware encoder holds one or two; past
 +// this something is stuck, and the oldest are forgotten.
 +constexpr size_t kMaxPending = 30;
++// The encoder's buffer (HRD), as time at the target bitrate. Left to its
++// default, an encoder may put a whole screen change into one frame holding a
++// second or more of bitrate, which the receiver waits for as a freeze; this
++// keeps any frame to about 100 ms of sending and raises QP instead
++constexpr uint64_t kBufferMs = 100;
 +
 +std::string Utf8(const wchar_t* text) {
 +  if (!text) {
@@ -460,6 +465,13 @@ index 0000000..243dbcf
 +  variant.vt = VT_UI4;
 +  variant.ulVal = value;
 +  return SUCCEEDED(api->SetValue(&property, &variant));
++}
++
++// The buffer size is in bytes for H.264
++void SetBitrate(ICodecAPI* api, uint32_t bitrate_bps) {
++  SetCodecValue(api, CODECAPI_AVEncCommonMeanBitRate, bitrate_bps);
++  SetCodecValue(api, CODECAPI_AVEncCommonBufferSize,
++                static_cast<UINT32>(bitrate_bps * kBufferMs / 8000));
 +}
 +
 +bool SetCodecFlag(ICodecAPI* api, const GUID& property, bool value) {
@@ -606,7 +618,7 @@ index 0000000..243dbcf
 +  ICodecAPI* api = codec_api_.Get();
 +  SetCodecValue(api, CODECAPI_AVEncCommonRateControlMode,
 +                eAVEncCommonRateControlMode_CBR);
-+  SetCodecValue(api, CODECAPI_AVEncCommonMeanBitRate, bitrate_bps_);
++  SetBitrate(api, bitrate_bps_);
 +  SetCodecFlag(api, CODECAPI_AVLowLatencyMode, true);
 +  SetCodecValue(api, CODECAPI_AVEncMPVDefaultBPictureCount, 0);
 +  // Key frames only when WebRTC asks for one (a new receiver, or loss)
@@ -1013,7 +1025,7 @@ index 0000000..243dbcf
 +  }
 +  if (bitrate != bitrate_bps_) {
 +    bitrate_bps_ = bitrate;
-+    SetCodecValue(codec_api_.Get(), CODECAPI_AVEncCommonMeanBitRate, bitrate);
++    SetBitrate(codec_api_.Get(), bitrate);
 +  }
 +}
 +

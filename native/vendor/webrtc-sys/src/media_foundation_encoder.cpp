@@ -64,6 +64,11 @@ constexpr int kHighQp = 37;
 // Frames waiting for their output. A hardware encoder holds one or two; past
 // this something is stuck, and the oldest are forgotten.
 constexpr size_t kMaxPending = 30;
+// The encoder's buffer (HRD), as time at the target bitrate. Left to its
+// default, an encoder may put a whole screen change into one frame holding a
+// second or more of bitrate, which the receiver waits for as a freeze; this
+// keeps any frame to about 100 ms of sending and raises QP instead
+constexpr uint64_t kBufferMs = 100;
 
 std::string Utf8(const wchar_t* text) {
   if (!text) {
@@ -143,6 +148,13 @@ bool SetCodecValue(ICodecAPI* api, const GUID& property, UINT32 value) {
   variant.vt = VT_UI4;
   variant.ulVal = value;
   return SUCCEEDED(api->SetValue(&property, &variant));
+}
+
+// The buffer size is in bytes for H.264
+void SetBitrate(ICodecAPI* api, uint32_t bitrate_bps) {
+  SetCodecValue(api, CODECAPI_AVEncCommonMeanBitRate, bitrate_bps);
+  SetCodecValue(api, CODECAPI_AVEncCommonBufferSize,
+                static_cast<UINT32>(bitrate_bps * kBufferMs / 8000));
 }
 
 bool SetCodecFlag(ICodecAPI* api, const GUID& property, bool value) {
@@ -289,7 +301,7 @@ bool MediaFoundationH264Encoder::Configure(const EncoderMft& mft) {
   ICodecAPI* api = codec_api_.Get();
   SetCodecValue(api, CODECAPI_AVEncCommonRateControlMode,
                 eAVEncCommonRateControlMode_CBR);
-  SetCodecValue(api, CODECAPI_AVEncCommonMeanBitRate, bitrate_bps_);
+  SetBitrate(api, bitrate_bps_);
   SetCodecFlag(api, CODECAPI_AVLowLatencyMode, true);
   SetCodecValue(api, CODECAPI_AVEncMPVDefaultBPictureCount, 0);
   // Key frames only when WebRTC asks for one (a new receiver, or loss)
@@ -696,7 +708,7 @@ void MediaFoundationH264Encoder::SetRates(
   }
   if (bitrate != bitrate_bps_) {
     bitrate_bps_ = bitrate;
-    SetCodecValue(codec_api_.Get(), CODECAPI_AVEncCommonMeanBitRate, bitrate);
+    SetBitrate(codec_api_.Get(), bitrate);
   }
 }
 
