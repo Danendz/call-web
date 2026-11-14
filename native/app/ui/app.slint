@@ -65,6 +65,11 @@ export component AppWindow inherits Window {
     // "Connection stats" in Settings, remembered between launches
     in property <bool> show-stats;
     callback set-show-stats(bool);
+    // "Record call stats" in Settings' Debug group, remembered between launches
+    in property <bool> record-stats;
+    in property <bool> can-show-files;
+    callback set-record-stats(bool);
+    callback show-stats-files();
     // "Noise suppression" in Settings, remembered between launches
     in property <bool> noise-suppression;
     callback set-noise-suppression(bool);
@@ -466,6 +471,8 @@ export component AppWindow inherits Window {
         if root.settings-open: SettingsSheet {
             sheet: root.touch || root.width < 900px;
             show-stats: root.show-stats;
+            record-stats: root.record-stats;
+            can-show-files: root.can-show-files;
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             video-codec: root.video-codec;
@@ -483,6 +490,8 @@ export component AppWindow inherits Window {
             download-translation => { root.download-translation(); }
             delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }
+            set-record-stats(on) => { root.set-record-stats(on); }
+            show-stats-files => { root.show-stats-files(); }
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-video-codec(id) => { root.set-video-codec(id); }

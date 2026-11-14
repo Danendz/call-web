@@ -574,3 +574,15 @@ msgstr "重启后生效。"
 
 msgid "Modern"
 msgstr "现代"
+
+msgid "Debug"
+msgstr "调试"
+
+msgid "Record call stats"
+msgstr "记录通话统计"
+
+msgid "Saves each call's connection stats, one file per call, to compare calls and settings."
+msgstr "保存每次通话的连接统计，每次通话一个文件，用于比较不同通话和设置。"
+
+msgid "Show files"
+msgstr "显示文件"

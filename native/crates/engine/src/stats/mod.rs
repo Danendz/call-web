@@ -1,17 +1,24 @@
 //! What the stats overlay shows, read from WebRTC's report once a second, like the web's `stats.ts`.
 
+mod detail;
+pub(crate) mod log;
+
 use std::time::Instant;
 
 use libwebrtc::stats::{IceCandidateType, IceServerTransportProtocol, QualityLimitationReason, RtcStats};
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub use detail::Detail;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Path {
     Direct,
     Relay,
     Unknown,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct VideoStats {
     pub width: u32,
     pub height: u32,
@@ -24,7 +31,7 @@ pub struct VideoStats {
     pub limited_by: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CallStats {
     pub path: Path,
     pub local_type: Option<&'static str>,
@@ -48,6 +55,8 @@ pub struct CallStats {
     pub convert_ms: f64,
     /// Turning a camera frame into what WebRTC encodes, smoothed
     pub camera_ms: f64,
+    /// For the stats log; None on the first sample, with nothing to compare against
+    pub detail: Option<Detail>,
 }
 
 /// Running totals, kept between samples to turn them into rates.
@@ -58,6 +67,7 @@ pub(crate) struct Counters {
     bytes_out: u64,
     packets_in: u64,
     packets_lost: i64,
+    totals: detail::Totals,
 }
 
 pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant) -> (CallStats, Counters) {
@@ -95,7 +105,8 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
     };
     let non_empty = |s: &str| Some(s.to_owned()).filter(|s| !s.is_empty());
 
-    let mut counters = Counters { at: now, bytes_in: 0, bytes_out: 0, packets_in: 0, packets_lost: 0 };
+    let (totals, target_kbps) = detail::totals(report);
+    let mut counters = Counters { at: now, bytes_in: 0, bytes_out: 0, packets_in: 0, packets_lost: 0, totals };
     let (mut jitter_ms, mut video_in, mut video_out, mut loss_out_pct) = (None, None, None, None::<f64>);
     for s in report {
         match s {
@@ -193,6 +204,7 @@ pub(crate) fn sample(report: &[RtcStats], prev: Option<&Counters>, now: Instant)
         send_budget_kbps: pair.map(|p| p.available_outgoing_bitrate / 1000.0).filter(|b| *b > 0.0),
         convert_ms: f64::from(crate::video::CONVERT_US.get()) / 1000.0,
         camera_ms: f64::from(crate::video::CAMERA_US.get()) / 1000.0,
+        detail: prev.map(|prev| detail::detail(&counters.totals, &prev.totals, target_kbps)),
     };
     (stats, counters)
 }
@@ -243,6 +255,44 @@ mod tests {
         assert_eq!(stats.path, Path::Unknown, "no selected pair in this report");
         assert_eq!(stats.in_kbps.round(), 1000.0);
         assert_eq!(stats.loss_pct.map(|l| l.round()), Some(10.0));
+    }
+
+    #[test]
+    fn loss_recovery_is_counted_per_second_across_streams() {
+        let first = report(
+            r#"[
+            {"type":"inbound-rtp","id":"V","timestamp":0,"kind":"video","nackCount":4,"fecPacketsReceived":10,
+             "fecPacketsDiscarded":2,"freezeCount":1,"jitterBufferDelay":3.0,
+             "jitterBufferEmittedCount":100},
+            {"type":"inbound-rtp","id":"A","timestamp":0,"kind":"audio","nackCount":1,"concealedSamples":0,
+             "totalSamplesReceived":48000},
+            {"type":"outbound-rtp","id":"O","timestamp":0,"kind":"video","active":true,"nackCount":7,
+             "targetBitrate":1500000}
+        ]"#,
+        );
+        let t0 = Instant::now();
+        let (stats, counters) = sample(&first, None, t0);
+        assert_eq!(stats.detail, None, "nothing to compare against yet");
+
+        let second = report(
+            r#"[
+            {"type":"inbound-rtp","id":"V","timestamp":0,"kind":"video","nackCount":9,"fecPacketsReceived":30,
+             "fecPacketsDiscarded":2,"freezeCount":2,"jitterBufferDelay":5.4,
+             "jitterBufferEmittedCount":160},
+            {"type":"inbound-rtp","id":"A","timestamp":0,"kind":"audio","nackCount":1,"concealedSamples":960,
+             "totalSamplesReceived":96000},
+            {"type":"outbound-rtp","id":"O","timestamp":0,"kind":"video","active":true,"nackCount":10,
+             "targetBitrate":1200000}
+        ]"#,
+        );
+        let (stats, _) = sample(&second, Some(&counters), t0 + std::time::Duration::from_secs(1));
+        let d = stats.detail.unwrap();
+        assert_eq!((d.nacks_sent, d.nacks_received), (5, 3));
+        assert_eq!((d.fec_received, d.fec_discarded), (20, 0));
+        assert_eq!(d.freezes, 1);
+        assert_eq!(d.jitter_buffer_ms.map(f64::round), Some(40.0), "2.4 s over 60 frames");
+        assert_eq!(d.concealed_pct.map(f64::round), Some(2.0));
+        assert_eq!(d.target_kbps.round(), 1200.0);
     }
 
     #[test]

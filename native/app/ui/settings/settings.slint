@@ -5,88 +5,11 @@ import { IconButton } from "../components/icon-button.slint";
 import { LangSwitch } from "../setup/lang-switch.slint";
 import { Segmented } from "../components/segmented.slint";
 import { AccountSection } from "../account/account-section.slint";
+import { Switch, SettingRow, Group, Heading } from "rows.slint";
+import { DebugSection } from "debug-section.slint";
 
 // Where the on-device speech model stands, as the engine's ModelStatus
 export enum ModelState { missing, downloading, ready, failed }
-
-// An on/off switch, like the OS's own
-component Switch inherits Rectangle {
-    in property <string> label;
-    in property <bool> checked;
-    in property <bool> enabled: true;
-    callback toggled();
-
-    width: 44px;
-    height: 26px;
-    border-radius: self.height / 2;
-    background: checked ? Theme.accent : Theme.surface-3;
-    opacity: enabled ? 1 : 0.38;
-    animate background { duration: Theme.fast; easing: Theme.ease; }
-    accessible-role: switch;
-    accessible-label: label;
-    accessible-checked: checked;
-    accessible-enabled: enabled;
-    accessible-action-default => { if (enabled) { root.toggled(); } }
-
-    Rectangle {
-        width: parent.height - 6px;
-        height: self.width;
-        x: checked ? parent.width - self.width - 3px : 3px;
-        border-radius: self.width / 2;
-        background: #fff;
-        animate x { duration: Theme.fast; easing: Theme.ease; }
-    }
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => { if (root.enabled) { root.toggled(); } }
-    }
-}
-
-// One row of a settings group: a title, a line under it, and a control at the end.
-component SettingRow inherits HorizontalLayout {
-    in property <string> title;
-    in property <string> detail;
-    in property <color> detail-color: Theme.muted;
-
-    padding: 16px;
-    spacing: 14px;
-    VerticalLayout {
-        alignment: center;
-        spacing: 3px;
-        horizontal-stretch: 1;
-        Text {
-            text: root.title;
-            color: Theme.text;
-            font-size: Theme.font-size;
-            wrap: word-wrap;
-        }
-        if root.detail != "": Text {
-            text: root.detail;
-            color: root.detail-color;
-            font-size: Theme.font-size-small;
-            wrap: word-wrap;
-        }
-    }
-    @children
-}
-
-// A group of rows, like the OS's settings
-component Group inherits Rectangle {
-    border-radius: Theme.radius;
-    border-width: 1px;
-    border-color: Theme.border;
-    background: Theme.surface-2;
-    VerticalLayout {
-        @children
-    }
-}
-
-// A section's heading over its group
-component Heading inherits Text {
-    color: Theme.muted;
-    font-size: Theme.font-size-small;
-    font-weight: 600;
-}
 
 // The app's settings over whatever screen is up, like the web's SettingsSheet: from the bottom on a phone or a
 // narrow window, from the right as a side panel otherwise. A tap on the dim, Esc or Back close it.
@@ -94,6 +17,8 @@ export component SettingsSheet inherits Rectangle {
     // From the bottom instead of the right
     in property <bool> sheet;
     in property <bool> show-stats;
+    in property <bool> record-stats;
+    in property <bool> can-show-files;
     in property <bool> subtitles-on;
     in property <bool> noise-suppression;
     // "auto", "h264" or "vp8"
@@ -127,6 +52,8 @@ export component SettingsSheet inherits Rectangle {
     callback delete-account(string);
     callback clear-account-error();
     callback set-show-stats(bool);
+    callback set-record-stats(bool);
+    callback show-stats-files();
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
     callback set-video-codec(string);
@@ -558,6 +485,14 @@ export component SettingsSheet inherits Rectangle {
                         }
                         delete-account(password) => { root.delete-account(password); }
                         clear-error => { root.clear-account-error(); }
+                    }
+
+                    Rectangle { height: 10px; }
+                    DebugSection {
+                        record-stats: root.record-stats;
+                        can-show-files: root.can-show-files;
+                        set-record-stats(on) => { root.set-record-stats(on); }
+                        show-stats-files => { root.show-stats-files(); }
                     }
                 }
             }

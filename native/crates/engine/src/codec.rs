@@ -16,7 +16,8 @@ use libwebrtc::rtp_sender::VideoEncoderBackend;
 use libwebrtc::video_codec::VideoCodec as Codec;
 
 /// The "Video codec" picker in Settings.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum VideoCodec {
     #[default]
     Auto,

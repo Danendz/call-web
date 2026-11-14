@@ -18,6 +18,8 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = ["c
 # first connection to an https server panics
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tracing = "0.1"
+# The stats log's file names, in local time
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 url = "2"
 libwebrtc = "0.4"
 # The hook into the mic's audio after WebRTC's processing; patched in `native/Cargo.toml`

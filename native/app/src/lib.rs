@@ -5,6 +5,7 @@
 mod android;
 mod bridge;
 mod chat;
+mod debug;
 mod friends;
 #[cfg(not(target_os = "android"))]
 mod gpu;
@@ -435,6 +436,7 @@ pub fn run() -> anyhow::Result<()> {
             settings.save();
         }
     });
+    debug::wire(&ui, &engine, &settings);
     ui.set_subtitles_on(settings.borrow().subtitles);
     engine.send(Command::SetLiveSubtitles(settings.borrow().subtitles));
     ui.on_set_subtitles_on({

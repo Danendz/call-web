@@ -128,6 +128,8 @@ pub enum Command {
     SetForceRelay(bool),
     /// The stats overlay is up: stats are then sampled every second and handed over
     SetStatsShown(bool),
+    /// "Record call stats": each call's stats go into a file of their own in the data folder, see [`crate::stats_log_dir`]
+    SetStatsLog(bool),
     /// DeepFilterNet on the mic instead of WebRTC's own noise suppression; any time, live in a call
     SetNoiseSuppression(bool),
     /// Any time: a call renegotiates onto it

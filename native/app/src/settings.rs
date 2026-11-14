@@ -35,6 +35,9 @@ pub struct Settings {
     /// "Connection stats" in Settings: the overlay shows in every call
     #[serde(default)]
     pub show_stats: bool,
+    /// "Record call stats" in Settings' Debug group: each call's stats go into a file
+    #[serde(default)]
+    pub record_stats: bool,
     /// "Live subtitles" in Settings: the last spoken lines over the video
     #[serde(default = "yes")]
     pub subtitles: bool,
@@ -195,6 +198,7 @@ impl Default for Settings {
             on_device_speech: true,
             live_prompt_seen: false,
             show_stats: false,
+            record_stats: false,
             subtitles: true,
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,

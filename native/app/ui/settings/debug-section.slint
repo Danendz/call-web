@@ -1,0 +1,79 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button } from "../components/button.slint";
+import { Switch, SettingRow, Group } from "rows.slint";
+
+// Tools for checking how calls go, folded away at the end of Settings.
+export component DebugSection inherits VerticalLayout {
+    in property <bool> record-stats;
+    // A folder can be opened in Finder or Explorer; not on a phone
+    in property <bool> can-show-files;
+    callback set-record-stats(bool);
+    callback show-stats-files();
+
+    in-out property <bool> open;
+
+    spacing: 8px;
+
+    Rectangle {
+        height: 36px;
+        accessible-role: button;
+        accessible-label: @tr("Debug");
+        accessible-expanded: root.open;
+        accessible-action-default => { root.open = !root.open; }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Text {
+                text: @tr("Debug");
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Image {
+                y: (parent.height - self.height) / 2;
+                width: 16px;
+                height: 16px;
+                source: Icons.chevron-down;
+                colorize: Theme.muted;
+                transform-rotation: root.open ? 0deg : -90deg;
+                animate transform-rotation { duration: Theme.fast; easing: Theme.ease; }
+            }
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.open = !root.open; }
+        }
+    }
+
+    if root.open: Group {
+        SettingRow {
+            title: @tr("Record call stats");
+            detail: @tr("Saves each call's connection stats, one file per call, to compare calls and settings.");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Record call stats");
+                    checked: root.record-stats;
+                    toggled => { root.set-record-stats(!root.record-stats); }
+                }
+            }
+        }
+        if root.can-show-files: Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+        if root.can-show-files: HorizontalLayout {
+            padding: 16px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            alignment: start;
+            Button {
+                text: @tr("Show files");
+                height-hint: 38px;
+                clicked => { root.show-stats-files(); }
+            }
+        }
+    }
+}

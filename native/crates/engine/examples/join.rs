@@ -11,7 +11,8 @@
 //! first, from the server. `LIVE=1` turns live subtitles on, so what's said also goes out as live text while it's said,
 //! each pause ending a line. `CODEC=h264` or `CODEC=vp8` picks the video codec as Settings does (default
 //! auto), and `SWITCH=<codec>` changes it 10 s into its stay, as Settings does mid-call; the stats it logs name the
-//! codec in use.
+//! codec in use. `RECORD=1` with `DATA_DIR` writes the call's stats log into `<folder>/call-stats/`, as Settings'
+//! "Record call stats" does.
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -89,6 +90,7 @@ fn main() {
     engine.send(Command::SetVideoCodec(codec("CODEC").unwrap_or(VideoCodec::Auto)));
     // Stats come only while asked for, like the overlay; they name the codec in use
     engine.send(Command::SetStatsShown(true));
+    engine.send(Command::SetStatsLog(std::env::var_os("RECORD").is_some()));
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {
         engine.send(Command::SetTranscribe(true));
