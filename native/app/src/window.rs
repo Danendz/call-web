@@ -89,12 +89,15 @@ pub fn watch_renderer(ui: &crate::ui::AppWindow, settings: &Rc<RefCell<Settings>
     let result = ui.window().set_rendering_notifier(move |state, api| match state {
         RenderingState::RenderingSetup => {
             let name = match api {
-                GraphicsAPI::WGPU30 { device, .. } => match device.adapter_info().backend {
-                    slint::wgpu_30::wgpu::Backend::Metal => "Metal",
-                    slint::wgpu_30::wgpu::Backend::Dx12 => "D3D12",
-                    slint::wgpu_30::wgpu::Backend::Vulkan => "Vulkan",
-                    _ => "wgpu",
-                },
+                GraphicsAPI::WGPU30 { device, queue, .. } => {
+                    crate::gpu::start(device, queue);
+                    match device.adapter_info().backend {
+                        slint::wgpu_30::wgpu::Backend::Metal => "Metal",
+                        slint::wgpu_30::wgpu::Backend::Dx12 => "D3D12",
+                        slint::wgpu_30::wgpu::Backend::Vulkan => "Vulkan",
+                        _ => "wgpu",
+                    }
+                }
                 GraphicsAPI::NativeOpenGL { .. } => "OpenGL",
                 _ => "other",
             };

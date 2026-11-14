@@ -34,6 +34,8 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "unstable-wgpu-30",
 ] }
 velopack = "=1.2.161"
+# Slint's own wgpu, only to turn on WGSL for the video shader in gpu.rs; keep the version Slint takes
+wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06"] }
