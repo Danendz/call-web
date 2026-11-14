@@ -192,6 +192,9 @@ object Shim {
     @JvmStatic
     external fun nativePip(pip: Boolean)
 
+    @JvmStatic
+    external fun nativeShown(shown: Boolean)
+
     /** Which routes there are, as bits of 1 << route, and the one in use. */
     @JvmStatic
     external fun nativeAudio(available: Int, route: Int)

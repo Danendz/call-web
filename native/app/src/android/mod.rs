@@ -345,6 +345,12 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativePip(_env: JNIEnv, _class
     on_ui(move |ui| ui.set_pip(pip != 0));
 }
 
+/// `Shim.nativeShown`: the activity started or stopped, so whether any of it is on screen.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_danendz_call_Shim_nativeShown(_env: JNIEnv, _class: JClass, shown: jboolean) {
+    crate::video::set_window_shown(shown != 0);
+}
+
 /// `Shim.nativeAudio`: which outputs there are, as bits of `1 << route`, and the one the call plays on.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_danendz_call_Shim_nativeAudio(
