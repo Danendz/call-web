@@ -213,6 +213,7 @@ class MediaFoundationH264Encoder : public webrtc::VideoEncoder {
   int height_ = 0;
   uint32_t framerate_ = 30;
   uint32_t bitrate_bps_ = 0;
+  bool screen_ = false;
   bool sending_ = false;
   bool key_frame_pending_ = true;
   LONGLONG last_sample_time_ = -1;
@@ -243,6 +244,7 @@ int32_t MediaFoundationH264Encoder::InitEncode(
   height_ = codec->height;
   framerate_ = std::max<uint32_t>(1, codec->maxFramerate);
   bitrate_bps_ = std::max<uint32_t>(100'000, codec->startBitrate * 1000);
+  screen_ = codec->mode == webrtc::VideoCodecMode::kScreensharing;
   sending_ = true;
   key_frame_pending_ = true;
   last_sample_time_ = -1;
@@ -719,7 +721,13 @@ webrtc::VideoEncoder::EncoderInfo MediaFoundationH264Encoder::GetEncoderInfo()
   info.is_hardware_accelerated = true;
   info.supports_native_handle = false;
   info.supports_simulcast = false;
-  info.scaling_settings = ScalingSettings(kLowQp, kHighQp);
+  // A shared screen keeps its resolution, so the quality scaler could only
+  // cut its frame rate, by a third each time QP runs high: right after a call
+  // starts, while the bandwidth estimate is still low, it took 60 fps down to
+  // 40 or less and moving content kept it there. The bitrate alone governs it
+  if (!screen_) {
+    info.scaling_settings = ScalingSettings(kLowQp, kHighQp);
+  }
   info.requested_resolution_alignment = 2;
   info.preferred_pixel_formats = {webrtc::VideoFrameBuffer::Type::kI420};
   return info;
