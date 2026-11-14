@@ -39,6 +39,11 @@
 #include "nvidia/nvidia_decoder_factory.h"
 #endif
 
+#if defined(_WIN32)
+#include "api/video_codecs/video_decoder_software_fallback_wrapper.h"
+#include "livekit/media_foundation_decoder.h"
+#endif
+
 namespace livekit_ffi {
 
 namespace {
@@ -169,8 +174,17 @@ std::unique_ptr<webrtc::VideoDecoder> VideoDecoderFactory::Create(
   if (absl::EqualsIgnoreCase(format.name, webrtc::kVp9CodecName))
     return webrtc::VP9Decoder::Create();
   if (absl::EqualsIgnoreCase(format.name, webrtc::kH264CodecName) &&
-      internal_h264_decoder_works_)
+      internal_h264_decoder_works_) {
+#if defined(_WIN32)
+    // On the GPU through Media Foundation, with FFmpeg taking over wherever
+    // that fails
+    if (MediaFoundationH264DecoderAvailable())
+      return webrtc::CreateVideoDecoderSoftwareFallbackWrapper(
+          env, webrtc::H264Decoder::Create(),
+          CreateMediaFoundationH264Decoder());
+#endif
     return webrtc::H264Decoder::Create();
+  }
 
 
 #if defined(RTC_DAV1D_IN_INTERNAL_DECODER_FACTORY)
