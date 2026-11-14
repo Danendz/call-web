@@ -163,6 +163,7 @@ fn main() {
 
             builder
                 .file("src/media_foundation_encoder.cpp")
+                .file("src/media_foundation_decoder.cpp")
                 //.include("./vaapi-windows/DirectX-Headers-1.0/include")
                 //.include(path::PathBuf::from("./vaapi-windows/x64/include"))
                 //.file("vaapi-windows/DirectX-Headers-1.0/src/dxguids.cpp")

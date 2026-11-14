@@ -12,15 +12,16 @@ LiveKit's `webrtc-sys` (the C++ shim between `libwebrtc` and Google's WebRTC) wi
   runs (`crates/denoise`, installed by `crates/engine/src/media.rs`), and a switch for WebRTC's own noise suppression,
   which is off while ours is on. Upstream has no way to do either from Rust.
 - On Windows, a hardware H.264 encoder through Media Foundation (`media_foundation_encoder.{h,cpp}`), registered as the
-  encoder factory's `Hardware` backend, so `codec.rs` sees hardware H.264 and Auto picks it. Upstream reaches the GPU's
-  encoder only through NVENC, and only on Linux.
+  encoder factory's `Hardware` backend, so `codec.rs` sees hardware H.264 and Auto picks it, and a decoder on the GPU
+  (`media_foundation_decoder.{h,cpp}`) in front of FFmpeg's, which takes over wherever it fails. Upstream reaches the
+  GPU's encoder only through NVENC, and only on Linux, and decodes H.264 on Windows only in software.
 
 - `webrtc-sys/` is the crate exactly as published on crates.io, plus `webrtc-sys.patch`. Don't edit it by hand:
   change the patch and run `./webrtc-sys.sh`. CI runs `./webrtc-sys.sh --check` and fails when the two differ.
 - `webrtc-sys.patch` is everything we changed: `capture_processor.{h,cpp,rs}`, two lines in `build.rs` and `lib.rs`,
   and the factory creating its audio processing with the hook in `peer_connection_factory.cpp`; then
-  `media_foundation_encoder.{h,cpp}`, the Windows lines that build and link it in `build.rs`, and its registration in
-  `video_encoder_factory.cpp`.
+  `media_foundation_encoder.{h,cpp}` and `media_foundation_decoder.{h,cpp}`, the Windows lines that build and link
+  them in `build.rs`, and their registration in `video_encoder_factory.cpp` and `video_decoder_factory.cpp`.
 - `webrtc-sys-build` (which downloads the WebRTC prebuilt) is unchanged and comes from crates.io as usual.
 
 **Why vendored rather than a git dependency on a fork:** cargo fetches a git dependency's whole repository with all
