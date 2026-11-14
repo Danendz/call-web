@@ -158,14 +158,11 @@ impl Bridge {
         ui.set_translation_progress(progress);
         let translation_size = Pair::into(state.lang).size();
         ui.set_translation_size(megabytes(translation_size).into());
-        let (live, progress) = model_state(state.live);
-        ui.set_live_state(live);
-        ui.set_live_progress(progress);
-        let (pack, progress) =
-            pack_state(&[(state.live, SpeechModel::Live.size()), (state.translation, translation_size)]);
+        let speech_size = SpeechModel::SenseVoice.size();
+        let (pack, progress) = pack_state(&[(state.model, speech_size), (state.translation, translation_size)]);
         ui.set_pack_state(pack);
         ui.set_pack_progress(progress);
-        ui.set_pack_size(megabytes(SpeechModel::Live.size() + translation_size).into());
+        ui.set_pack_size(megabytes(speech_size + translation_size).into());
         *self.last.borrow_mut() = (state.phase, state.lang, state.translation);
         self.sync_translation(ui);
     }

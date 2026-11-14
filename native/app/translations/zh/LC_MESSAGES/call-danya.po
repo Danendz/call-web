@@ -560,12 +560,6 @@ msgstr "{} 不在线。对方会看到未接来电。"
 msgid "Live translation"
 msgstr "实时翻译"
 
-msgid "Live speech"
-msgstr "实时语音识别"
-
-msgid "Not used while live subtitles are on"
-msgstr "开启实时字幕时不使用"
-
 msgid "Translate live subtitles on this device?"
 msgstr "在本机上翻译实时字幕？"
 
