@@ -22,7 +22,7 @@ export default defineRailway(() => {
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { sleepApplication: true },
     // The models, kept across deploys and wake-ups instead of fetched again each time
-    volumeMounts: { "/models": volume("speech-models", { sizeMB: 1024 }) },
+    volumeMounts: { "/models": volume("speech-models", { sizeMB: 1024, region: "asia-southeast1-eqsg3a" }) },
     env: {
       PORT: "8090",
       MODELS_DIR: "/models",
