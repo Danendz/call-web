@@ -187,12 +187,13 @@ impl Transcriber {
     }
 
     /// Frees the loaded models (a few hundred MB), once the call is over or a model is gone.
+    /// A recording still running holds the live models; its thread gives them back when it ends.
     pub(crate) fn release(&mut self) {
-        if let Ok(mut loaded) = self.loaded.lock() {
-            *loaded = None;
-        }
-        if let Ok(mut loaded) = self.loaded_live.lock() {
-            *loaded = None;
+        // Each is dropped by the end of its statement, before giving back
+        let local = self.loaded.lock().ok().and_then(|mut l| l.take()).is_some();
+        let live = self.loaded_live.lock().ok().and_then(|mut l| l.take()).and_then(Arc::into_inner).is_some();
+        if local || live {
+            crate::memory::give_back();
         }
     }
 

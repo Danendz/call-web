@@ -7,6 +7,7 @@ mod download;
 pub mod friends;
 mod level;
 mod media;
+mod memory;
 mod mic;
 mod peer;
 mod remote;

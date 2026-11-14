@@ -36,7 +36,7 @@ Ordered by value per hour of work. The native app gets the same behavior from li
 - [x] **Web sends live text** (Web). With live subtitles on, web speech always goes to the server, which decodes the line again every 0.5 s as it grows (every 1 s past 5 s, skipped while it's behind) and sends it as `chat-live`, cutting lines at 0.4 s pauses. With them off, the browser's own recognition comes first as before.
 - [ ] **Keep spoken lines through a reconnect** (Web + Native). A finished line said while the room socket is down or reconnecting is dropped (`native/crates/engine/src/signaling.rs` outgoing queue, `web/src/call/signaling.ts` `send`), though its live text may already be on the other person's screen. Queue spoken lines and send them once the socket is back.
 - [ ] **Chat history past 200 lines on rejoin** (Web + Native). A rejoin or resume replaces the chat with the server's copy, capped at `MAX_CHAT_HISTORY = 200` (`server/rooms.ts`); with speech to chat a long call passes that and older lines vanish. Merge with what the client holds, or raise the cap.
-- [ ] **WebCodecs with custom FEC and retransmission** over an unreliable data channel. Only if the items above aren't enough: it means writing our own jitter buffer, A/V sync and congestion control. The native app (Phase 3) is the better place for this.
+- [ ] **WebCodecs with custom FEC and retransmission** over an unreliable data channel. Only if the items above aren't enough: it means writing our own jitter buffer, A/V sync and congestion control. The native app (Phase 3) is the better place for this. Reference: [videocall.rs](https://github.com/security-union/videocall-rs) does this over WebTransport, with WebCodecs and a NetEQ jitter buffer ported to Rust/WASM in an `AudioWorklet`.
 
 ## Phase 2 — Native app (Rust + Slint)
 
@@ -81,7 +81,7 @@ During screen sharing the other person may be in a full-screen game and can't se
 | [~] On-device speech recognition | SenseVoice-Small (int8) through `sherpa-onnx` on macOS, Windows and Android, one model for Mandarin, English and the two mixed, punctuated, told the language picked in "I speak". Whole utterances, cut by the same pause detection as the server path, decoded when the pause comes: a fraction of a second on a phone. The model (240 MB) isn't in the installer: Settings downloads, cancels or deletes it and switches between this device and the server. With live subtitles on, the streaming model from **Live subtitles** recognizes instead, decoding while you speak, and the start screen offers that one. It comes from our server (the `releases` bucket, `/updates`), resumable, checked against a SHA-256 built into the binary, and kept in the app data folder; until it's ready, or if it fails to load, speech goes to the server. Free, no quota, works offline. Plugs in behind the `Recognizer` trait from M3. Left: Apple SpeechAnalyzer on macOS 26+ if it proves better. |
 | [ ] Share one app's audio | Only the game's sound, not Discord or music: Windows process loopback capture, ScreenCaptureKit per-app audio. The browser can only share a tab's or the whole system's audio. |
 | [ ] Native super-resolution | VideoToolbox super-resolution scaler on macOS, NVIDIA RTX Video Super Resolution on Windows. Stronger than the web shader. |
-| [ ] Custom FEC, retransmission and congestion control | libwebrtc field trials (FlexFEC, more RED redundancy) or changes to the source, tuned for the China link. |
+| [ ] Custom FEC, retransmission and congestion control | libwebrtc field trials (FlexFEC, more RED redundancy) or changes to the source, tuned for the China link. For ideas on loss recovery, jitter buffering and per-receiver bitrate adaptation outside WebRTC, see [videocall.rs](https://github.com/security-union/videocall-rs) (its Rust NetEQ port, protobuf media framing, diagnostics-driven adaptation). |
 | [ ] Fine-grained encoder tuning | Per-encoder options (x264, libvpx, NVENC), region-of-interest encoding (more bits on the face), keyframe and rate-control control. |
 
 ### Efficiency
@@ -97,7 +97,7 @@ Less CPU, memory and battery in a call. In a call on a Mac the app used 16–21%
 | [x] Publish only what changed | A state that changed nothing isn't handed to the UI, and stats have their own callback, so the overlay's tick doesn't touch the rest of the UI. |
 | [x] Stats only when shown | Stats are sampled once a second and handed to the UI only while the overlay is up; otherwise every 5 s, just for the relay check. |
 | [x] Speech from WebRTC's mic | Speech to chat reads the call's mic after WebRTC's echo cancellation, noise suppression and gain control, instead of opening the mic again with a second canceller. |
-| [ ] Give memory back after a call | Return the allocator's freed pages after the speech models unload. |
+| [x] Give memory back after a call | Once the speech models are dropped, the allocator returns their freed pages to the system (`malloc_zone_pressure_relief` on macOS, `M_PURGE` on Android, `HeapCompact` on Windows) instead of keeping them for reuse. |
 
 ## Phase 4 — Android (Native only)
 
@@ -118,5 +118,6 @@ Phase 3's on-device speech recognition (`sherpa-onnx`) is built for Android too;
 
 ## Not planned
 
+- **Moving to [videocall.rs](https://github.com/security-union/videocall-rs)** (WebTransport/QUIC through its own relay instead of WebRTC). It relays every call through a server with no direct path, encrypts only to the server, encodes VP9 in software only, has no native echo cancellation or Windows client, its web client needs WebTransport (no Firefox), and cross-border QUIC from mainland China is often throttled, which drops it to WebSocket over TCP. Hardware H.264 and the wgpu renderer above are the bigger speed wins. Keep it as a reference for the FEC and jitter buffer work.
 - **Overlay and notification workarounds in the web app** (Document Picture-in-Picture chat window, browser notifications, message sounds, tab badges). These belong to the native app.
 - **Overlay inside exclusive-fullscreen games** (drawing into the game's DirectX/Vulkan output, like Discord or Steam). Hard to build, and anti-cheat systems (Vanguard, EasyAntiCheat) can flag it and ban the account. Borderless windowed mode plus the overlay window covers most games.

@@ -225,6 +225,12 @@ fn run(dir: &Path, loaded: &LoadedLive, jobs: &std_mpsc::Receiver<Out>, events: 
             }
         }
     }
+    drop(open);
+    // The call ended while this recording ran, so this was the last handle
+    let last = Arc::into_inner(model).is_some();
+    if last {
+        crate::memory::give_back();
+    }
 }
 
 /// Drops the live line, if any of it went out
