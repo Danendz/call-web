@@ -1,6 +1,6 @@
-//! Speech to chat: what you say becomes chat messages. The mic is opened apart from WebRTC's capture and run through
-//! WebRTC's audio processing with echo cancellation, fed the other person's decoded audio as the echo to remove, so
-//! their voice from your speakers isn't transcribed as yours. Then it's cut into utterances, which go to a
+//! Speech to chat: what you say becomes chat messages. The mic comes from the call's capture after WebRTC's echo
+//! cancellation, noise suppression and gain control, as the web transcribes the track it sends, so the other
+//! person's voice from your speakers isn't transcribed as yours. Then it's cut into utterances, which go to a
 //! [`Recognizer`]: with live subtitles, the streaming model on this device, which sends what you're saying as you say
 //! it; otherwise SenseVoice on this device once it's downloaded and picked, or the server's `/ws/speech`, streamed
 //! while you speak like the web's server path.
@@ -13,19 +13,16 @@ mod utterance;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc as std_mpsc};
+use std::sync::{Arc, mpsc as std_mpsc};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use futures_util::StreamExt;
-use libwebrtc::audio_stream::native::NativeAudioStream;
-use libwebrtc::audio_track::RtcAudioTrack;
-use libwebrtc::native::apm::AudioProcessingModule;
 use protocol::{Lang, SpeechServerMessage, TRANSCRIBE_SAMPLE_RATE};
 use tokio::sync::mpsc;
 use url::Url;
 
 pub use crate::download::ModelStatus;
+use crate::media::{MicFrame, MicTap};
 pub use live::{LiveModel, Utterance};
 pub use model::Model;
 pub(crate) use model::{delete as delete_model, dir as model_dir, download as download_model, is_ready as model_ready};
@@ -35,10 +32,9 @@ use local::{Loaded, Local};
 use socket::SpeechSocket;
 use utterance::{CHUNK, Detector, Event};
 
-const RATE: i32 = TRANSCRIBE_SAMPLE_RATE as i32;
-const TEN_MS: usize = TRANSCRIBE_SAMPLE_RATE as usize / 100;
-// Android hands apps the mic at its recognition level with no gain: talking at arm's length comes in near -55 dB,
-// under the detector's floor and down to a few bits once it's 16-bit. Desktop mics come in some 20 dB louder.
+// Opened apart from WebRTC, Android hands apps the mic at its recognition level with no gain: talking at arm's length
+// comes in near -55 dB, under the detector's floor and down to a few bits once it's 16-bit. Desktop mics come in
+// some 20 dB louder. The call's capture has gain control instead.
 const MIC_GAIN: f32 = if cfg!(target_os = "android") { 10.0 } else { 1.0 };
 
 /// Something the person should know about speech to chat; the UI words it in their language.
@@ -101,9 +97,9 @@ pub(crate) enum OnDevice {
 }
 
 pub(crate) struct Transcriber {
-    apm: Arc<Mutex<AudioProcessingModule>>,
+    /// None without WebRTC's platform audio: the mic is opened apart then
+    tap: Option<MicTap>,
     running: Option<(Params, Recording)>,
-    reverse: Option<tokio::task::JoinHandle<()>>,
     events: mpsc::UnboundedSender<SpeechEvent>,
     paused_until: Arc<AtomicU64>,
     unavailable: bool,
@@ -125,13 +121,10 @@ impl Drop for Recording {
 
 impl Transcriber {
     /// What recognition reports comes back through `events`, for the engine's thread.
-    pub(crate) fn new(events: mpsc::UnboundedSender<SpeechEvent>) -> Self {
-        // Echo cancellation and noise suppression; gain control would pump the noise floor the detector relies on
-        let apm = AudioProcessingModule::new(true, false, true, true);
+    pub(crate) fn new(events: mpsc::UnboundedSender<SpeechEvent>, tap: Option<MicTap>) -> Self {
         Self {
-            apm: Arc::new(Mutex::new(apm)),
+            tap,
             running: None,
-            reverse: None,
             events,
             paused_until: Arc::default(),
             unavailable: false,
@@ -174,7 +167,7 @@ impl Transcriber {
                 (Box::new(SpeechSocket::connect(params.url.clone(), self.events.clone())), self.paused_until.clone())
             }
         };
-        match start(&params, recognizer, self.apm.clone(), paused_until) {
+        match start(&params, recognizer, self.tap.as_ref(), paused_until) {
             Ok(recording) => self.running = Some((params, recording)),
             Err(e) => tracing::info!("speech to chat can't open the mic: {e}"),
         }
@@ -201,31 +194,6 @@ impl Transcriber {
         }
     }
 
-    /// The other person's voice, as the echo to take out of ours.
-    pub(crate) fn set_remote_audio(&mut self, track: Option<RtcAudioTrack>) {
-        if let Some(old) = self.reverse.take() {
-            old.abort();
-        }
-        let Some(track) = track else { return };
-        let apm = self.apm.clone();
-        self.reverse = Some(tokio::spawn(async move {
-            let mut stream = NativeAudioStream::new(track, RATE, 1);
-            let mut pending: Vec<i16> = Vec::new();
-            while let Some(frame) = stream.next().await {
-                pending.extend_from_slice(&frame.data);
-                let whole = pending.len() / TEN_MS * TEN_MS;
-                if whole > 0 {
-                    if let Ok(mut apm) = apm.lock()
-                        && let Some(slice) = pending.get_mut(..whole)
-                    {
-                        let _ = apm.process_reverse_stream(slice, RATE, 1);
-                    }
-                    pending.drain(..whole);
-                }
-            }
-        }));
-    }
-
     /// A notice from the server; returns what the UI should show, if it changed.
     pub(crate) fn notice(&mut self, msg: SpeechServerMessage) -> Option<SpeechNotice> {
         match msg {
@@ -249,31 +217,63 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
+/// Where a recording's samples come from.
+enum Source {
+    /// The call's capture
+    Call(std_mpsc::Receiver<MicFrame>),
+    /// The mic opened apart, or `CALL_FAKE_MIC`; the Input keeps it open
+    Apart(crate::mic::Input, std_mpsc::Receiver<Vec<f32>>),
+}
+
+impl Source {
+    fn open(tap: Option<&MicTap>, mic: Option<&str>) -> Result<Self, String> {
+        if let Some(tap) = tap
+            && std::env::var_os("CALL_FAKE_MIC").is_none()
+        {
+            return Ok(Self::Call(tap.open()));
+        }
+        let (samples_tx, samples) = std_mpsc::channel();
+        let input = crate::mic::open(mic, move |s| {
+            let _ = samples_tx.send(s.iter().map(|x| x * MIC_GAIN).collect());
+        })?;
+        Ok(Self::Apart(input, samples))
+    }
+
+    /// The next samples in -1..1 and their rate, or None after `timeout` without any.
+    fn recv(&self, timeout: std::time::Duration) -> Option<(Vec<f32>, u32)> {
+        match self {
+            Self::Call(frames) => {
+                // WebRTC's floats are in the 16-bit range
+                let (frame, rate) = frames.recv_timeout(timeout).ok()?;
+                Some((frame.iter().map(|x| x / 32768.0).collect(), rate))
+            }
+            Self::Apart(input, samples) => Some((samples.recv_timeout(timeout).ok()?, input.sample_rate)),
+        }
+    }
+}
+
 /// Opens the mic on a thread of its own and runs samples through the pipeline until the Recording is dropped.
 fn start(
     params: &Params,
     recognizer: Box<dyn Recognizer>,
-    apm: Arc<Mutex<AudioProcessingModule>>,
+    tap: Option<&MicTap>,
     paused_until: Arc<AtomicU64>,
 ) -> Result<Recording, String> {
     let (stop, stopped) = std_mpsc::channel::<()>();
     let (opened_tx, opened) = std_mpsc::channel();
-    let (mic, lang) = (params.mic.clone(), params.lang);
+    let (mic, lang, tap) = (params.mic.clone(), params.lang, tap.cloned());
     thread::Builder::new()
         .name("speech".into())
         .spawn(move || {
-            let (samples_tx, samples) = std_mpsc::channel::<Vec<f32>>();
-            let input = match crate::mic::open(mic.as_deref(), move |s| {
-                let _ = samples_tx.send(s.iter().map(|x| x * MIC_GAIN).collect());
-            }) {
-                Ok(input) => input,
+            let source = match Source::open(tap.as_ref(), mic.as_deref()) {
+                Ok(source) => source,
                 Err(e) => {
                     let _ = opened_tx.send(Err(e));
                     return;
                 }
             };
             let _ = opened_tx.send(Ok(()));
-            let mut down = Downsampler::new(input.sample_rate);
+            let mut down: Option<Downsampler> = None;
             let mut detector = Detector::new();
             let mut pcm: Vec<i16> = Vec::new();
             let mut events = Vec::new();
@@ -284,14 +284,15 @@ fn start(
                 if !matches!(stopped.try_recv(), Err(std_mpsc::TryRecvError::Empty)) {
                     break;
                 }
-                let Ok(chunk) = samples.recv_timeout(std::time::Duration::from_millis(200)) else { continue };
+                let Some((chunk, rate)) = source.recv(std::time::Duration::from_millis(200)) else { continue };
+                // The call's capture can restart at another rate, on another mic
+                let down = match &mut down {
+                    Some(d) if d.rate == rate => d,
+                    _ => down.insert(Downsampler::new(rate)),
+                };
                 down.push(&chunk, &mut pcm);
                 while pcm.len() >= CHUNK {
-                    let mut block: Vec<i16> = pcm.drain(..CHUNK).collect();
-                    if let Ok(mut apm) = apm.lock() {
-                        let _ = apm.process_stream(&mut block, RATE, 1);
-                    }
-                    detector.push(block, &mut events);
+                    detector.push(pcm.drain(..CHUNK).collect(), &mut events);
                 }
                 for event in events.drain(..) {
                     match event {
@@ -311,7 +312,7 @@ fn start(
             if sending && !events.is_empty() {
                 recognizer.send(Out::Cancel);
             }
-            drop(input);
+            drop(source);
         })
         .map_err(|e| e.to_string())?;
     opened.recv().map_err(|_| "the speech thread ended".to_owned())??;
@@ -321,6 +322,7 @@ fn start(
 /// The mic's rate down to 16 kHz, like the web's `pcm.ts`: each output sample averages the input samples it
 /// covers, which also filters what's above the new rate.
 struct Downsampler {
+    rate: u32,
     ratio: f64,
     carry: Vec<f32>,
     /// Where the next output sample starts in `carry`, in input samples
@@ -329,7 +331,7 @@ struct Downsampler {
 
 impl Downsampler {
     fn new(rate: u32) -> Self {
-        Self { ratio: (f64::from(rate) / f64::from(TRANSCRIBE_SAMPLE_RATE)).max(1.0), carry: Vec::new(), at: 0.0 }
+        Self { rate, ratio: (f64::from(rate) / f64::from(TRANSCRIBE_SAMPLE_RATE)).max(1.0), carry: Vec::new(), at: 0.0 }
     }
 
     fn push(&mut self, samples: &[f32], out: &mut Vec<i16>) {

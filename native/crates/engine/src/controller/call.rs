@@ -139,7 +139,6 @@ impl Controller {
     pub(super) fn drop_peer(&mut self) {
         self.peer = None;
         self.remote_audio.clear();
-        self.transcriber.set_remote_audio(None);
         self.remote.drop_tracks();
         (self.on_stats)(None);
         // Events from the old connection still queued must not touch the next one
@@ -205,11 +204,8 @@ impl Controller {
                 }
             }
             PeerEvent::RemoteVideo { stream_id, track } => self.remote.add(stream_id, track),
-            PeerEvent::RemoteAudio { track, voice } => {
+            PeerEvent::RemoteAudio(track) => {
                 track.set_enabled(!self.state.speaker_off);
-                if voice {
-                    self.transcriber.set_remote_audio(Some(track.clone()));
-                }
                 self.remote_audio.push(track);
             }
             PeerEvent::Stats(stats) => {

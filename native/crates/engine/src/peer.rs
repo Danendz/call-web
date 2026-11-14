@@ -54,12 +54,8 @@ pub enum PeerEvent {
         stream_id: String,
         track: RtcVideoTrack,
     },
-    /// Their voice, or their screen's sound. It plays by itself; this is for muting it, and taking the voice's echo
-    /// out of speech to chat
-    RemoteAudio {
-        track: RtcAudioTrack,
-        voice: bool,
-    },
+    /// Their voice, or their screen's sound. It plays by itself; this is for muting it
+    RemoteAudio(RtcAudioTrack),
     Stats(Box<CallStats>),
 }
 
@@ -145,7 +141,6 @@ impl Peer {
             screen_stream_id: config.screen_stream_id,
             screen_added: false,
             sharing: false,
-            voice_seen: false,
             counters: None,
             ignore_offer: false,
             last_restart: None,
@@ -230,8 +225,6 @@ struct Session {
     /// The screen's transceivers are in this connection; they keep their tracks after a share stops
     screen_added: bool,
     sharing: bool,
-    /// Their voice's track has arrived
-    voice_seen: bool,
     counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
@@ -289,12 +282,7 @@ impl Session {
                     let stream_id = event.streams.first().map(|s| s.id()).unwrap_or_default();
                     self.emit(PeerEvent::RemoteVideo { stream_id, track });
                 }
-                // Their voice comes first (its transceiver is the first one); a later one is their screen's sound
-                MediaStreamTrack::Audio(track) => {
-                    let voice = !self.voice_seen;
-                    self.voice_seen = true;
-                    self.emit(PeerEvent::RemoteAudio { track, voice });
-                }
+                MediaStreamTrack::Audio(track) => self.emit(PeerEvent::RemoteAudio(track)),
             },
             Input::RestartIce => self.restart_ice(),
             Input::Screen(track) => self.set_screen(track),
