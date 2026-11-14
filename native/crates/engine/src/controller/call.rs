@@ -114,6 +114,7 @@ impl Controller {
             stream_id: self.stream_id.clone(),
             screen_stream_id: self.screen.stream_id.clone(),
             video_codec: self.video_codec,
+            screen_bitrate: self.screen_bitrate,
             stats_shown: self.stats_shown,
         };
         match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {

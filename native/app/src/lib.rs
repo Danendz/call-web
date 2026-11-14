@@ -195,6 +195,7 @@ pub fn run() -> anyhow::Result<()> {
         }
         engine.send(Command::SetNoiseSuppression(settings.noise_suppression));
         engine.send(Command::SetVideoCodec(settings.video_codec.engine()));
+        engine.send(Command::SetScreenBitrate(settings.screen_bitrate()));
     }
 
     let send = |command: Command| {
@@ -480,6 +481,41 @@ pub fn run() -> anyhow::Result<()> {
             settings.video_codec = pick;
             settings.save();
             engine.send(Command::SetVideoCodec(pick.engine()));
+        }
+    });
+    let show_screen_quality = {
+        let weak = ui.as_weak();
+        move |settings: &crate::settings::Settings| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_screen_quality(settings.screen_quality.id().into());
+                ui.set_screen_mbps(settings.screen_custom_mbps as i32);
+            }
+        }
+    };
+    show_screen_quality(&settings.borrow());
+    ui.on_set_screen_quality({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let show = show_screen_quality.clone();
+        move |id| {
+            let mut settings = settings.borrow_mut();
+            settings.screen_quality = crate::settings::ScreenQuality::from_id(&id);
+            show(&settings);
+            settings.save();
+            engine.send(Command::SetScreenBitrate(settings.screen_bitrate()));
+        }
+    });
+    ui.on_step_screen_mbps({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        move |step| {
+            let mut settings = settings.borrow_mut();
+            let range = crate::settings::CUSTOM_MBPS;
+            settings.screen_custom_mbps =
+                settings.screen_custom_mbps.saturating_add_signed(step).clamp(*range.start(), *range.end());
+            show_screen_quality(&settings);
+            settings.save();
+            engine.send(Command::SetScreenBitrate(settings.screen_bitrate()));
         }
     });
     // Desktop only: Android always draws with OpenGL, and an empty value hides the choice

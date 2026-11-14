@@ -132,6 +132,8 @@ pub enum Command {
     SetNoiseSuppression(bool),
     /// Any time: a call renegotiates onto it
     SetVideoCodec(crate::VideoCodec),
+    /// The shared screen's bitrate ceiling in bits per second; any time, live in a call
+    SetScreenBitrate(u64),
     /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes
     SendChat(String),
     /// Tells the other person a picture of the call was saved

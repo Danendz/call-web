@@ -103,6 +103,7 @@ struct Controller {
     seat: Seat,
     peer: Option<Peer>,
     video_codec: crate::VideoCodec,
+    screen_bitrate: u64,
     peer_tx: mpsc::UnboundedSender<PeerEvent>,
     peer_rx: mpsc::UnboundedReceiver<PeerEvent>,
 }
@@ -202,6 +203,7 @@ impl Controller {
             seat: Seat::default(),
             peer: None,
             video_codec: crate::VideoCodec::default(),
+            screen_bitrate: crate::SHARE_SCREEN_BITRATE,
             peer_tx,
             peer_rx,
         };
@@ -368,6 +370,12 @@ impl Controller {
                 self.video_codec = pick;
                 if let Some(peer) = &self.peer {
                     peer.set_video_codec(pick);
+                }
+            }
+            Command::SetScreenBitrate(bps) => {
+                self.screen_bitrate = bps;
+                if let Some(peer) = &self.peer {
+                    peer.set_screen_bitrate(bps);
                 }
             }
             Command::SetForceRelay(relay) => {

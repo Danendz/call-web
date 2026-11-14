@@ -71,6 +71,11 @@ export component AppWindow inherits Window {
     // "Video codec" in Settings: "auto", "h264" or "vp8", remembered between launches
     in property <string> video-codec;
     callback set-video-codec(string);
+    // "Screen share quality" in Settings: "balanced", "high" or "custom", and Custom's Mbps
+    in property <string> screen-quality;
+    in property <int> screen-mbps;
+    callback set-screen-quality(string);
+    callback step-screen-mbps(int);
     // "modern" or "opengl"; empty on Android, which has no choice
     in property <string> renderer;
     callback set-renderer(string);
@@ -464,6 +469,8 @@ export component AppWindow inherits Window {
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             video-codec: root.video-codec;
+            screen-quality: root.screen-quality;
+            screen-mbps: root.screen-mbps;
             renderer: root.renderer;
             lang: root.lang;
             model-state: root.model-state;
@@ -479,6 +486,8 @@ export component AppWindow inherits Window {
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-video-codec(id) => { root.set-video-codec(id); }
+            set-screen-quality(id) => { root.set-screen-quality(id); }
+            step-screen-mbps(step) => { root.step-screen-mbps(step); }
             set-renderer(renderer) => { root.set-renderer(renderer); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }
