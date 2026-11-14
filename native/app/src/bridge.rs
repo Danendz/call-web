@@ -140,7 +140,6 @@ impl Bridge {
         ui.set_remote_screen(state.remote_screen);
         ui.set_sharing(state.sharing);
         ui.set_force_relay(state.force_relay);
-        ui.set_stats(stats_view(state.stats.as_ref(), state.trying_direct));
         ui.set_transcribe_on(state.transcribe_on);
         let (notice, until) = match state.speech_notice {
             None => (0, String::new()),
@@ -221,6 +220,12 @@ fn sync_devices(model: &VecModel<DeviceItem>, devices: &[Device]) {
                 .collect::<Vec<_>>(),
         );
     }
+}
+
+/// The stats overlay's numbers, apart from [`Bridge::render`]: they change every second while it's up.
+pub fn render_stats(ui: &AppWindow, stats: Option<(CallStats, bool)>) {
+    let (stats, trying_direct) = stats.map_or((None, false), |(s, trying)| (Some(s), trying));
+    ui.set_stats(stats_view(stats.as_ref(), trying_direct));
 }
 
 /// The web's StatsOverlay text, "—" where there's nothing yet.

@@ -85,7 +85,6 @@ pub struct State {
     pub portrait: bool,
     /// Why the room can't be joined, in [`Phase::Full`]; None: two people are already in it
     pub full_reason: Option<FullReason>,
-    pub stats: Option<CallStats>,
     /// The other person just saved a picture of the call
     pub peer_screenshot: bool,
     /// Speech to chat is on: what you say is posted to the chat while someone's there to read it
@@ -103,8 +102,6 @@ pub struct State {
     pub translation: ModelStatus,
     /// Everything goes through our TURN server (a stats overlay switch, for testing the relay)
     pub force_relay: bool,
-    /// An ICE restart to get off the relay just went out
-    pub trying_direct: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +128,8 @@ pub enum Command {
     SelectCam(String),
     SetPortrait(bool),
     SetForceRelay(bool),
+    /// The stats overlay is up: stats are then sampled every second and handed over
+    SetStatsShown(bool),
     /// DeepFilterNet on the mic instead of WebRTC's own noise suppression; any time, live in a call
     SetNoiseSuppression(bool),
     /// Sent as typed, trimmed; nothing if it's empty or longer than the server takes
@@ -190,8 +189,11 @@ pub struct Engine {
 
 impl Engine {
     /// `on_state` runs on the engine's thread for every change; the UI hops to its own thread from there.
+    /// `on_stats` gets the call's stats, and whether an ICE restart to get off the relay just went out, while
+    /// [`Command::SetStatsShown`] says the overlay is up; None once the call is gone.
     /// Video frames go to `sink`, from video threads; see [`VideoSink`].
     /// `data_dir` is where the on-device speech model is kept; `on_device` whether it's used once it's there.
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         server: Url,
         lang: Lang,
@@ -199,6 +201,7 @@ impl Engine {
         on_device: bool,
         sink: Arc<dyn VideoSink>,
         on_state: impl Fn(State) + Send + 'static,
+        on_stats: impl Fn(Option<(CallStats, bool)>) + Send + 'static,
         on_chat: impl Fn(ChatEvent) + Send + 'static,
     ) -> std::io::Result<Self> {
         let (commands, rx) = mpsc::unbounded_channel();
@@ -216,6 +219,7 @@ impl Engine {
                     controller_level,
                     sink,
                     Box::new(on_state),
+                    Box::new(on_stats),
                     Box::new(on_chat),
                 )
                 .run(rx)

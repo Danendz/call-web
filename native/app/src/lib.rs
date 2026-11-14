@@ -103,6 +103,7 @@ pub fn run() -> anyhow::Result<()> {
     #[cfg(not(target_os = "android"))]
     window::watch_shown(&ui);
     let chat_weak = ui.as_weak();
+    let stats_weak = ui.as_weak();
     let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
     let server_for_friends = server.clone();
     let engine = Rc::new(Engine::start(
@@ -113,6 +114,9 @@ pub fn run() -> anyhow::Result<()> {
         sink,
         move |state| {
             let _ = weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.render(&ui, &state)));
+        },
+        move |stats| {
+            let _ = stats_weak.upgrade_in_event_loop(move |ui| bridge::render_stats(&ui, stats));
         },
         move |event| {
             let _ = chat_weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.chat(&ui, event)));
@@ -411,6 +415,10 @@ pub fn run() -> anyhow::Result<()> {
             settings.save();
             engine.send(Command::SetOnDevice(on));
         }
+    });
+    ui.on_stats_shown({
+        let engine = engine.clone();
+        move |on| engine.send(Command::SetStatsShown(on))
     });
     ui.set_show_stats(settings.borrow().show_stats);
     ui.on_set_show_stats({

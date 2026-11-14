@@ -69,6 +69,7 @@ fn main() {
                 state.live
             );
         },
+        |_| {},
         on_chat,
     )
     .unwrap_or_else(|e| panic!("engine: {e}"));
