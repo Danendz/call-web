@@ -12,7 +12,6 @@ import "./call.css";
 import { CallTimer } from "./CallTimer";
 import { ControlPill } from "./ControlPill";
 import type { CallController, CallState } from "./controller";
-import type { SpeechNotice } from "./speech/transcriber";
 import { Fade } from "./Fade";
 import { arrangeFeeds, DEFAULT_CORNERS, Feeds, type FeedKey } from "./Feeds";
 import { isRearCamera } from "./media";
@@ -167,7 +166,7 @@ export function CallView({ controller, state, roomUrl }: { controller: CallContr
           <Fade className="notice" text={banner} />
           <Fade className="notice" text={soundBlocked ? t.tapToListen : null} />
           <Fade className="notice muted" text={state.peerScreenshot ? t.peerScreenshot : null} />
-          <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? speechNoticeText(state.speechNotice, t) : null} />
+          <Fade className="notice muted" text={state.transcribeOn && state.speechNotice ? t.speechUnavailable : null} />
           {connected && <TranslationOffer lang={state.lang} />}
         </div>
         <ChatOverlay
@@ -234,9 +233,4 @@ function statusBanner(state: CallState, t: Strings): string | null {
     default:
       return null;
   }
-}
-
-function speechNoticeText(notice: SpeechNotice, t: Strings): string {
-  if (notice.kind === "unavailable") return t.speechUnavailable;
-  return t.speechPaused(new Date(notice.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
 }

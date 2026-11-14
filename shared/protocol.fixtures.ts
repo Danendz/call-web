@@ -107,11 +107,12 @@ export const serverMessages = [
 
 export const speechClientMessages = [
   { type: "start", lang: "zh" },
+  { type: "start", lang: "en", live: true },
   { type: "end" },
   { type: "cancel" },
 ] satisfies SpeechClientMessage[];
 
-export const speechServerMessages = [{ type: "paused", until: 1_700_000_000_000 }, { type: "unavailable" }] satisfies SpeechServerMessage[];
+export const speechServerMessages = [{ type: "unavailable" }] satisfies SpeechServerMessage[];
 
 export const userClientMessages = [
   { type: "ring", to: "friend_1" },

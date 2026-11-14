@@ -123,7 +123,7 @@ fn size(msg: &Out) -> usize {
 fn encode(msg: Out) -> Message {
     let json = |m: SpeechClientMessage| Message::text(serde_json::to_string(&m).unwrap_or_default());
     match msg {
-        Out::Start(lang) => json(SpeechClientMessage::Start { lang }),
+        Out::Start(lang) => json(SpeechClientMessage::Start { lang, live: None }),
         Out::End => json(SpeechClientMessage::End),
         Out::Cancel => json(SpeechClientMessage::Cancel),
         // 16-bit little-endian, what the server reads
