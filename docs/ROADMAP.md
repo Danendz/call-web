@@ -87,7 +87,7 @@ Less CPU, memory and battery in a call. In a call on a Mac the app used 16–21%
 | Feature | Notes |
 |---|---|
 | [x] Reuse video frame buffers | Each feed reuses a few RGBA buffers instead of allocating one per frame, and the self-view is mirrored at draw time instead of on the CPU. |
-| [ ] Skip frames nobody sees | No conversion for a feed that isn't shown: window minimized or covered, or picture-in-picture showing another feed. |
+| [x] Skip frames nobody sees | No conversion for a feed that isn't shown: window minimized or covered (macOS), minimized (Windows), app in the background (Android), or picture-in-picture showing another feed. |
 | [ ] Render with wgpu, video on the GPU | Switch Slint's renderer from OpenGL to wgpu (Metal on macOS, Vulkan on Android, DX12 on Windows), then hand video in as a `WGPUTexture` with a YUV shader: no CPU conversion and 2.7× less upload, and macOS stops depending on deprecated OpenGL. Changes the renderer for the whole UI, so every screen needs retesting on all three platforms. A YUV shader on the current OpenGL renderer was skipped: Skia doesn't restore GL state after an outside draw, and Android drops the context in the background. Texture upload is still the hottest frame on Mac after buffer reuse. |
 | [ ] Quieter UI timer | The 30 Hz ticker runs only on the setup and call screens, at 1 Hz when only the call timer needs it; Android's sync moves to the state callback. |
 | [ ] Publish only what changed | Skip a state publish that changed nothing, and send stats on their own so the overlay's tick doesn't touch the rest of the UI. |

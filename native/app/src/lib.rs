@@ -95,6 +95,12 @@ pub fn run() -> anyhow::Result<()> {
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
+    ui.on_feeds_seen({
+        let sink = sink.clone();
+        move |camera, peer, screen| sink.set_seen(camera, peer, screen)
+    });
+    #[cfg(not(target_os = "android"))]
+    window::watch_shown(&ui);
     let chat_weak = ui.as_weak();
     let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
     let server_for_friends = server.clone();

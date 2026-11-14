@@ -1,6 +1,7 @@
 //! The engine's video frames into the window. Each feed keeps only its newest converted frame, and at most one hop
 //! to the UI thread is pending per feed, so a busy UI skips frames instead of falling behind. Buffers are reused:
 //! a 720p frame is 3.7 MB, and a fresh one per frame cost an allocation and a memset on top of the conversion.
+//! Frames nobody would see (the window is hidden, or the layout doesn't show that feed) aren't converted at all.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -22,6 +23,8 @@ struct Slot {
     shown: Mutex<Option<Buffer>>,
     spare: Mutex<Vec<Buffer>>,
     scheduled: AtomicBool,
+    /// Whether the screen on show draws this feed; see [`SlintSink::set_seen`]
+    seen: AtomicBool,
 }
 
 impl Slot {
@@ -31,6 +34,7 @@ impl Slot {
             shown: Mutex::new(None),
             spare: Mutex::new(Vec::new()),
             scheduled: AtomicBool::new(false),
+            seen: AtomicBool::new(true),
         })
     }
 
@@ -48,6 +52,13 @@ impl Slot {
             spare.push(buffer);
         }
     }
+}
+
+/// Whether any of the window is on screen: false while it's minimized or covered, or on Android stopped
+static WINDOW_SHOWN: AtomicBool = AtomicBool::new(true);
+
+pub fn set_window_shown(shown: bool) {
+    WINDOW_SHOWN.store(shown, Ordering::Relaxed);
 }
 
 /// The share of frames whose reused buffer the UI still held, so Slint copied it before it could be written, in
@@ -76,6 +87,14 @@ pub struct SlintSink {
 impl SlintSink {
     pub fn new(window: slint::Weak<AppWindow>) -> Arc<Self> {
         Arc::new(Self { window, camera: Slot::new(), peer: Slot::new(), screen: Slot::new() })
+    }
+
+    /// Which feeds the screen on show draws. One left out keeps its last frame, which shows for a moment when it's
+    /// drawn again, until the next one arrives.
+    pub fn set_seen(&self, camera: bool, peer: bool, screen: bool) {
+        self.camera.seen.store(camera, Ordering::Relaxed);
+        self.peer.seen.store(peer, Ordering::Relaxed);
+        self.screen.seen.store(screen, Ordering::Relaxed);
     }
 
     fn slot(&self, feed: Feed) -> &Arc<Slot> {
@@ -122,6 +141,9 @@ impl SlintSink {
 impl VideoSink for SlintSink {
     fn frame(&self, feed: Feed, frame: &Frame<'_>) {
         let slot = self.slot(feed);
+        if !slot.seen.load(Ordering::Relaxed) || !WINDOW_SHOWN.load(Ordering::Relaxed) {
+            return;
+        }
         let mut buffer = slot.take(frame.width(), frame.height());
         let before = buffer.as_bytes().as_ptr();
         // Copies first if the UI still holds this buffer, so a frame being drawn is never written over
