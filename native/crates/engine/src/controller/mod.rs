@@ -121,6 +121,7 @@ impl Controller {
         let screen = LocalScreen::new(media.factory());
         let translation = translate::status(data_dir.as_deref(), lang);
         let model = speech::status(data_dir.as_deref(), Model::SenseVoice);
+        let fetch_decoder = speech::drop_old_decoder(data_dir.as_deref());
         let live = speech::status(data_dir.as_deref(), Model::Live);
         let state = State {
             phase: Phase::Start,
@@ -161,7 +162,7 @@ impl Controller {
             live_subtitles: false,
             translation,
         };
-        Self {
+        let mut controller = Self {
             server,
             state,
             on_state,
@@ -194,7 +195,11 @@ impl Controller {
             peer: None,
             peer_tx,
             peer_rx,
+        };
+        if fetch_decoder {
+            controller.download_model(Model::Live);
         }
+        controller
     }
 
     async fn run(mut self, mut commands: mpsc::UnboundedReceiver<Command>) {
