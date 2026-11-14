@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Instant, interval, sleep_until};
 
+use crate::codec::{self, VideoCodec};
 use crate::screen::ScreenTracks;
 use crate::stats::{self, CallStats, Counters};
 
@@ -72,6 +73,7 @@ enum Input {
     RestartIce,
     ForceRelay(bool),
     Screen(Option<ScreenTracks>),
+    VideoCodec(VideoCodec),
 }
 
 pub struct PeerConfig {
@@ -82,6 +84,7 @@ pub struct PeerConfig {
     pub stream_id: String,
     /// Our shared screen goes out in its own stream, so the other side can tell it from the camera.
     pub screen_stream_id: String,
+    pub video_codec: VideoCodec,
 }
 
 /// Runs until dropped; dropping it closes the connection.
@@ -134,9 +137,14 @@ impl Peer {
         prefer_red(factory, &pc);
         // add_track, not add_transceiver: the other side's offer can then reuse this transceiver instead of adding one
         pc.add_track(camera, &stream_ids)?;
+        let hardware_h264 = codec::hardware_h264(factory);
+        codec::apply(factory, &pc, config.video_codec, hardware_h264);
 
         let session = Session {
             pc,
+            factory: factory.clone(),
+            video_codec: config.video_codec,
+            hardware_h264,
             polite: config.polite,
             wait_for_offer: config.polite.then(|| Instant::now() + FIRST_OFFER_WAIT),
             offer_skipped: false,
@@ -172,6 +180,11 @@ impl Peer {
     /// Sends the shared screen alongside the camera, or stops; see [`Session::set_screen`].
     pub fn set_screen(&self, tracks: Option<ScreenTracks>) {
         let _ = self.input.send(Input::Screen(tracks));
+    }
+
+    /// Changes the video codec mid-call: one renegotiation, see [`crate::codec`].
+    pub fn set_video_codec(&self, pick: VideoCodec) {
+        let _ = self.input.send(Input::VideoCodec(pick));
     }
 }
 
@@ -214,6 +227,9 @@ fn rtc_config(servers: &[IceServerConfig], relay: bool) -> RtcConfiguration {
 
 struct Session {
     pc: PeerConnection,
+    factory: PeerConnectionFactory,
+    video_codec: VideoCodec,
+    hardware_h264: bool,
     polite: bool,
     ice_servers: Vec<IceServerConfig>,
     screen_stream_id: String,
@@ -299,6 +315,12 @@ impl Session {
             },
             Input::RestartIce => self.restart_ice(),
             Input::Screen(track) => self.set_screen(track),
+            Input::VideoCodec(pick) => {
+                self.video_codec = pick;
+                self.apply_codecs();
+                // Codec preferences don't fire negotiation-needed by themselves
+                self.negotiate().await;
+            }
             Input::ForceRelay(relay) => {
                 if let Err(e) = self.pc.set_configuration(rtc_config(&self.ice_servers, relay)) {
                     tracing::warn!("couldn't change the relay policy: {}", e.message);
@@ -347,8 +369,12 @@ impl Session {
                 // Their offer came: no more waiting for it
                 self.wait_for_offer = None;
                 let kind: SdpType = description.kind.parse().map_err(|e: &str| e.to_owned())?;
-                let sdp = SessionDescription::parse(description.sdp.as_deref().unwrap_or_default(), kind)
-                    .map_err(|e| format!("bad sdp: {e:?}"))?;
+                let mut text = description.sdp.unwrap_or_default();
+                if kind == SdpType::Offer {
+                    // Or we'd send a codec we leave out whenever they offer it first; see `codec`
+                    text = codec::filter_offer(&text, self.video_codec, self.hardware_h264);
+                }
+                let sdp = SessionDescription::parse(&text, kind).map_err(|e| format!("bad sdp: {e:?}"))?;
                 let collision = kind == SdpType::Offer && self.pc.signaling_state() != SignalingState::Stable;
                 self.ignore_offer = !self.polite && collision;
                 if self.ignore_offer {
@@ -361,6 +387,8 @@ impl Session {
                 }
                 self.pc.set_remote_description(sdp).await.map_err(|e| e.message)?;
                 if kind == SdpType::Offer {
+                    // Their offer may have added transceivers (their screen), which the answer orders by ours
+                    self.apply_codecs();
                     let answer = self.pc.create_answer(Default::default()).await.map_err(|e| e.message)?;
                     self.pc.set_local_description(answer.clone()).await.map_err(|e| e.message)?;
                     self.send_description(&answer);
@@ -401,8 +429,13 @@ impl Session {
                     tracing::warn!("couldn't add the screen: {}", e.message);
                 }
             }
+            self.apply_codecs();
         }
         self.tune_senders();
+    }
+
+    fn apply_codecs(&self) {
+        codec::apply(&self.factory, &self.pc, self.video_codec, self.hardware_h264);
     }
 
     /// Like the web's tuneSenders: caps video bitrate and tells the encoder what to give up when bandwidth runs

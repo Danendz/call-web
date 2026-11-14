@@ -113,6 +113,7 @@ impl Controller {
             polite: self.seat.polite,
             stream_id: self.stream_id.clone(),
             screen_stream_id: self.screen.stream_id.clone(),
+            video_codec: self.video_codec,
         };
         match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {
             Ok(peer) => {

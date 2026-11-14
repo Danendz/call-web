@@ -9,7 +9,9 @@
 //! call (with `CALL_FAKE_SCREEN=1` a test pattern). `DATA_DIR=<folder>` recognizes speech on this machine with the
 //! model in `<folder>/models/`, as the app does once it's downloaded; with `DOWNLOAD=1` it downloads the model there
 //! first, from the server. `LIVE=1` turns live subtitles on, so speech goes to the live model there instead and is
-//! sent as live text while it's said.
+//! sent as live text while it's said. `CODEC=h264` or `CODEC=vp8` picks the video codec as Settings does (default
+//! auto), and `SWITCH=<codec>` changes it 10 s into its stay, as Settings does mid-call; the stats it logs name the
+//! codec in use.
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -18,7 +20,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use engine::{ChatEvent, Command, Engine, Feed, Frame, Lang, Model, Phase, VideoSink, room};
+use engine::{ChatEvent, Command, Engine, Feed, Frame, Lang, Model, Phase, VideoCodec, VideoSink, room};
 use url::Url;
 
 fn main() {
@@ -68,6 +70,12 @@ fn main() {
                 state.model,
                 state.live
             );
+            if let Some(stats) = &state.stats {
+                let codec = |v: &Option<engine::VideoStats>| {
+                    v.as_ref().map(|v| format!("{:?} ({:?})", v.codec, v.implementation)).unwrap_or_default()
+                };
+                tracing::info!("video out {} · in {}", codec(&stats.video_out), codec(&stats.video_in));
+            }
         },
         on_chat,
     )
@@ -77,6 +85,7 @@ fn main() {
     if std::env::var_os("DOWNLOAD").is_some() {
         engine.send(Command::DownloadModel(if live { Model::Live } else { Model::SenseVoice }));
     }
+    engine.send(Command::SetVideoCodec(codec("CODEC").unwrap_or(VideoCodec::Auto)));
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {
         engine.send(Command::SetTranscribe(true));
@@ -92,10 +101,31 @@ fn main() {
             engine.send(Command::ToggleShare);
         }
     }
-    std::thread::sleep(Duration::from_secs(seconds));
+    let mut stay = Duration::from_secs(seconds);
+    if let Some(pick) = codec("SWITCH") {
+        let wait = SWITCH_AFTER.min(stay);
+        std::thread::sleep(wait);
+        stay -= wait;
+        tracing::info!("switching the video codec to {pick:?}");
+        engine.send(Command::SetVideoCodec(pick));
+    }
+    std::thread::sleep(stay);
     engine.send(Command::HangUp);
     // Lets the leave go out, so the other side sees us go at once instead of after the server's resume grace
     std::thread::sleep(Duration::from_millis(500));
+}
+
+/// How long after joining `SWITCH` changes the codec: time for the call to settle on the first one
+const SWITCH_AFTER: Duration = Duration::from_secs(10);
+
+/// A video codec from an environment variable, as Settings names them.
+fn codec(var: &str) -> Option<VideoCodec> {
+    match std::env::var(var).ok()?.as_str() {
+        "auto" => Some(VideoCodec::Auto),
+        "h264" => Some(VideoCodec::H264),
+        "vp8" => Some(VideoCodec::Vp8),
+        other => panic!("{var} is auto, h264 or vp8, not {other}"),
+    }
 }
 
 /// Counts frames instead of showing them.

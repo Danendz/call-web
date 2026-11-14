@@ -23,6 +23,9 @@ msgstr "按用户名添加好友"
 msgid "At least 10 characters"
 msgstr "至少 10 个字符"
 
+msgid "Auto"
+msgstr "自动"
+
 msgid "Back"
 msgstr "返回"
 
@@ -196,6 +199,9 @@ msgstr "我说"
 
 msgid "If that username exists, they'll see your request."
 msgstr "如果该用户名存在，对方会看到你的请求。"
+
+msgid "If video freezes or breaks up, VP8 switches the whole call to it, for both of you."
+msgstr "如果视频卡住或花屏，选 VP8 可让整个通话（双方）都改用它。"
 
 msgid "In a call"
 msgstr "通话中"
@@ -499,6 +505,9 @@ msgstr "用户名"
 
 msgid "Usernames are 3–20 lowercase letters, digits or _."
 msgstr "用户名为 3–20 个小写字母、数字或 _。"
+
+msgid "Video codec"
+msgstr "视频编码"
 
 msgid "Waiting for the other person to join…"
 msgstr "等待对方加入…"

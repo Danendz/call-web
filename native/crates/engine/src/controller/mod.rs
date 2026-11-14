@@ -96,6 +96,7 @@ struct Controller {
     signal_rx: mpsc::UnboundedReceiver<SignalEvent>,
     seat: Seat,
     peer: Option<Peer>,
+    video_codec: crate::VideoCodec,
     peer_tx: mpsc::UnboundedSender<PeerEvent>,
     peer_rx: mpsc::UnboundedReceiver<PeerEvent>,
 }
@@ -192,6 +193,7 @@ impl Controller {
             signal_rx,
             seat: Seat::default(),
             peer: None,
+            video_codec: crate::VideoCodec::default(),
             peer_tx,
             peer_rx,
         }
@@ -354,6 +356,12 @@ impl Controller {
                 }
             }
             Command::SetNoiseSuppression(on) => self.media.set_noise_suppression(on),
+            Command::SetVideoCodec(pick) => {
+                self.video_codec = pick;
+                if let Some(peer) = &self.peer {
+                    peer.set_video_codec(pick);
+                }
+            }
             Command::SetForceRelay(relay) => {
                 self.state.force_relay = relay;
                 if let Some(peer) = &self.peer {

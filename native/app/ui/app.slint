@@ -68,6 +68,9 @@ export component AppWindow inherits Window {
     // "Noise suppression" in Settings, remembered between launches
     in property <bool> noise-suppression;
     callback set-noise-suppression(bool);
+    // "Video codec" in Settings: "auto", "h264" or "vp8", remembered between launches
+    in property <string> video-codec;
+    callback set-video-codec(string);
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
@@ -452,6 +455,7 @@ export component AppWindow inherits Window {
             show-stats: root.show-stats;
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
+            video-codec: root.video-codec;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;
@@ -471,6 +475,7 @@ export component AppWindow inherits Window {
             set-show-stats(on) => { root.set-show-stats(on); }
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
+            set-video-codec(id) => { root.set-video-codec(id); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }
             cancel-download => { root.cancel-model-download(); }

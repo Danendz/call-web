@@ -1,5 +1,7 @@
 import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, Reaction, ServerMessage } from "../../../shared/protocol";
+import { getVideoCodec, onVideoCodecChange } from "../settings/codec";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
+import { hardwareKnown } from "./codec";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
   BROWSER_AUDIO,
@@ -163,6 +165,7 @@ export class CallController {
   });
 
   private stopNoiseListener: () => void;
+  private stopCodecListener: () => void;
 
   constructor(private roomId: string) {
     this.signaling = new Signaling(
@@ -172,12 +175,18 @@ export class CallController {
     );
     if (getNoiseSuppression()) preloadDenoise();
     this.stopNoiseListener = onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+    this.stopCodecListener = onVideoCodecChange(() => this.peer?.setVideoCodec(getVideoCodec()));
+    // Usually known long before a call; a call that started sooner switches once it is
+    void hardwareKnown.then(() => {
+      if (getVideoCodec() === "auto") this.peer?.setVideoCodec("auto");
+    });
   }
 
   /** The page moved away from this room: leave it and let go of camera and mic. */
   dispose(): void {
     this.disposed = true;
     this.stopNoiseListener();
+    this.stopCodecListener();
     this.teardown(true);
   }
 
@@ -536,6 +545,7 @@ export class CallController {
         onRemoteStreams: (remoteStream, remoteScreen) => this.set({ remoteStream, remoteScreen }),
         onStateChange: () => this.set({ iceState: this.peer?.pc.iceConnectionState ?? null }),
       },
+      getVideoCodec(),
     );
     if (this.remoteScreenId) this.peer.setRemoteScreen(this.remoteScreenId);
     if (this.denoised) {
