@@ -2,12 +2,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import { EMOJI_GROUPS } from "../shared/emoji.js";
 import {
   LANGS,
   MAX_CHAT_LENGTH,
   MAX_LIVE_ID_LENGTH,
   MAX_LIVE_LENGTH,
   MAX_STREAM_ID_LENGTH,
+  REACTIONS,
   ROOM_ID_RE,
   type ClientMessage,
 } from "../shared/protocol.js";
@@ -37,8 +39,14 @@ const socketsPerUser = concurrencyLimit(10);
 // Per member: typing fast is a few messages in 10 s; a renegotiation sends a few dozen ICE candidates.
 // Each chat message is translated by a paid model, so an anonymous room gets half.
 const chatPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(10, 10_000), user: rateLimit(20, 10_000) };
+// Speech to chat posts a line at every pause, so fast talk outruns the typing budget; still capped for the translation.
+const spokenPerMember: Record<Tier, (key: string) => boolean> = { anon: rateLimit(30, 10_000), user: rateLimit(60, 10_000) };
 const signalsPerMember = rateLimit(200, 10_000);
 const screenshotsPerMember = rateLimit(5, 10_000);
+// A fast tapper sends a few a second; more than this is a script
+const reactionsPerMember = rateLimit(30, 10_000);
+// The quick reactions and the picker's grid: an allowlist, so a reaction is never free text
+const reactions = new Set<string>([...REACTIONS, ...EMOJI_GROUPS.flatMap((g) => g.emoji)]);
 // Live text is sent a few times a second while speaking
 const livePerMember = rateLimit(80, 10_000);
 // A media update per camera toggle or share start/stop; nobody clicks those 30 times in 10 s.
@@ -183,7 +191,7 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
         if (signalsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "signal", payload: msg.payload });
         break;
       case "chat": {
-        if (!chatPerMember[tier](clientId)) break;
+        if (!(msg.spoken === true ? spokenPerMember : chatPerMember)[tier](clientId)) break;
         const text = typeof msg.text === "string" ? msg.text.trim() : "";
         const liveId = typeof msg.liveId === "string" && msg.liveId.length <= MAX_LIVE_ID_LENGTH ? msg.liveId : undefined;
         if (text && text.length <= MAX_CHAT_LENGTH) postChat(roomId, clientId, text, msg.spoken === true, liveId);
@@ -211,6 +219,11 @@ function onConnection(ws: WebSocket, roomId: string, requestedId: string | null,
       case "screenshot":
         if (screenshotsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "screenshot" });
         break;
+      case "reaction": {
+        const emoji = msg.emoji;
+        if (typeof emoji === "string" && reactions.has(emoji) && reactionsPerMember(clientId)) relayToPeer(roomId, clientId, { type: "reaction", emoji });
+        break;
+      }
       case "media": {
         const { camOn, screen, speakerOff = false } = msg;
         const validScreen = screen === null || (typeof screen === "string" && screen.length <= MAX_STREAM_ID_LENGTH);

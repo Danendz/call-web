@@ -1,0 +1,129 @@
+import { Theme } from "../theme.slint";
+
+// The emoji panel's grid, under the quick reactions: the same as shared/emoji.ts and `EMOJI` in crates/protocol, the
+// ones people use most, not the whole of Unicode. Each can be sent as a reaction. Change them together.
+
+export struct EmojiGroup {
+    icon: string,
+    emoji: [string],
+}
+
+export global Emoji {
+    out property <[EmojiGroup]> groups: [
+        {
+            icon: "😀",
+            emoji: [
+                "😀", "😁", "😂", "🤣", "😊", "😇", "🙂", "😉", "😍", "🥰", "😘", "😋", "😛", "😜", "🤪", "😎", "🤩", "🥳", "😏",
+                "😌", "😴", "🤔", "🤨", "😐", "🙄", "😬", "😮", "😲", "🥺", "😢", "😭", "😤", "😡", "🤯", "😳", "😱", "🤗", "🤭",
+                "🫡", "😷"
+            ],
+        },
+        {
+            icon: "👍",
+            emoji: [
+                "👍", "👎", "👌", "✌️", "🤞", "🤟", "🤙", "👋", "👏", "🙌", "🙏", "💪", "🫶", "👀", "🤝", "✋", "👉", "👈", "☝️",
+                "🤷"
+            ],
+        },
+        {
+            icon: "❤️",
+            emoji: [
+                "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "💕", "💖", "💘", "💋", "✨", "💯", "🔥", "⭐", "💫", "💥",
+                "💤"
+            ],
+        },
+        {
+            icon: "🐱",
+            emoji: [
+                "🐱", "🐶", "🐼", "🐻", "🐰", "🦊", "🐨", "🐯", "🐷", "🐸", "🐧", "🐥", "🦄", "🐝", "🦋", "🌸", "🌹", "🌻", "🌈",
+                "☀️", "🌙", "❄️"
+            ],
+        },
+        {
+            icon: "🍕",
+            emoji: [
+                "🍕", "🍔", "🍟", "🍜", "🍣", "🥟", "🍚", "🍰", "🎂", "🍩", "🍪", "🍫", "🍓", "🍉", "🍑", "🥑", "☕", "🧋", "🍵",
+                "🍺", "🍷", "🥂"
+            ],
+        },
+        {
+            icon: "🎉",
+            emoji: [
+                "🎉", "🎁", "🎈", "🎮", "🎧", "🎵", "📷", "💻", "📱", "✈️", "🚗", "🏠", "⚽", "🏀", "🏆", "💰", "⏰", "📅", "✅",
+                "❌", "❓", "❗"
+            ],
+        },
+    ];
+}
+
+// A tab per group and the group's emoji in a grid, as many 38px cells across as fit; the emoji panel holds it
+export component EmojiGrid inherits Rectangle {
+    callback picked(string);
+    // How tall the grid may grow before it scrolls
+    in property <length> max-grid: 210px;
+    property <int> group: 0;
+    property <int> columns: max(1, floor((self.width - 12px) / 38px));
+    property <length> cell: (self.width - 12px) / columns;
+
+    clip: true;
+
+    VerticalLayout {
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            spacing: 2px;
+            for g[i] in Emoji.groups: Rectangle {
+                height: 36px;
+                horizontal-stretch: 1;
+                accessible-role: tab;
+                accessible-label: g.icon;
+                accessible-action-default => { root.group = i; }
+                Text {
+                    text: g.icon;
+                    font-size: 18px;
+                    opacity: i == root.group ? 1 : 0.55;
+                }
+                Rectangle {
+                    y: parent.height - 2px;
+                    height: 2px;
+                    background: i == root.group ? Theme.accent : transparent;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.group = i; }
+                }
+            }
+        }
+        Rectangle { height: 1px; background: Theme.border; }
+        Flickable {
+            height: min(root.max-grid, grid.height + 12px);
+            content-height: grid.height + 12px;
+            grid := Rectangle {
+                x: 6px;
+                y: 6px;
+                width: root.width - 12px;
+                height: ceil(Emoji.groups[root.group].emoji.length / root.columns) * root.cell;
+                for e[i] in Emoji.groups[root.group].emoji: Rectangle {
+                    x: Math.mod(i, root.columns) * root.cell;
+                    y: floor(i / root.columns) * root.cell;
+                    width: root.cell;
+                    height: root.cell;
+                    border-radius: Theme.radius-sm;
+                    background: touch.has-hover ? Theme.menu-hover : transparent;
+                    accessible-role: button;
+                    accessible-label: e;
+                    accessible-action-default => { root.picked(e); }
+                    Text {
+                        text: e;
+                        font-size: 22px;
+                        transform-scale: touch.pressed ? 0.88 : 1;
+                    }
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.picked(e); }
+                    }
+                }
+            }
+        }
+    }
+}

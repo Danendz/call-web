@@ -2,7 +2,13 @@
 // never holds up the call's own messages. Utterances go out while they're being said (see
 // SpeechClientMessage); what's sent while the socket is still connecting waits for it to open
 
-import { MAX_UTTERANCE_S, TRANSCRIBE_SAMPLE_RATE, type Lang, type SpeechServerMessage } from "../../../../shared/protocol";
+import {
+  MAX_UTTERANCE_S,
+  TRANSCRIBE_SAMPLE_RATE,
+  type Lang,
+  type SpeechClientMessage,
+  type SpeechServerMessage,
+} from "../../../../shared/protocol";
 
 // After a drop, the next utterance reconnects; not sooner than this, so a server that's down isn't hammered
 const RETRY_MS = 2_000;
@@ -26,8 +32,8 @@ export class SpeechSocket {
     this.socket();
   }
 
-  start(lang: Lang): void {
-    this.send(JSON.stringify({ type: "start", lang }));
+  start(lang: Lang, live: boolean): void {
+    this.send(JSON.stringify({ type: "start", lang, ...(live && { live }) } satisfies SpeechClientMessage));
   }
 
   audio(pcm: Int16Array): void {

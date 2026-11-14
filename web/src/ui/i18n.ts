@@ -84,6 +84,7 @@ const en = {
   rotateVideo: "Rotate their video",
   screenshot: "Screenshot",
   peerScreenshot: "The other person took a screenshot",
+  react: "React",
 
   starting: "Starting…",
   waitingForPeer: "Waiting for the other person to join…",
@@ -91,14 +92,14 @@ const en = {
   connecting: "Connecting…",
   unstable: "Connection unstable, reconnecting…",
   failed: "Connection failed, retrying…",
-  speechUnavailable: "Speech-to-chat isn't available in this browser",
-  speechPaused: (at: string) => `Speech-to-chat paused until ${at}: free limit reached`,
+  speechUnavailable: "Speech-to-chat isn't available right now",
 
-  closeChat: "Close chat",
   noMessages: "No messages yet. They disappear when the room closes.",
   spoken: "Spoken",
+  tapToListen: "Tap to listen",
   message: "Message",
   send: "Send",
+  emoji: "Emoji",
 };
 
 export type Strings = typeof en;
@@ -182,6 +183,7 @@ const zh: Strings = {
   rotateVideo: "旋转对方画面",
   screenshot: "截图",
   peerScreenshot: "对方截了一张图",
+  react: "表情回应",
 
   starting: "正在启动…",
   waitingForPeer: "等待对方加入…",
@@ -189,14 +191,14 @@ const zh: Strings = {
   connecting: "正在连接…",
   unstable: "连接不稳定，正在重连…",
   failed: "连接失败，正在重试…",
-  speechUnavailable: "此浏览器不支持语音转文字",
-  speechPaused: (at) => `语音转文字已暂停至 ${at}：已达到免费额度`,
+  speechUnavailable: "语音转文字暂时不可用",
 
-  closeChat: "关闭聊天",
   noMessages: "还没有消息。房间关闭后消息会消失。",
   spoken: "语音",
+  tapToListen: "点击收听",
   message: "消息",
   send: "发送",
+  emoji: "表情",
 };
 
 export const STRINGS: Record<Lang, Strings> = { en, zh };

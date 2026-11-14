@@ -25,7 +25,9 @@ pub use crate::download::ModelStatus;
 use crate::media::{MicFrame, MicTap};
 pub use live::{LiveModel, Utterance};
 pub use model::Model;
-pub(crate) use model::{delete as delete_model, dir as model_dir, download as download_model, is_ready as model_ready};
+pub(crate) use model::{
+    delete as delete_model, dir as model_dir, download as download_model, drop_old_decoder, is_ready as model_ready,
+};
 
 use live::{Live, LoadedLive};
 use local::{Loaded, Local};

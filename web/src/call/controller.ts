@@ -1,5 +1,6 @@
-import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, ServerMessage } from "../../../shared/protocol";
+import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, Reaction, ServerMessage } from "../../../shared/protocol";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
+import { getSubtitles, onSubtitlesChange } from "../settings/subtitles";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
   BROWSER_AUDIO,
@@ -118,12 +119,20 @@ const initialState: CallState = {
 
 const PEER_SCREENSHOT_SHOWN_MS = 3_000;
 
+/** A reaction to fly over the video: one you sent, or one from the other person. */
+export interface ReactionEvent {
+  emoji: Reaction;
+  mine: boolean;
+}
+
 /** Owns media, signaling and the peer connection; React only renders its state snapshots. */
 export class CallController {
   // The language may have been changed on another page since this module loaded
   private state: CallState = { ...initialState, lang: loadLang() };
   private disposed = false;
   private listeners = new Set<() => void>();
+  // Reactions are moments, not state: they go straight to whoever draws them
+  private reactionListeners = new Set<(r: ReactionEvent) => void>();
   private signaling: Signaling;
   private peer: PeerSession | null = null;
   private polite = false;
@@ -155,6 +164,7 @@ export class CallController {
   });
 
   private stopNoiseListener: () => void;
+  private stopSubtitlesListener: () => void;
 
   constructor(private roomId: string) {
     this.signaling = new Signaling(
@@ -164,12 +174,15 @@ export class CallController {
     );
     if (getNoiseSuppression()) preloadDenoise();
     this.stopNoiseListener = onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+    // Live subtitles change how speech is recognized
+    this.stopSubtitlesListener = onSubtitlesChange(() => this.set({}));
   }
 
   /** The page moved away from this room: leave it and let go of camera and mic. */
   dispose(): void {
     this.disposed = true;
     this.stopNoiseListener();
+    this.stopSubtitlesListener();
     this.teardown(true);
   }
 
@@ -180,12 +193,22 @@ export class CallController {
 
   getState = () => this.state;
 
+  onReaction = (listener: (r: ReactionEvent) => void) => {
+    this.reactionListeners.add(listener);
+    return () => this.reactionListeners.delete(listener);
+  };
+
+  private emitReaction(r: ReactionEvent): void {
+    for (const l of this.reactionListeners) l(r);
+  }
+
   private set(patch: Partial<CallState>): void {
     this.state = { ...this.state, ...patch };
     const { transcribeOn, micOn, phase, localStream, lang } = this.state;
     // Only while someone is there to read it, and never while muted
     const speaking = transcribeOn && micOn && phase === "in-call";
-    this.transcriber.sync((speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null, lang);
+    const track = (speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null;
+    this.transcriber.sync(track, lang, getSubtitles());
     for (const l of this.listeners) l();
   }
 
@@ -356,6 +379,10 @@ export class CallController {
     this.signaling.send({ type: "screenshot" });
   }
 
+  sendReaction(emoji: Reaction): void {
+    if (this.signaling.send({ type: "reaction", emoji })) this.emitReaction({ emoji, mine: true });
+  }
+
   sendChat(text: string): boolean {
     return this.signaling.send({ type: "chat", text });
   }
@@ -488,6 +515,9 @@ export class CallController {
         clearTimeout(this.peerScreenshotTimer);
         this.set({ peerScreenshot: true });
         this.peerScreenshotTimer = window.setTimeout(() => this.set({ peerScreenshot: false }), PEER_SCREENSHOT_SHOWN_MS);
+        break;
+      case "reaction":
+        this.emitReaction({ emoji: msg.emoji, mine: false });
         break;
       case "media":
         this.remoteScreenId = msg.screen;

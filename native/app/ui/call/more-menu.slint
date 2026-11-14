@@ -11,6 +11,10 @@ export component MoreMenu inherits IconButton {
     in property <bool> can-screenshot;
     in property <bool> sharing;
     in property <bool> can-share;
+    // The chat's show and hide, here on a phone's rail rather than its own button
+    in property <bool> chat-item;
+    in property <bool> chat-open;
+    callback toggle-chat();
     callback screenshot();
     callback toggle-share();
     callback toggle-portrait();
@@ -44,6 +48,12 @@ export component MoreMenu inherits IconButton {
             anchor-top: root.absolute-position.y - root.area-y;
             closed => { menu.close(); }
 
+            if root.chat-item: MenuItem {
+                icon: Icons.message-square;
+                text: @tr("Chat");
+                checked: root.chat-open;
+                activated => { panel.dismiss(); root.toggle-chat(); }
+            }
             MenuItem {
                 icon: root.sharing ? Icons.screen-share-off : Icons.screen-share;
                 text: root.sharing ? @tr("Stop sharing") : @tr("Share screen");

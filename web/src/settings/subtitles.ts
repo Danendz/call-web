@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-// "Live subtitles" is saved so it stays across calls; on unless turned off. Off, nothing is shown over the video.
+// "Live subtitles" is saved so it stays across calls; on unless turned off. Off, the chat shows spoken lines only once
+// they're finished, and nothing is translated on this device.
 
 const KEY = "subtitles";
 const listeners = new Set<() => void>();
@@ -25,11 +26,16 @@ export function setSubtitles(on: boolean): void {
   listeners.forEach((l) => l());
 }
 
-function subscribe(listener: () => void): () => void {
+export function getSubtitles(): boolean {
+  return subtitles;
+}
+
+/** Calls `listener` on every change; returns what stops it. */
+export function onSubtitlesChange(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
 export function useSubtitles(): boolean {
-  return useSyncExternalStore(subscribe, () => subtitles);
+  return useSyncExternalStore(onSubtitlesChange, getSubtitles);
 }
