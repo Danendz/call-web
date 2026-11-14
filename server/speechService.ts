@@ -55,16 +55,23 @@ wss.on("connection", (ws) => {
   const send = (msg: SpeechDownstreamMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
   };
+  // Until the models are loaded, what comes in waits: the connection that woke the service brings the call's first
+  // utterance, which would otherwise go unrecognized. The web service bounds it by the member's audio limit.
+  let early: [RawData, boolean][] | null = [];
   void speech.then((loaded) => {
-    if (loaded) return;
-    send({ type: "unavailable" });
-    ws.close(1000);
+    if (!loaded) {
+      send({ type: "unavailable" });
+      return ws.close(1000);
+    }
+    const waited = early ?? [];
+    early = null;
+    for (const [data, isBinary] of waited) onMessage(data, isBinary);
   });
   const ping = setInterval(() => ws.ping(), PING_MS);
   let utterance: Utterance | null = null;
 
   const start = (live: boolean) => {
-    // Still loading (just woken up) or too far behind: this utterance goes unrecognized
+    // Too far behind: this utterance goes unrecognized
     if (!models || models.decoder.waiting() > MAX_WAITING) return;
     utterance = new Utterance(
       models.vad(live),
@@ -82,7 +89,7 @@ wss.on("connection", (ws) => {
     );
   };
 
-  ws.on("message", (data: RawData, isBinary) => {
+  const onMessage = (data: RawData, isBinary: boolean) => {
     if (isBinary) {
       if (utterance && Buffer.isBuffer(data)) utterance.audio(int16ToFloat(data));
       return;
@@ -97,8 +104,10 @@ wss.on("connection", (ws) => {
     utterance?.[msg.type === "end" ? "end" : "cancel"]();
     utterance = null;
     if (msg.type === "start") start(msg.live === true);
-  });
+  };
+  ws.on("message", (data: RawData, isBinary) => (early ? early.push([data, isBinary]) : onMessage(data, isBinary)));
   ws.on("close", () => {
+    early = null;
     clearInterval(ping);
     utterance?.cancel();
     utterance = null;
