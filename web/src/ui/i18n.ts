@@ -95,8 +95,7 @@ const en = {
   connecting: "Connecting…",
   unstable: "Connection unstable, reconnecting…",
   failed: "Connection failed, retrying…",
-  speechUnavailable: "Speech-to-chat isn't available in this browser",
-  speechPaused: (at: string) => `Speech-to-chat paused until ${at}: free limit reached`,
+  speechUnavailable: "Speech-to-chat isn't available right now",
 
   noMessages: "No messages yet. They disappear when the room closes.",
   spoken: "Spoken",
@@ -198,8 +197,7 @@ const zh: Strings = {
   connecting: "正在连接…",
   unstable: "连接不稳定，正在重连…",
   failed: "连接失败，正在重试…",
-  speechUnavailable: "此浏览器不支持语音转文字",
-  speechPaused: (at) => `语音转文字已暂停至 ${at}：已达到免费额度`,
+  speechUnavailable: "语音转文字暂时不可用",
 
   noMessages: "还没有消息。房间关闭后消息会消失。",
   spoken: "语音",

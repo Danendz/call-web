@@ -6,11 +6,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "concurrently -k -n server,speech,web \"npm:dev:server\" \"npm:dev:speech\" \"npm:dev:web\"",
     "dev:server": "NO_RATE_LIMITS=1 tsx watch --env-file-if-exists=.env server/index.ts",
+    "dev:speech": "tsx watch --env-file-if-exists=.env server/speechService.ts",
     "dev:web": "vite",
     "build": "vite build && tsx scripts/precompress.ts && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
+    "build:speech": "tsc -p tsconfig.server.json",
+    "start:speech": "node dist/server/speechService.js",
     "test": "node --import tsx --test server/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "fixtures": "tsx scripts/fixtures.ts",
@@ -19,6 +22,7 @@
   },
   "dependencies": {
     "postgres": "3.4.9",
+    "sherpa-onnx-node": "2.0.1",
     "vaul": "1.1.2",
     "ws": "8.22.1"
   },

@@ -265,7 +265,12 @@ pub enum FullReason {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SpeechClientMessage {
-    Start { lang: Lang },
+    Start {
+        lang: Lang,
+        /// The server sends the line being said to the other person as it grows, for live subtitles
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        live: Option<bool>,
+    },
     End,
     Cancel,
 }

@@ -70,7 +70,9 @@ fn main() {
                 state.model,
                 state.live
             );
-            if let Some(stats) = &state.stats {
+        },
+        |stats| {
+            if let Some((stats, _)) = &stats {
                 let codec = |v: &Option<engine::VideoStats>| {
                     v.as_ref().map(|v| format!("{:?} ({:?})", v.codec, v.implementation)).unwrap_or_default()
                 };
@@ -86,6 +88,8 @@ fn main() {
         engine.send(Command::DownloadModel(if live { Model::Live } else { Model::SenseVoice }));
     }
     engine.send(Command::SetVideoCodec(codec("CODEC").unwrap_or(VideoCodec::Auto)));
+    // Stats come only while asked for, like the overlay; they name the codec in use
+    engine.send(Command::SetStatsShown(true));
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {
         engine.send(Command::SetTranscribe(true));

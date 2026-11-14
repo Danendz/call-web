@@ -63,6 +63,17 @@ class MainActivity : NativeActivity() {
         Shim.nativePip(pip)
     }
 
+    // Stopped means nothing of the app is on screen (picture-in-picture only pauses it), so video isn't converted
+    override fun onStart() {
+        super.onStart()
+        Shim.nativeShown(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Shim.nativeShown(false)
+    }
+
     // Back that no screen took (the system's, or Slint's fallback) would end the activity, and the call with it;
     // like a phone app, the call goes to the background instead, in picture-in-picture during a call. Swiping the app
     // away from recents still quits it.

@@ -71,6 +71,9 @@ export component AppWindow inherits Window {
     // "Video codec" in Settings: "auto", "h264" or "vp8", remembered between launches
     in property <string> video-codec;
     callback set-video-codec(string);
+    // "modern" or "opengl"; empty on Android, which has no choice
+    in property <string> renderer;
+    callback set-renderer(string);
     property <bool> settings-open;
     in property <[ChatRow]> chat;
     in property <int> others-count;
@@ -222,9 +225,17 @@ export component AppWindow inherits Window {
     callback share-source(string);
     callback close-screen-picker();
     callback corner-moved(string, string);
+    // Which videos the screen on show draws (yours, theirs, their screen); the others aren't converted
+    callback feeds-seen(bool, bool, bool);
+    callback stats-shown(bool);
     callback show-shot();
     callback update-now();
-    changed phase => { keys.focus(); }
+    // The screen changed, so the UI clock runs at the pace that screen needs
+    callback phase-changed();
+    changed phase => {
+        keys.focus();
+        root.phase-changed();
+    }
 
     title: "Call Danya";
     icon: Icons.video;
@@ -327,6 +338,8 @@ export component AppWindow inherits Window {
             pick-cam(id) => { root.pick-cam(id); }
             join => { root.join(); }
             back => { root.home(); }
+            // Only your camera's preview
+            init => { root.feeds-seen(true, false, false); }
         }
 
         if phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call: CallScreen {
@@ -364,6 +377,8 @@ export component AppWindow inherits Window {
             share-source(id) => { root.share-source(id); }
             close-screen-picker => { root.close-screen-picker(); }
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
+            feeds-seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
+            stats-shown(on) => { root.stats-shown(on); }
             peer-frame-rotation: root.peer-frame-rotation;
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;
@@ -456,6 +471,7 @@ export component AppWindow inherits Window {
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             video-codec: root.video-codec;
+            renderer: root.renderer;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;
@@ -476,6 +492,7 @@ export component AppWindow inherits Window {
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-video-codec(id) => { root.set-video-codec(id); }
+            set-renderer(renderer) => { root.set-renderer(renderer); }
             set-lang(lang) => { root.set-lang(lang); }
             download-model => { root.download-model(); }
             cancel-download => { root.cancel-model-download(); }

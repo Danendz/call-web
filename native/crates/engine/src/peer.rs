@@ -18,7 +18,7 @@ use libwebrtc::video_track::RtcVideoTrack;
 use protocol::{IceServerConfig, SessionDescription as Description, SignalPayload};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{Instant, interval, sleep_until};
+use tokio::time::{Instant, Interval, interval, sleep_until};
 
 use crate::codec::{self, VideoCodec};
 use crate::screen::ScreenTracks;
@@ -27,6 +27,8 @@ use crate::stats::{self, CallStats, Counters};
 const DISCONNECTED_GRACE: Duration = Duration::from_secs(4);
 const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
+// While the stats overlay is hidden only the relay check reads them, and its retries are 15 s apart at the least
+const STATS_HIDDEN_EVERY: Duration = Duration::from_secs(5);
 /// How long the polite side waits for the other side's first offer before making its own; see [`Session::negotiate`]
 const FIRST_OFFER_WAIT: Duration = Duration::from_secs(3);
 // Enough for clean 720p at 30 fps; a direct call into mainland China carried ~2 Mbps with negligible loss
@@ -55,12 +57,8 @@ pub enum PeerEvent {
         stream_id: String,
         track: RtcVideoTrack,
     },
-    /// Their voice, or their screen's sound. It plays by itself; this is for muting it, and taking the voice's echo
-    /// out of speech to chat
-    RemoteAudio {
-        track: RtcAudioTrack,
-        voice: bool,
-    },
+    /// Their voice, or their screen's sound. It plays by itself; this is for muting it
+    RemoteAudio(RtcAudioTrack),
     Stats(Box<CallStats>),
 }
 
@@ -74,6 +72,7 @@ enum Input {
     ForceRelay(bool),
     Screen(Option<ScreenTracks>),
     VideoCodec(VideoCodec),
+    StatsShown(bool),
 }
 
 pub struct PeerConfig {
@@ -85,6 +84,8 @@ pub struct PeerConfig {
     /// Our shared screen goes out in its own stream, so the other side can tell it from the camera.
     pub screen_stream_id: String,
     pub video_codec: VideoCodec,
+    /// The stats overlay is up, so stats are sampled every second instead of every few
+    pub stats_shown: bool,
 }
 
 /// Runs until dropped; dropping it closes the connection.
@@ -152,11 +153,11 @@ impl Peer {
             screen_stream_id: config.screen_stream_id,
             screen_added: false,
             sharing: false,
-            voice_seen: false,
             counters: None,
             ignore_offer: false,
             last_restart: None,
             disconnected_since: None,
+            stats: stats_interval(config.stats_shown),
             events,
         };
         let (close, closed) = oneshot::channel();
@@ -185,6 +186,10 @@ impl Peer {
     /// Changes the video codec mid-call: one renegotiation, see [`crate::codec`].
     pub fn set_video_codec(&self, pick: VideoCodec) {
         let _ = self.input.send(Input::VideoCodec(pick));
+    }
+
+    pub fn set_stats_shown(&self, shown: bool) {
+        let _ = self.input.send(Input::StatsShown(shown));
     }
 }
 
@@ -225,6 +230,10 @@ fn rtc_config(servers: &[IceServerConfig], relay: bool) -> RtcConfiguration {
     config
 }
 
+fn stats_interval(shown: bool) -> Interval {
+    interval(if shown { STATS_EVERY } else { STATS_HIDDEN_EVERY })
+}
+
 struct Session {
     pc: PeerConnection,
     factory: PeerConnectionFactory,
@@ -236,12 +245,11 @@ struct Session {
     /// The screen's transceivers are in this connection; they keep their tracks after a share stops
     screen_added: bool,
     sharing: bool,
-    /// Their voice's track has arrived
-    voice_seen: bool,
     counters: Option<Counters>,
     ignore_offer: bool,
     last_restart: Option<Instant>,
     disconnected_since: Option<Instant>,
+    stats: Interval,
     /// Until then the polite side leaves the first offer to the other side; None once anything arrived
     wait_for_offer: Option<Instant>,
     /// An offer was held back meanwhile, so it's made if theirs doesn't come
@@ -251,7 +259,6 @@ struct Session {
 
 impl Session {
     async fn run(mut self, mut input: mpsc::UnboundedReceiver<Input>, mut closed: oneshot::Receiver<()>) {
-        let mut stats = interval(STATS_EVERY);
         loop {
             let grace = self.disconnected_since.map(|since| since + DISCONNECTED_GRACE);
             let first_offer = self.wait_for_offer;
@@ -259,7 +266,7 @@ impl Session {
                 // The Peer was dropped
                 _ = &mut closed => break,
                 Some(msg) = input.recv() => self.handle(msg).await,
-                _ = stats.tick() => self.sample_stats().await,
+                _ = self.stats.tick() => self.sample_stats().await,
                 () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
                     self.disconnected_since = None;
                     self.restart_ice();
@@ -306,12 +313,7 @@ impl Session {
                     let stream_id = event.streams.first().map(|s| s.id()).unwrap_or_default();
                     self.emit(PeerEvent::RemoteVideo { stream_id, track });
                 }
-                // Their voice comes first (its transceiver is the first one); a later one is their screen's sound
-                MediaStreamTrack::Audio(track) => {
-                    let voice = !self.voice_seen;
-                    self.voice_seen = true;
-                    self.emit(PeerEvent::RemoteAudio { track, voice });
-                }
+                MediaStreamTrack::Audio(track) => self.emit(PeerEvent::RemoteAudio(track)),
             },
             Input::RestartIce => self.restart_ice(),
             Input::Screen(track) => self.set_screen(track),
@@ -328,6 +330,8 @@ impl Session {
                 self.last_restart = None;
                 self.restart_ice();
             }
+            // Its first tick is now, so the overlay fills as it opens
+            Input::StatsShown(shown) => self.stats = stats_interval(shown),
         }
     }
 

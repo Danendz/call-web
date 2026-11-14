@@ -46,6 +46,32 @@ pub struct Settings {
     /// Languages whose translation model was offered and put off; picking the language again offers it again
     #[serde(default)]
     pub translation_prompt_dismissed: Vec<Lang>,
+    /// "Graphics" in Settings, applied at the next launch; the app falls back to OpenGL itself if wgpu fails
+    #[serde(default)]
+    pub renderer: Renderer,
+    /// How far wgpu got on this machine, so a launch that never drew a frame isn't tried again
+    #[serde(default)]
+    pub wgpu: WgpuCheck,
+}
+
+/// What Slint draws with: Skia over wgpu (Metal, D3D12 or Vulkan), or Skia over OpenGL. Android always uses OpenGL.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Renderer {
+    #[default]
+    Modern,
+    OpenGl,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WgpuCheck {
+    #[default]
+    Untested,
+    /// Launched on wgpu and hasn't drawn a frame yet. Still set at the next launch, it means that one failed
+    Trying,
+    /// Drew a frame here once, so it isn't checked again
+    Works,
 }
 
 /// "Video codec" in Settings, as the settings file and the UI name it.
@@ -116,6 +142,8 @@ impl Default for Settings {
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,
             translation_prompt_dismissed: Vec::new(),
+            renderer: Renderer::Modern,
+            wgpu: WgpuCheck::Untested,
         }
     }
 }

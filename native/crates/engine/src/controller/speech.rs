@@ -161,6 +161,12 @@ impl Controller {
     }
 }
 
+/// Removes the old int8 decoder of a live model downloaded before it changed. True when there was one: the model then
+/// only lacks the new decoder (13 MB), to fetch on its own.
+pub(super) fn drop_old_decoder(data_dir: Option<&Path>) -> bool {
+    data_dir.is_some_and(|d| speech::drop_old_decoder(&speech::model_dir(d, Model::Live)))
+}
+
 /// Whether `model` is all there in the data folder
 pub(super) fn status(data_dir: Option<&Path>, model: Model) -> ModelStatus {
     match data_dir {

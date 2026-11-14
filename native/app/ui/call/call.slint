@@ -93,6 +93,9 @@ export component CallScreen inherits Rectangle {
     callback share-source(string);
     callback close-screen-picker();
     callback corner-moved(string, string);
+    callback feeds-seen(bool, bool, bool);
+    // Whether the stats overlay is up, so the engine samples stats every second only then
+    callback stats-shown(bool);
     callback show-shot();
     callback hang-up();
     callback open-settings();
@@ -134,6 +137,9 @@ export component CallScreen inherits Rectangle {
     // waiting, with the pointer on the pill, or with the menu just opened
     property <bool> idle;
     property <bool> hovering-pill;
+    // While relay is forced the stats stay up: their switch is the way back
+    property <bool> stats-open: (root.show-stats || root.force-relay) && root.connected && !root.pip;
+    changed stats-open => { root.stats-shown(stats-open); }
     property <bool> can-idle: connected && !hovering-pill && screen-sources.length == 0;
     changed can-idle => { wake(); }
     function wake() {
@@ -184,7 +190,10 @@ export component CallScreen inherits Rectangle {
     }
 
     property <bool> shown: false;
-    init => { shown = true; }
+    init => {
+        shown = true;
+        root.stats-shown(stats-open);
+    }
 
     background: #000;
     opacity: shown ? 1 : 0;
@@ -223,6 +232,7 @@ export component CallScreen inherits Rectangle {
             corner-peer: root.clear-of-chat(root.corner-peer);
             corner-screen: root.clear-of-chat(root.corner-screen);
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
+            seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
             touched => {
                 root.wake();
                 chat.blur();
@@ -377,8 +387,7 @@ export component CallScreen inherits Rectangle {
             // Clear of the pill below it
             limit-width: parent.width - 28px;
             limit-height: parent.height - self.y - 100px;
-            // While relay is forced the stats stay up: their switch is the way back
-            open: (root.show-stats || root.force-relay) && root.connected && !root.pip;
+            open: root.stats-open;
             stats: root.stats;
             force-relay: root.force-relay;
             set-force-relay(relay) => { root.set-force-relay(relay); }

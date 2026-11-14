@@ -1,4 +1,4 @@
-//! Cuts mic audio into utterances, like the web's `whisperRecorder.ts`: loudness against the room's noise floor says
+//! Cuts mic audio into utterances, like the web's `utteranceRecorder.ts`: loudness against the room's noise floor says
 //! when someone is talking, a pause ends it. Pure logic over 16 kHz chunks, so the thresholds can be tested.
 
 use protocol::MAX_UTTERANCE_S;

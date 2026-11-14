@@ -98,6 +98,8 @@ export component SettingsSheet inherits Rectangle {
     in property <bool> noise-suppression;
     // "auto", "h264" or "vp8"
     in property <string> video-codec;
+    // "modern" or "opengl"; empty hides the choice
+    in property <string> renderer;
     in property <string> lang;
     in property <ModelState> model-state;
     in property <int> model-progress;
@@ -128,6 +130,7 @@ export component SettingsSheet inherits Rectangle {
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
     callback set-video-codec(string);
+    callback set-renderer(string);
     callback set-lang(string);
     callback download-model();
     callback cancel-download();
@@ -374,6 +377,22 @@ export component SettingsSheet inherits Rectangle {
                                     label: @tr("Noise suppression");
                                     checked: root.noise-suppression;
                                     toggled => { root.set-noise-suppression(!root.noise-suppression); }
+                                }
+                            }
+                        }
+                        if root.renderer != "": Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        if root.renderer != "": SettingRow {
+                            title: @tr("Graphics");
+                            detail: @tr("Applies after restart.");
+                            VerticalLayout {
+                                alignment: center;
+                                Segmented {
+                                    value: root.renderer;
+                                    options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
+                                    picked(renderer) => { root.set-renderer(renderer); }
                                 }
                             }
                         }

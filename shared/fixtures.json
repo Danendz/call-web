@@ -426,6 +426,11 @@
       "lang": "zh"
     },
     {
+      "type": "start",
+      "lang": "en",
+      "live": true
+    },
+    {
       "type": "end"
     },
     {
@@ -433,10 +438,6 @@
     }
   ],
   "speechServerMessages": [
-    {
-      "type": "paused",
-      "until": 1700000000000
-    },
     {
       "type": "unavailable"
     }

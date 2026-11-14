@@ -14,7 +14,7 @@ A 1-on-1 video call with text chat, tuned for calls to and from mainland China.
 ```sh
 npm install
 cp .env.example .env   # fill in the keys you have
-npm run dev        # server on :8080, Vite on :5173 (open http://localhost:5173)
+npm run dev        # server on :8080, speech service on :8090, Vite on :5173 (open http://localhost:5173)
 ```
 
 Without `TURN_HOST`, calls only work between devices that can reach each other directly, such as two tabs or the same LAN.
@@ -31,7 +31,9 @@ npm run build && npm start   # serves dist/web + /ws on $PORT (default 8080)
 | `TURN_HOST` | e.g. `turn-hk.danendz.com` |
 | `TURN_SECRET` | coturn `static-auth-secret` |
 | `TURN_PORT` / `TURNS_PORT` | defaults `3478` / `5349` |
-| `GROQ_API_KEY` | Whisper speech-to-chat and the free translation models |
+| `GROQ_API_KEY` | the free translation models |
+| `SPEECH_HOST` / `SPEECH_PORT` / `SPEECH_SECRET` | the speech service (`server/speechService.ts`) on the private network, and the secret both sides share; defaults `localhost` / `8090` |
+| `MODELS_DIR` | speech service: where its models are kept, default `.models`; fetched from the `releases` bucket (or `call.danendz.com/updates/` without it) at startup |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | DeepSeek, translates when Groq's quota runs out |
 
 Deployment (Railway via `.railway/railway.ts`, coturn on Alibaba Cloud Hong Kong, Cloudflare DNS) is covered in [infra/README.md](infra/README.md).

@@ -140,7 +140,6 @@ impl Bridge {
         ui.set_remote_screen(state.remote_screen);
         ui.set_sharing(state.sharing);
         ui.set_force_relay(state.force_relay);
-        ui.set_stats(stats_view(state.stats.as_ref(), state.trying_direct));
         ui.set_transcribe_on(state.transcribe_on);
         let (notice, until) = match state.speech_notice {
             None => (0, String::new()),
@@ -223,6 +222,12 @@ fn sync_devices(model: &VecModel<DeviceItem>, devices: &[Device]) {
     }
 }
 
+/// The stats overlay's numbers, apart from [`Bridge::render`]: they change every second while it's up.
+pub fn render_stats(ui: &AppWindow, stats: Option<(CallStats, bool)>) {
+    let (stats, trying_direct) = stats.map_or((None, false), |(s, trying)| (Some(s), trying));
+    ui.set_stats(stats_view(stats.as_ref(), trying_direct));
+}
+
 /// The web's StatsOverlay text, "—" where there's nothing yet.
 fn stats_view(stats: Option<&CallStats>, trying_direct: bool) -> StatsView {
     let Some(s) = stats else {
@@ -255,9 +260,17 @@ fn stats_view(stats: Option<&CallStats>, trying_direct: bool) -> StatsView {
         video_in: fmt_video(s.video_in.as_ref()).into(),
         video_out: fmt_video(s.video_out.as_ref()).into(),
         limited_by: s.video_out.as_ref().and_then(|v| v.limited_by).unwrap_or_default().into(),
-        convert: format!("{:.1} ms", s.convert_ms).into(),
+        convert: format!("{} · {:.1} ms, {:.0}% copied", renderer_name(), s.convert_ms, crate::video::copied_percent())
+            .into(),
         camera: format!("{:.1} ms", s.camera_ms).into(),
     }
+}
+
+fn renderer_name() -> &'static str {
+    #[cfg(target_os = "android")]
+    return "OpenGL";
+    #[cfg(not(target_os = "android"))]
+    crate::window::renderer_name()
 }
 
 fn empty_stats() -> StatsView {

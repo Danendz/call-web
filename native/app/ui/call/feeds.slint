@@ -30,6 +30,8 @@ component Feed inherits Rectangle {
     in property <length> home-height;
     // Clockwise degrees
     in property <int> rotation;
+    // Your own camera shows like a mirror, as on the web
+    in property <bool> mirror;
     in property <bool> off;
     in property <string> label;
     // Why a small red mark sits in the corner (they muted your sound); none while empty
@@ -74,6 +76,8 @@ component Feed inherits Rectangle {
         // The stage shows all of the picture; a tile fills itself
         image-fit: main ? contain : cover;
         transform-rotation: root.rotation * 1deg;
+        // Slint scales after turning, so this flips the upright picture whatever the rotation
+        transform-scale-x: root.mirror ? -1 : 1;
     }
     CamOff {
         shown: root.off;
@@ -166,6 +170,8 @@ export component Feeds inherits Rectangle {
     in property <string> corner-screen: "tl";
     callback corner-moved(string, string);
     callback touched();
+    // Which feeds are drawn (yours, theirs, their screen), so the others aren't converted
+    callback seen(bool, bool, bool);
     // The feed on the stage, as `main` says it; the parent reads it for screenshots
     out property <string> main-feed: main;
 
@@ -182,6 +188,15 @@ export component Feeds inherits Rectangle {
     property <string> main: (picked == "self" && self-shown) || (picked == "peer" && peer-shown) || (picked == "screen" && screen-shown)
         ? picked
         : screen-shown ? "screen" : peer-shown ? "peer" : "self";
+
+    property <bool> self-seen: !you.hidden;
+    property <bool> peer-seen: !peer.hidden;
+    property <bool> screen-seen: !screen.hidden;
+    function report-seen() { root.seen(self-seen, peer-seen, screen-seen); }
+    init => { report-seen(); }
+    changed self-seen => { report-seen(); }
+    changed peer-seen => { report-seen(); }
+    changed screen-seen => { report-seen(); }
 
     // The web's --pip-long: clamp(120px, 22vw, 240px) on the long edge, the short one from the picture's shape
     property <length> pip-long: clamp(root.width * 0.22, 120px, 240px);
@@ -255,6 +270,7 @@ export component Feeds inherits Rectangle {
     you := Feed {
         source: self-video;
         rotation: self-rotation;
+        mirror: true;
         main: main == "self";
         hidden: !has-self || (only-main && main != "self");
         off: !self-cam-on;

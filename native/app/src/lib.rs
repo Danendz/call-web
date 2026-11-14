@@ -6,6 +6,8 @@ mod android;
 mod bridge;
 mod chat;
 mod friends;
+#[cfg(not(target_os = "android"))]
+mod gpu;
 mod reactions;
 mod readable;
 mod screenshot;
@@ -13,7 +15,7 @@ mod settings;
 mod translate;
 #[cfg(not(target_os = "android"))]
 mod update;
-mod video;
+pub(crate) mod video;
 #[cfg(not(target_os = "android"))]
 pub mod window;
 
@@ -96,7 +98,16 @@ pub fn run() -> anyhow::Result<()> {
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
+    ui.on_feeds_seen({
+        let sink = sink.clone();
+        move |camera, peer, screen| sink.set_seen(camera, peer, screen)
+    });
+    #[cfg(not(target_os = "android"))]
+    window::watch_shown(&ui);
+    #[cfg(not(target_os = "android"))]
+    window::watch_renderer(&ui, &settings);
     let chat_weak = ui.as_weak();
+    let stats_weak = ui.as_weak();
     let (on_device, data_dir) = (settings.borrow().on_device_speech, settings::data_dir());
     let server_for_friends = server.clone();
     let engine = Rc::new(Engine::start(
@@ -108,6 +119,9 @@ pub fn run() -> anyhow::Result<()> {
         move |state| {
             let _ = weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.render(&ui, &state)));
         },
+        move |stats| {
+            let _ = stats_weak.upgrade_in_event_loop(move |ui| bridge::render_stats(&ui, stats));
+        },
         move |event| {
             let _ = chat_weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.chat(&ui, event)));
         },
@@ -117,9 +131,8 @@ pub fn run() -> anyhow::Result<()> {
     let friends = friends::start(&ui, &engine, server_for_friends)?;
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
-    // mic level while the setup screen shows it
-    let ticker = slint::Timer::default();
-    ticker.start(slint::TimerMode::Repeated, Duration::from_millis(33), {
+    // mic level while the setup screen shows it. The clock runs only on the screens that need it
+    let tick = Rc::new({
         let weak = ui.as_weak();
         let engine = engine.clone();
         move || {
@@ -136,6 +149,33 @@ pub fn run() -> anyhow::Result<()> {
             android::sync(&ui);
         }
     });
+    let ticker = slint::Timer::default();
+    ticker.start(slint::TimerMode::Repeated, Duration::from_millis(33), {
+        let tick = tick.clone();
+        move || tick()
+    });
+    let pace = {
+        let weak = ui.as_weak();
+        move || {
+            let Some(ui) = weak.upgrade() else { return };
+            // Once more for the new screen: the timer clears when the call ends
+            tick();
+            let every = match ui.get_phase() {
+                // The mic level bar moves smoothly
+                AppPhase::Setup => Duration::from_millis(33),
+                // The call timer shows seconds; a quarter of one keeps it from skipping one
+                AppPhase::Starting | AppPhase::Waiting | AppPhase::InCall => Duration::from_millis(250),
+                _ => {
+                    ticker.stop();
+                    return;
+                }
+            };
+            ticker.set_interval(every);
+            ticker.restart();
+        }
+    };
+    pace();
+    ui.on_phase_changed(pace);
     {
         let settings = settings.borrow();
         if let Some(mic) = settings.mic.clone() {
@@ -224,12 +264,16 @@ pub fn run() -> anyhow::Result<()> {
                 "self" => ui.get_self_video(),
                 _ => ui.get_peer_video(),
             };
-            let Some(main) = main.to_rgba8() else { return };
+            let Some(main) = video::Pixels::of(&main) else { return };
             // Your own camera rides along as a tile, unless it's what's on the stage
-            let tile = (feed != "self" && ui.get_cam_on()).then(|| ui.get_self_video().to_rgba8()).flatten();
+            let tile = (feed != "self" && ui.get_cam_on()).then(|| video::Pixels::of(&ui.get_self_video())).flatten();
             let picture = screenshot::Picture {
-                main: screenshot::Shot { frame: main, rotation },
-                tile: tile.map(|frame| screenshot::Shot { frame, rotation: ui.get_self_frame_rotation() }),
+                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
+                tile: tile.map(|frame| screenshot::Shot {
+                    frame,
+                    rotation: ui.get_self_frame_rotation(),
+                    mirrored: true,
+                }),
                 elapsed: ui.get_elapsed().to_string(),
                 lang: parse_lang(&ui.get_lang()),
             };
@@ -377,6 +421,10 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetOnDevice(on));
         }
     });
+    ui.on_stats_shown({
+        let engine = engine.clone();
+        move |on| engine.send(Command::SetStatsShown(on))
+    });
     ui.set_show_stats(settings.borrow().show_stats);
     ui.on_set_show_stats({
         let settings = settings.clone();
@@ -438,6 +486,26 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetVideoCodec(pick.engine()));
         }
     });
+    // Desktop only: Android always draws with OpenGL, and an empty value hides the choice
+    #[cfg(not(target_os = "android"))]
+    {
+        ui.set_renderer(renderer_code(settings.borrow().renderer).into());
+        ui.on_set_renderer({
+            let settings = settings.clone();
+            let weak = ui.as_weak();
+            move |code| {
+                let renderer = if code == "opengl" { settings::Renderer::OpenGl } else { settings::Renderer::Modern };
+                if let Some(ui) = weak.upgrade() {
+                    ui.set_renderer(renderer_code(renderer).into());
+                }
+                let mut settings = settings.borrow_mut();
+                settings.renderer = renderer;
+                // Picked again by hand, wgpu gets another try
+                settings.wgpu = settings::WgpuCheck::Untested;
+                settings.save();
+            }
+        });
+    }
     ui.on_set_portrait({
         let engine = engine.clone();
         let settings = settings.clone();
@@ -498,6 +566,14 @@ pub fn lang_code(lang: Lang) -> &'static str {
     match lang {
         Lang::Zh => "zh",
         Lang::En => "en",
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn renderer_code(renderer: settings::Renderer) -> &'static str {
+    match renderer {
+        settings::Renderer::Modern => "modern",
+        settings::Renderer::OpenGl => "opengl",
     }
 }
 
