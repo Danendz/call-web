@@ -15,8 +15,8 @@ pub enum Model {
     /// SenseVoice-Small, int8: decodes each utterance once it's over. Mandarin and English (and mixed), with
     /// punctuation.
     SenseVoice,
-    /// For live subtitles: a streaming Zipformer (Mandarin and English, mixed), int8, that decodes while you speak,
-    /// and a CT-Transformer that punctuates the line once it's over.
+    /// For live subtitles: a streaming Zipformer (Mandarin and English, mixed), int8 but for its decoder, that decodes
+    /// while you speak, and a CT-Transformer that punctuates the line once it's over.
     Live,
 }
 
@@ -41,12 +41,16 @@ pub(crate) const ENCODER: ModelFile = ModelFile {
     sha256: "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b",
 };
 
+// Full precision: the int8 one repeats characters over and over ("凑凑凑凑够够") under greedy search
 pub(crate) const DECODER: ModelFile = ModelFile {
-    local: "decoder.int8.onnx",
-    remote: "streaming-zipformer-zh-en-2023-02-20-decoder.int8.onnx",
-    size: 13_091_040,
-    sha256: "1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa",
+    local: "decoder.onnx",
+    remote: "streaming-zipformer-zh-en-2023-02-20-decoder.onnx",
+    size: 13_876_452,
+    sha256: "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d",
 };
+
+// The int8 decoder that live models downloaded up to 0.3.2 have in place of `DECODER`
+const OLD_DECODER: &str = "decoder.int8.onnx";
 
 pub(crate) const JOINER: ModelFile = ModelFile {
     local: "joiner.int8.onnx",
@@ -110,3 +114,9 @@ pub(crate) fn download(
 }
 
 pub(crate) use download::delete;
+
+/// Removes the int8 decoder of a live model downloaded before it changed; true when there was one, so the new
+/// decoder should be fetched to make the model whole again.
+pub(crate) fn drop_old_decoder(dir: &Path) -> bool {
+    std::fs::remove_file(dir.join(OLD_DECODER)).is_ok()
+}

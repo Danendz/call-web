@@ -10,7 +10,8 @@ export component Notice inherits Rectangle {
     changed text => { if (text != "") { shown-text = text; } }
     init => { shown-text = text; }
 
-    width: label.preferred-width + 28px;
+    // Narrower than one line when the layout has less room: then it wraps
+    preferred-width: label.preferred-width + 28px;
     height: shown ? label.preferred-height + 14px : 0;
     border-radius: self.height / 2;
     background: Theme.glass;
@@ -23,5 +24,7 @@ export component Notice inherits Rectangle {
         color: muted ? Theme.muted : Theme.text;
         font-size: 13px;
         horizontal-alignment: center;
+        width: parent.width - 28px;
+        wrap: word-wrap;
     }
 }

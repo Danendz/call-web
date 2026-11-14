@@ -13,8 +13,10 @@ use engine::{
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::chat::{Chat, local_time};
+use crate::chat::Chat;
 use crate::megabytes;
+use crate::reactions::Reactions;
+use crate::readable::local_time;
 use crate::ui::{AppPhase, AppWindow, CallLink, CamAccess, DeviceItem, ModelState, StatsView};
 
 /// What the bridge keeps on the UI thread between states.
@@ -24,9 +26,10 @@ pub struct Bridge {
     cams: Rc<VecModel<DeviceItem>>,
     screen_sources: Rc<VecModel<DeviceItem>>,
     chat: RefCell<Chat>,
+    reactions: RefCell<Reactions>,
     /// Where the translation models are kept
     data_dir: Option<PathBuf>,
-    /// What translating subtitles depends on from the last state, for when the switch changes in between
+    /// What translating live subtitles depends on from the last state, for when the switch changes in between
     last: RefCell<(Phase, Lang, ModelStatus)>,
     /// Read by the ticker that redraws the call timer
     pub call_started: Rc<RefCell<Option<Instant>>>,
@@ -48,6 +51,7 @@ impl Bridge {
             cams,
             screen_sources,
             chat: RefCell::new(Chat::new(ui, lang)),
+            reactions: RefCell::new(Reactions::new(ui)),
             data_dir,
             last: RefCell::new((Phase::Start, lang, ModelStatus::Missing)),
             call_started: Rc::default(),
@@ -55,6 +59,10 @@ impl Bridge {
     }
 
     pub fn chat(&self, ui: &AppWindow, event: ChatEvent) {
+        // A reaction flies over the video and shows in the chat
+        if let ChatEvent::Reaction { emoji, mine } = event {
+            self.reactions.borrow_mut().add(emoji, mine);
+        }
         self.chat.borrow_mut().event(ui, event);
     }
 
@@ -62,13 +70,17 @@ impl Bridge {
         self.chat.borrow_mut().translation_event(pair, event);
     }
 
-    /// Translates subtitles here while a call is up with them on and the model downloaded
+    /// Shows live text in the chat with live subtitles on, and translates it here while a call is up and the model is
+    /// downloaded
     pub fn sync_translation(&self, ui: &AppWindow) {
         let (phase, lang, model) = *self.last.borrow();
         let up = matches!(phase, Phase::Starting | Phase::Waiting | Phase::InCall);
-        let want = (up && ui.get_subtitles_on() && model == ModelStatus::Ready).then(|| Pair::into(lang));
+        let on = ui.get_subtitles_on();
+        let want = (up && on && model == ModelStatus::Ready).then(|| Pair::into(lang));
         let weak = ui.as_weak();
-        self.chat.borrow_mut().sync_translation(want, self.data_dir.as_deref(), move |pair, event| {
+        let mut chat = self.chat.borrow_mut();
+        chat.set_live_on(on);
+        chat.sync_translation(want, self.data_dir.as_deref(), move |pair, event| {
             let _ = weak.upgrade_in_event_loop(move |_| crate::with_bridge(|bridge| bridge.translated(pair, event)));
         });
     }

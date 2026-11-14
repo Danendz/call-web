@@ -8,6 +8,12 @@ export const ROOM_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
 export const MAX_LIVE_LENGTH = 500;
 export const MAX_LIVE_ID_LENGTH = 64;
 
+// What can be sent as a reaction: it flies over both sides' video and shows in their chat, and isn't stored. These
+// are the quick ones, first in the picker; any emoji in its grid (`EMOJI_GROUPS`) can be sent too. The server drops
+// anything else.
+export const REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🔥", "🎉", "👏"] as const;
+export type Reaction = string;
+
 // The two languages the chat is translated between, also what each side's speech is recognized in.
 export const LANGS = ["zh", "en"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -32,14 +38,14 @@ export interface ChatMessage {
 }
 
 // /ws/speech?room=&token= carries one utterance at a time: "start", its audio as binary frames while it's
-// being said, then "end" to transcribe it or "cancel" to drop it. Lines reach the chat in the order they ended.
-export type SpeechClientMessage = { type: "start"; lang: Lang } | { type: "end" } | { type: "cancel" };
+// being said, then "end" to transcribe it or "cancel" to drop it. A pause in the speech also ends a line, so one
+// utterance can post a few. Lines reach the chat in the order they ended. `live`: send the line being said to the
+// other person as it grows (chat-live), for live subtitles.
+export type SpeechClientMessage = { type: "start"; lang: Lang; live?: boolean } | { type: "end" } | { type: "cancel" };
 
 export type SpeechServerMessage =
-  // Every speech model is out of quota until this epoch ms
-  | { type: "paused"; until: number }
-  // The server has no speech model configured
-  | { type: "unavailable" };
+  // The server's speech model couldn't be loaded
+  { type: "unavailable" };
 
 export interface IceServerConfig {
   urls: string[];
@@ -60,6 +66,7 @@ export type ClientMessage =
   | { type: "ping" }
   // Tells the other person you saved a picture of the call; carries nothing
   | { type: "screenshot" }
+  | { type: "reaction"; emoji: Reaction }
   | MediaMessage;
 
 // What you're sending, which the video tracks alone can't say: a camera turned off still sends black frames, and a
@@ -112,6 +119,7 @@ export type ServerMessage =
   | LiveMessage
   | { type: "pong" }
   | { type: "screenshot" }
+  | { type: "reaction"; emoji: Reaction }
   | MediaMessage
   | { type: "error"; message: string };
 

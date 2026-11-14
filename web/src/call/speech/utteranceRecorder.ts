@@ -1,4 +1,4 @@
-// Cuts the mic track into utterances for server transcription, handing each one out while it's being
+// Cuts the mic track into utterances for the server's recognition, handing each one out while it's being
 // said. Loudness against the room's noise floor says when someone is talking; a pause ends the utterance.
 // It listens to the call's own track, so echo cancellation keeps the other person's voice from the
 // speakers out of it
@@ -46,7 +46,7 @@ export interface UtteranceSink {
   end(speech: boolean): void;
 }
 
-export class WhisperRecorder {
+export class UtteranceRecorder {
   private ctx: AudioContext;
   private chunkMs: number;
   private floorDb = -60;

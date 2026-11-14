@@ -28,6 +28,8 @@ const MIN_RESTART_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_EVERY: Duration = Duration::from_secs(1);
 // While the stats overlay is hidden only the relay check reads them, and its retries are 15 s apart at the least
 const STATS_HIDDEN_EVERY: Duration = Duration::from_secs(5);
+/// How long the polite side waits for the other side's first offer before making its own; see [`Session::negotiate`]
+const FIRST_OFFER_WAIT: Duration = Duration::from_secs(3);
 // Enough for clean 720p at 30 fps; a direct call into mainland China carried ~2 Mbps with negligible loss
 const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 // A camera that gives 60 fps gets half again, so its frames aren't blurrier than at 30
@@ -137,6 +139,8 @@ impl Peer {
         let session = Session {
             pc,
             polite: config.polite,
+            wait_for_offer: config.polite.then(|| Instant::now() + FIRST_OFFER_WAIT),
+            offer_skipped: false,
             ice_servers: config.ice_servers,
             screen_stream_id: config.screen_stream_id,
             screen_added: false,
@@ -230,6 +234,10 @@ struct Session {
     last_restart: Option<Instant>,
     disconnected_since: Option<Instant>,
     stats: Interval,
+    /// Until then the polite side leaves the first offer to the other side; None once anything arrived
+    wait_for_offer: Option<Instant>,
+    /// An offer was held back meanwhile, so it's made if theirs doesn't come
+    offer_skipped: bool,
     events: mpsc::UnboundedSender<PeerEvent>,
 }
 
@@ -237,6 +245,7 @@ impl Session {
     async fn run(mut self, mut input: mpsc::UnboundedReceiver<Input>, mut closed: oneshot::Receiver<()>) {
         loop {
             let grace = self.disconnected_since.map(|since| since + DISCONNECTED_GRACE);
+            let first_offer = self.wait_for_offer;
             tokio::select! {
                 // The Peer was dropped
                 _ = &mut closed => break,
@@ -245,6 +254,12 @@ impl Session {
                 () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
                     self.disconnected_since = None;
                     self.restart_ice();
+                }
+                () = sleep_until(first_offer.unwrap_or_else(Instant::now)), if first_offer.is_some() => {
+                    self.wait_for_offer = None;
+                    if self.offer_skipped {
+                        self.negotiate().await;
+                    }
                 }
             }
         }
@@ -300,8 +315,17 @@ impl Session {
 
     /// Like the browser's `onnegotiationneeded` + `setLocalDescription()`: only from a stable state, and the
     /// event fires again once the state is stable if it's still needed.
+    ///
+    /// At the start of a call both sides want to offer, and the polite one rolls its offer back to answer. A
+    /// browser that does that never sends its ICE candidates, and the call stays on "Connecting" (Chrome, joining
+    /// second). So the polite side leaves the first offer to the other one, and makes its own only if none came
+    /// within [`FIRST_OFFER_WAIT`]. Once theirs is answered, the connection asks again if we still need to offer.
     async fn negotiate(&mut self) {
         if self.pc.signaling_state() != SignalingState::Stable {
+            return;
+        }
+        if self.wait_for_offer.is_some() {
+            self.offer_skipped = true;
             return;
         }
         // Leave offerToReceive unset: the defaults would turn our receive-only transceivers inactive
@@ -324,6 +348,8 @@ impl Session {
     async fn apply(&mut self, payload: SignalPayload) -> Result<(), String> {
         match payload {
             SignalPayload::Description { description } => {
+                // Their offer came: no more waiting for it
+                self.wait_for_offer = None;
                 let kind: SdpType = description.kind.parse().map_err(|e: &str| e.to_owned())?;
                 let sdp = SessionDescription::parse(description.sdp.as_deref().unwrap_or_default(), kind)
                     .map_err(|e| format!("bad sdp: {e:?}"))?;

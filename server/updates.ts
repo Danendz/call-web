@@ -9,8 +9,8 @@ import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { clientIp, concurrencyLimit, rateLimit } from "./limits.js";
 
 // Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe; Android's
-// (packaging/android/release.sh): android.json, call-danya-1.2.3.apk, call-danya.apk; the on-device speech model's
-// files (uploaded by hand): sensevoice-small-int8-2024-07-17.onnx. Nothing with a slash, so a request can only name a
+// (packaging/android/release.sh): android.json, call-danya-1.2.3.apk, call-danya.apk; the speech models' files
+// (uploaded by hand): sensevoice-small-int8-2024-07-17.onnx. Nothing with a slash, so a request can only name a
 // file at the bucket's root.
 const FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -42,6 +42,17 @@ function bucketFromEnv(): Bucket | undefined {
 }
 
 const bucket = bucketFromEnv();
+
+function fileUrl(bucket: Bucket, file: string): URL {
+  return new URL(`/${file}`, `${bucket.endpoint.protocol}//${bucket.name}.${bucket.endpoint.host}`);
+}
+
+/** A file from the bucket for the server's own use (the speech models); null when there's no bucket configured. */
+export function fetchFromBucket(file: string): Promise<Response> | null {
+  if (!bucket) return null;
+  const url = fileUrl(bucket, file);
+  return fetch(url, { headers: signedHeaders(bucket, "GET", url) });
+}
 
 /** Handles /updates/*; returns false for any other path. */
 export function serveUpdates(req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
@@ -78,7 +89,7 @@ async function proxy(
   res: ServerResponse,
   signal: AbortSignal,
 ): Promise<void> {
-  const url = new URL(`/${file}`, `${bucket.endpoint.protocol}//${bucket.name}.${bucket.endpoint.host}`);
+  const url = fileUrl(bucket, file);
   // A byte range lets the app resume the ~240 MB speech model after a dropped connection; it isn't signed, which S3
   // allows for headers left out of SignedHeaders
   const range = req.headers.range;

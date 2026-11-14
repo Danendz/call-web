@@ -2,6 +2,8 @@ import type { SignalPayload } from "../../../shared/protocol";
 
 const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
+// How long the polite side waits for the other side's first offer before making its own; see negotiate()
+const FIRST_OFFER_WAIT_MS = 3_000;
 // Enough for clean 720p; a direct call into mainland China carried ~2 Mbps with negligible loss.
 const VIDEO_MAX_BITRATE = 2_000_000;
 // While sharing: the screen, and a small face for the camera. The screen's cap is only a ceiling: congestion control
@@ -36,6 +38,9 @@ export class PeerSession {
   private remoteScreenId: string | null = null;
   private remoteCamera: MediaStream | null = null;
   private disconnectTimer?: number;
+  // Set while the polite side leaves the first offer to the other one
+  private firstOfferTimer?: number;
+  private offerSkipped = false;
   private lastRestart = 0;
   private closed = false;
   // Our shared screen goes out in its own stream, so the other side can tell it from the camera by stream id.
@@ -67,18 +72,13 @@ export class PeerSession {
       this.emitRemote();
     };
 
-    pc.onnegotiationneeded = async () => {
-      try {
-        this.makingOffer = true;
-        await pc.setLocalDescription();
-        if (pc.localDescription) cb.sendSignal({ kind: "description", description: pc.localDescription.toJSON() });
-        void this.tuneSenders();
-      } catch (err) {
-        console.warn("negotiation failed", err);
-      } finally {
-        this.makingOffer = false;
-      }
-    };
+    if (polite) {
+      this.firstOfferTimer = window.setTimeout(() => {
+        this.firstOfferTimer = undefined;
+        if (this.offerSkipped) void this.negotiate();
+      }, FIRST_OFFER_WAIT_MS);
+    }
+    pc.onnegotiationneeded = () => this.negotiate();
 
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) cb.sendSignal({ kind: "candidate", candidate: candidate.toJSON() });
@@ -97,6 +97,29 @@ export class PeerSession {
     pc.onconnectionstatechange = () => cb.onStateChange();
   }
 
+  /**
+   * At the start of a call both sides want to offer, and the polite one rolls its offer back to answer. A browser that
+   * does that never sends its ICE candidates, and the call stays on "Connecting" (Chrome, joining second). So the
+   * polite side leaves the first offer to the other one, and makes its own only if none came within
+   * FIRST_OFFER_WAIT_MS. Once theirs is answered, negotiationneeded fires again if we still need to offer.
+   */
+  private async negotiate(): Promise<void> {
+    if (this.firstOfferTimer !== undefined) {
+      this.offerSkipped = true;
+      return;
+    }
+    try {
+      this.makingOffer = true;
+      await this.pc.setLocalDescription();
+      if (this.pc.localDescription) this.cb.sendSignal({ kind: "description", description: this.pc.localDescription.toJSON() });
+      void this.tuneSenders();
+    } catch (err) {
+      console.warn("negotiation failed", err);
+    } finally {
+      this.makingOffer = false;
+    }
+  }
+
   /** Signals are processed strictly in order so candidates never race their description. */
   handleSignal(payload: SignalPayload): void {
     this.signalQueue = this.signalQueue.then(() => this.applySignal(payload)).catch((err) => console.warn("signal error", err));
@@ -106,6 +129,9 @@ export class PeerSession {
     if (this.closed) return;
     const pc = this.pc;
     if (payload.kind === "description") {
+      // Their offer came: no more waiting for it
+      clearTimeout(this.firstOfferTimer);
+      this.firstOfferTimer = undefined;
       const description = payload.description as RTCSessionDescriptionInit;
       const offerCollision = description.type === "offer" && (this.makingOffer || pc.signalingState !== "stable");
       this.ignoreOffer = !this.polite && offerCollision;
@@ -226,6 +252,7 @@ export class PeerSession {
   close(): void {
     this.closed = true;
     clearTimeout(this.disconnectTimer);
+    clearTimeout(this.firstOfferTimer);
     this.pc.ontrack = this.pc.onnegotiationneeded = this.pc.onicecandidate = null;
     this.pc.oniceconnectionstatechange = this.pc.onconnectionstatechange = null;
     this.pc.close();

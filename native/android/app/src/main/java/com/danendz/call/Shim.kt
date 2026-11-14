@@ -17,6 +17,9 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Rational
 import java.lang.ref.WeakReference
@@ -162,6 +165,17 @@ object Shim {
 
     @JvmStatic
     fun openPicture(context: Context, uri: String) = Gallery.open(context, uri)
+
+    @JvmStatic
+    fun vibrate(context: Context, ms: Long) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Vibrator::class.java)
+        }
+        vibrator?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
 
     @JvmStatic
     fun startUpdates(context: Context, feed: String) = Updater.start(context, feed)

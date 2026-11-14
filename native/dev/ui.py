@@ -61,8 +61,10 @@ def find(label):
     matches = [e for e in elements() if label in (e.get("accessibleLabel"), e.get("accessibleValue"))]
     if not matches:
         sys.exit(f'nothing labelled "{label}"; see `tree`')
-    # A button's label is also on the text inside it: the one that acts is the one with an action
-    return next((e for e in matches if e["accessibleRole"] != "Text"), matches[0])
+    # A button's label is also on the text inside it, and a group may share it (the chat and its button): the one that
+    # acts is the button
+    acting = [e for e in matches if e["accessibleRole"] == "Button"] or [e for e in matches if e["accessibleRole"] != "Text"]
+    return (acting or matches)[0]
 
 
 def main(args):
