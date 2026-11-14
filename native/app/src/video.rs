@@ -15,11 +15,12 @@ use crate::ui::AppWindow;
 
 type Buffer = SharedPixelBuffer<Rgba8Pixel>;
 
-/// A converted frame: pixels in memory, or a texture on the GPU with the device it was made on.
+/// A converted frame: pixels in memory, or a texture on the GPU with the device it was made on, and the conversion
+/// still to submit until the UI thread has.
 pub enum Pixels {
     Cpu(Buffer),
     #[cfg(not(target_os = "android"))]
-    Gpu(wgpu::Texture, wgpu::Device),
+    Gpu(wgpu::Texture, wgpu::Device, Option<wgpu::CommandBuffer>),
 }
 
 #[cfg(not(target_os = "android"))]
@@ -36,7 +37,7 @@ impl Pixels {
         match self {
             Self::Cpu(b) => device.is_none() && b.width() == width && b.height() == height,
             #[cfg(not(target_os = "android"))]
-            Self::Gpu(t, d) => device == Some(d) && t.width() == width && t.height() == height,
+            Self::Gpu(t, d, _) => device == Some(d) && t.width() == width && t.height() == height,
         }
     }
 
@@ -47,7 +48,7 @@ impl Pixels {
         }
         #[cfg(not(target_os = "android"))]
         if let Some(texture) = image.to_wgpu_30_texture() {
-            return Some(Self::Gpu(texture, crate::gpu::converter()?.device().clone()));
+            return Some(Self::Gpu(texture, crate::gpu::converter()?.device().clone(), None));
         }
         None
     }
@@ -58,15 +59,23 @@ impl Pixels {
             Self::Cpu(b) => Some(b.clone()),
             #[cfg(not(target_os = "android"))]
             // A texture from a renderer since torn down can't be read
-            Self::Gpu(t, d) => crate::gpu::converter().filter(|c| c.device() == d)?.read(t),
+            Self::Gpu(t, d, _) => crate::gpu::converter().filter(|c| c.device() == d)?.read(t),
         }
     }
 
-    fn image(&self) -> Image {
+    /// On the UI thread: runs a texture's conversion first, on the device it was recorded on.
+    fn image(&mut self) -> Image {
         match self {
             Self::Cpu(b) => Image::from_rgba8(b.clone()),
             #[cfg(not(target_os = "android"))]
-            Self::Gpu(t, _) => Image::try_from(t.clone()).unwrap_or_default(),
+            Self::Gpu(t, d, commands) => {
+                if let Some(commands) = commands.take()
+                    && let Some(gpu) = crate::gpu::converter().filter(|c| c.device() == d)
+                {
+                    gpu.submit(commands);
+                }
+                Image::try_from(t.clone()).unwrap_or_default()
+            }
         }
     }
 }
@@ -178,7 +187,7 @@ impl SlintSink {
             slot.scheduled.store(false, Ordering::Release);
             let latest = slot.latest.lock().ok().and_then(|mut l| l.take());
             let (image, rotation, shown) = match latest {
-                Some((pixels, rotation)) => (pixels.image(), i32::from(rotation), Some(pixels)),
+                Some((mut pixels, rotation)) => (pixels.image(), i32::from(rotation), Some(pixels)),
                 None => (Image::default(), 0, None),
             };
             match feed {
@@ -211,12 +220,12 @@ impl VideoSink for SlintSink {
         #[cfg(not(target_os = "android"))]
         if let Some(gpu) = crate::gpu::converter() {
             let texture = match slot.take(width, height, Some(gpu.device())) {
-                Some(Pixels::Gpu(texture, _)) => texture,
+                Some(Pixels::Gpu(texture, _, _)) => texture,
                 _ => gpu.texture(width, height),
             };
             let Ok(mut planes) = slot.planes.lock() else { return };
-            if frame.with_planes(|yuv| gpu.convert(&mut planes, yuv, &texture)) == Some(true) {
-                self.show(feed, Pixels::Gpu(texture, gpu.device().clone()), frame.rotation());
+            if let Some(commands) = frame.with_planes(|yuv| gpu.convert(&mut planes, yuv, &texture)).flatten() {
+                self.show(feed, Pixels::Gpu(texture, gpu.device().clone(), Some(commands)), frame.rotation());
             }
             return;
         }
