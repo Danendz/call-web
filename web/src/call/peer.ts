@@ -14,6 +14,10 @@ const SHARE_SCREEN_BITRATE = 15_000_000;
 const SHARE_SCREEN_FPS = 60;
 const SHARE_CAMERA_BITRATE = 400_000;
 const SHARE_CAMERA_SHORT_SIDE = 360;
+// One spatial layer, three temporal; see tuneSenders
+const TEMPORAL_LAYERS = "L1T3";
+// Not in TypeScript's DOM types yet
+type LayeredEncoding = RTCRtpEncodingParameters & { scalabilityMode?: string };
 
 interface PeerCallbacks {
   sendSignal: (payload: SignalPayload) => void;
@@ -225,8 +229,10 @@ export class PeerSession {
    * Caps video bitrate and tells the encoder what to give up when bandwidth runs short: resolution for the camera
    * (a smaller clean picture beats a blocky one), some of both for the screen (a playing video stays watchable instead
    * of freezing, and text is sharp again once it settles). While sharing, the camera shrinks to a small face so the
-   * screen gets the bandwidth. The mic gets priority so voices survive congestion. Encodings only exist after
-   * negotiation, so this runs after every description change.
+   * screen gets the bandwidth. The mic gets priority so voices survive congestion. Video asks for three temporal
+   * layers (L1T3): a lost frame then only breaks the frames that reference it, not everything up to the next keyframe.
+   * Hardware encoders mostly can't, and the browser refuses the mode for them, so the rest is set again without it.
+   * Encodings only exist after negotiation, so this runs after every description change.
    */
   private async tuneSenders(): Promise<void> {
     const sharing = !!this.screenVideo?.track;
@@ -243,11 +249,18 @@ export class PeerSession {
           enc.maxBitrate = maxBitrate;
           enc.scaleResolutionDownBy = scale;
           if (isScreen) enc.maxFramerate = SHARE_SCREEN_FPS;
+          (enc as LayeredEncoding).scalabilityMode = TEMPORAL_LAYERS;
         } else enc.priority = enc.networkPriority = "high";
       }
       if (isVideo) params.degradationPreference = isScreen ? "balanced" : "maintain-framerate";
       try {
-        await sender.setParameters(params);
+        await sender.setParameters(params).catch((err: unknown) => {
+          if (!isVideo) throw err;
+          const flat = sender.getParameters();
+          flat.encodings.forEach((enc, i) => Object.assign(enc, params.encodings[i], { scalabilityMode: undefined }));
+          flat.degradationPreference = params.degradationPreference;
+          return sender.setParameters(flat);
+        });
       } catch {
         // Some browsers reject priority/degradation fields; the bitrate cap is the part that matters.
         if (!isVideo) continue;

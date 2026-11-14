@@ -44,6 +44,8 @@ const SHARE_CAMERA_BITRATE: u64 = 400_000;
 const SHARE_CAMERA_FPS: f64 = 30.0;
 // The camera's 720p down to the web's 360p short side while sharing
 const SHARE_CAMERA_SCALE: f64 = 2.0;
+// One spatial layer, three temporal; see [`Session::tune_senders`]
+const TEMPORAL_LAYERS: &str = "L1T3";
 /// The ids of our screen's tracks, to tell their senders from the camera's and the mic's.
 pub const SCREEN_TRACK: &str = "screen";
 pub const SCREEN_AUDIO_TRACK: &str = "screen-audio";
@@ -446,7 +448,10 @@ impl Session {
     /// short: resolution for the camera (a smaller clean picture beats a blocky one), some of both for the screen (a
     /// playing video stays watchable instead of freezing, and text is sharp again once it settles). While sharing,
     /// the camera shrinks to a small face so the screen gets the bandwidth. The mic gets priority so voices survive
-    /// congestion. Encodings only exist after negotiation, so this runs after every description change.
+    /// congestion. Video asks for three temporal layers (L1T3): a lost frame then only breaks the frames that
+    /// reference it, not everything up to the next keyframe. Hardware encoders mostly can't, and WebRTC refuses the
+    /// mode for them, so the rest is set again without it. Encodings only exist after negotiation, so this runs after
+    /// every description change.
     fn tune_senders(&self) {
         let sharing = self.sharing;
         let camera_60 = crate::camera::fps() > 30;
@@ -474,6 +479,7 @@ impl Session {
                     enc.max_bitrate = Some(max_bitrate);
                     enc.max_framerate = max_framerate;
                     enc.scale_resolution_down_by = Some(if sharing && !screen { SHARE_CAMERA_SCALE } else { 1.0 });
+                    enc.scalability_mode = Some(TEMPORAL_LAYERS.to_owned());
                 } else {
                     enc.priority = Priority::High;
                 }
@@ -485,7 +491,14 @@ impl Session {
                     DegradationPreference::MaintainFramerate
                 });
             }
-            if let Err(e) = sender.set_parameters(params) {
+            let layered = sender.set_parameters(params.clone());
+            let result = if video && layered.is_err() {
+                params.encodings.iter_mut().for_each(|enc| enc.scalability_mode = None);
+                sender.set_parameters(params)
+            } else {
+                layered
+            };
+            if let Err(e) = result {
                 tracing::debug!("couldn't tune a sender: {}", e.message);
             }
         }
