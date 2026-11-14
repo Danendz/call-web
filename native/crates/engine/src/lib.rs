@@ -2,6 +2,7 @@
 //! back, like the web's `CallController`.
 
 mod camera;
+mod codec;
 mod controller;
 mod download;
 pub mod friends;
@@ -22,6 +23,7 @@ mod video;
 mod ws;
 
 pub use camera::CameraAccess;
+pub use codec::VideoCodec;
 pub use controller::{ChatEvent, Command, Engine, Link, Phase, State};
 pub use media::Device;
 pub use protocol::{

@@ -1,6 +1,8 @@
 import type { ChatMessage, FullReason, IceServerConfig, Lang, LiveMessage, Reaction, ServerMessage } from "../../../shared/protocol";
+import { getVideoCodec, onVideoCodecChange } from "../settings/codec";
 import { getNoiseSuppression, onNoiseSuppressionChange } from "../settings/noise";
 import { getSubtitles, onSubtitlesChange } from "../settings/subtitles";
+import { hardwareKnown } from "./codec";
 import { denoise, preloadDenoise, type Denoised } from "./denoise";
 import {
   BROWSER_AUDIO,
@@ -164,6 +166,7 @@ export class CallController {
   });
 
   private stopNoiseListener: () => void;
+  private stopCodecListener: () => void;
   private stopSubtitlesListener: () => void;
 
   constructor(private roomId: string) {
@@ -174,6 +177,11 @@ export class CallController {
     );
     if (getNoiseSuppression()) preloadDenoise();
     this.stopNoiseListener = onNoiseSuppressionChange(() => this.noiseSuppressionChanged());
+    this.stopCodecListener = onVideoCodecChange(() => this.peer?.setVideoCodec(getVideoCodec()));
+    // Usually known long before a call; a call that started sooner switches once it is
+    void hardwareKnown.then(() => {
+      if (getVideoCodec() === "auto") this.peer?.setVideoCodec("auto");
+    });
     // Live subtitles change how speech is recognized
     this.stopSubtitlesListener = onSubtitlesChange(() => this.set({}));
   }
@@ -182,6 +190,7 @@ export class CallController {
   dispose(): void {
     this.disposed = true;
     this.stopNoiseListener();
+    this.stopCodecListener();
     this.stopSubtitlesListener();
     this.teardown(true);
   }
@@ -542,6 +551,7 @@ export class CallController {
         onRemoteStreams: (remoteStream, remoteScreen) => this.set({ remoteStream, remoteScreen }),
         onStateChange: () => this.set({ iceState: this.peer?.pc.iceConnectionState ?? null }),
       },
+      getVideoCodec(),
     );
     if (this.remoteScreenId) this.peer.setRemoteScreen(this.remoteScreenId);
     if (this.denoised) {

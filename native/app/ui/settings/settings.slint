@@ -96,6 +96,8 @@ export component SettingsSheet inherits Rectangle {
     in property <bool> show-stats;
     in property <bool> subtitles-on;
     in property <bool> noise-suppression;
+    // "auto", "h264" or "vp8"
+    in property <string> video-codec;
     // "modern" or "opengl"; empty hides the choice
     in property <string> renderer;
     in property <string> lang;
@@ -127,6 +129,7 @@ export component SettingsSheet inherits Rectangle {
     callback set-show-stats(bool);
     callback set-subtitles-on(bool);
     callback set-noise-suppression(bool);
+    callback set-video-codec(string);
     callback set-renderer(string);
     callback set-lang(string);
     callback download-model();
@@ -390,6 +393,32 @@ export component SettingsSheet inherits Rectangle {
                                     value: root.renderer;
                                     options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
                                     picked(renderer) => { root.set-renderer(renderer); }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        // Three options don't fit beside the text, so they go under it
+                        VerticalLayout {
+                            SettingRow {
+                                padding-bottom: 0;
+                                title: @tr("Video codec");
+                                detail: @tr("If video freezes or breaks up, VP8 switches the whole call to it, for both of you.");
+                            }
+                            HorizontalLayout {
+                                padding: 16px;
+                                padding-top: 12px;
+                                alignment: start;
+                                Segmented {
+                                    options: [
+                                        { id: "auto", name: @tr("Auto") },
+                                        { id: "h264", name: "H.264" },
+                                        { id: "vp8", name: "VP8" },
+                                    ];
+                                    value: root.video-codec;
+                                    picked(id) => { root.set-video-codec(id); }
                                 }
                             }
                         }

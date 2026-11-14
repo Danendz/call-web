@@ -194,6 +194,7 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetTranscribe(true));
         }
         engine.send(Command::SetNoiseSuppression(settings.noise_suppression));
+        engine.send(Command::SetVideoCodec(settings.video_codec.engine()));
     }
 
     let send = |command: Command| {
@@ -467,6 +468,22 @@ pub fn run() -> anyhow::Result<()> {
             settings.noise_suppression = on;
             settings.save();
             engine.send(Command::SetNoiseSuppression(on));
+        }
+    });
+    ui.set_video_codec(settings.borrow().video_codec.id().into());
+    ui.on_set_video_codec({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |id| {
+            let pick = crate::settings::VideoCodec::from_id(&id);
+            if let Some(ui) = weak.upgrade() {
+                ui.set_video_codec(pick.id().into());
+            }
+            let mut settings = settings.borrow_mut();
+            settings.video_codec = pick;
+            settings.save();
+            engine.send(Command::SetVideoCodec(pick.engine()));
         }
     });
     // Desktop only: Android always draws with OpenGL, and an empty value hides the choice

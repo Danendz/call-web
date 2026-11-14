@@ -1,4 +1,5 @@
-import { Activity, AudioLines, Captions, Languages, Subtitles } from "lucide-react";
+import { Activity, AudioLines, Captions, Film, Languages, Subtitles } from "lucide-react";
+import type { VideoCodec } from "../call/codec";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import { ModelAction } from "../translate/ModelAction";
@@ -6,6 +7,7 @@ import { useT } from "../ui/i18n";
 import { Sheet } from "../ui/Sheet";
 import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import "./settings.css";
+import { setVideoCodec, useVideoCodec } from "./codec";
 import { setNoiseSuppression, useNoiseSuppression } from "./noise";
 import { setShowStats, useShowStats } from "./stats";
 import { setSubtitles, useSubtitles } from "./subtitles";
@@ -27,6 +29,7 @@ export function SettingsSheet({
   const showStats = useShowStats();
   const noiseSuppression = useNoiseSuppression();
   const subtitles = useSubtitles();
+  const videoCodec = useVideoCodec();
 
   return (
     <Sheet label={t.settings} open={open} onClose={onClose} side={narrow ? "bottom" : "right"} showTitle>
@@ -67,6 +70,20 @@ export function SettingsSheet({
             checked={noiseSuppression}
             onChange={(e) => setNoiseSuppression(e.target.checked)}
           />
+        </label>
+        <label className="settings-row">
+          <span className="row-icon" aria-hidden>
+            <Film size={18} />
+          </span>
+          <span className="settings-label">
+            {t.videoCodec}
+            <span className="settings-detail">{t.videoCodecDetail}</span>
+          </span>
+          <select value={videoCodec} onChange={(e) => setVideoCodec(e.target.value as VideoCodec)}>
+            <option value="auto">{t.codecAuto}</option>
+            <option value="h264">H.264</option>
+            <option value="vp8">VP8</option>
+          </select>
         </label>
         <label className="settings-row">
           <span className="row-icon" aria-hidden>

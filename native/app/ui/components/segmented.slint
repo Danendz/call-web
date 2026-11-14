@@ -5,22 +5,24 @@ export struct SegmentOption {
     name: string,
 }
 
-// Two options side by side, the picked one on a sliding highlight.
+// Two or three options side by side, the picked one on a sliding highlight.
 export component Segmented inherits Rectangle {
-    // Exactly two
     in property <[SegmentOption]> options;
     in property <string> value;
     callback picked(string);
+    // Slint can't search a list, and two or three options don't need to
+    property <int> picked-index: root.value == root.options[0].id ? 0 : root.value == root.options[1].id ? 1 : 2;
+    property <length> segment: (self.width - 6px) / max(1, root.options.length);
 
     height: 36px;
-    width: 180px;
+    width: root.options.length * 90px;
     border-radius: self.height / 2;
     background: Theme.surface-3;
 
     Rectangle {
         y: 3px;
-        x: root.value == root.options[0].id ? 3px : parent.width / 2;
-        width: parent.width / 2 - 3px;
+        x: 3px + root.picked-index * root.segment;
+        width: root.segment;
         height: parent.height - 6px;
         border-radius: self.height / 2;
         background: Theme.accent;
@@ -28,6 +30,7 @@ export component Segmented inherits Rectangle {
     }
 
     HorizontalLayout {
+        padding: 3px;
         for option in root.options: TouchArea {
             mouse-cursor: pointer;
             clicked => { root.picked(option.id); }

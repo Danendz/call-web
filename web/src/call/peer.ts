@@ -1,4 +1,5 @@
 import type { SignalPayload } from "../../../shared/protocol";
+import { applyCodecs, filterOffer, type VideoCodec } from "./codec";
 
 const DISCONNECTED_GRACE_MS = 4_000;
 const MIN_RESTART_INTERVAL_MS = 5_000;
@@ -53,6 +54,7 @@ export class PeerSession {
     localStream: MediaStream,
     private polite: boolean,
     private cb: PeerCallbacks,
+    private videoCodec: VideoCodec,
   ) {
     this.pc = new RTCPeerConnection(config);
     const pc = this.pc;
@@ -64,6 +66,7 @@ export class PeerSession {
       pc.addTransceiver(kind, { direction: "sendrecv", streams: [localStream] }).sender;
     this.senders = { audio: sender("audio"), video: sender("video") };
     preferRed(pc.getTransceivers().find((t) => t.sender === this.senders.audio));
+    applyCodecs(pc, videoCodec);
 
     pc.ontrack = ({ track, streams }) => {
       const id = streams[0]?.id ?? "";
@@ -120,6 +123,15 @@ export class PeerSession {
     }
   }
 
+  /** Changes the video codec mid-call: one renegotiation, see codec.ts. */
+  setVideoCodec(pick: VideoCodec): void {
+    this.videoCodec = pick;
+    applyCodecs(this.pc, pick);
+    // Codec preferences don't fire negotiationneeded by themselves. Mid-negotiation, the answer we're about to give
+    // follows them already
+    if (!this.closed && this.pc.signalingState === "stable") void this.negotiate();
+  }
+
   /** Signals are processed strictly in order so candidates never race their description. */
   handleSignal(payload: SignalPayload): void {
     this.signalQueue = this.signalQueue.then(() => this.applySignal(payload)).catch((err) => console.warn("signal error", err));
@@ -132,12 +144,18 @@ export class PeerSession {
       // Their offer came: no more waiting for it
       clearTimeout(this.firstOfferTimer);
       this.firstOfferTimer = undefined;
-      const description = payload.description as RTCSessionDescriptionInit;
+      let description = payload.description as RTCSessionDescriptionInit;
+      // Or we'd send a codec we leave out whenever they offer it first; see codec.ts
+      if (description.type === "offer" && description.sdp) {
+        description = { type: "offer", sdp: filterOffer(description.sdp, this.videoCodec) };
+      }
       const offerCollision = description.type === "offer" && (this.makingOffer || pc.signalingState !== "stable");
       this.ignoreOffer = !this.polite && offerCollision;
       if (this.ignoreOffer) return;
       await pc.setRemoteDescription(description);
       if (description.type === "offer") {
+        // Their offer may have added transceivers (their screen), which the answer orders by ours
+        applyCodecs(pc, this.videoCodec);
         await pc.setLocalDescription();
         if (pc.localDescription) this.cb.sendSignal({ kind: "description", description: pc.localDescription.toJSON() });
       }
@@ -179,7 +197,10 @@ export class PeerSession {
       await sender.replaceTrack(track);
       return sender;
     }
-    return track ? this.pc.addTransceiver(track, { direction: "sendonly", streams: [this.screenStream] }).sender : null;
+    if (!track) return null;
+    const added = this.pc.addTransceiver(track, { direction: "sendonly", streams: [this.screenStream] }).sender;
+    applyCodecs(this.pc, this.videoCodec);
+    return added;
   }
 
   /** Which incoming stream is the other side's screen; null once they stop sharing. */

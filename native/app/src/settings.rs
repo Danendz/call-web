@@ -41,6 +41,8 @@ pub struct Settings {
     /// DeepFilterNet on the mic. Off on a phone, where it costs battery and competes with a shared screen
     #[serde(default = "desktop")]
     pub noise_suppression: bool,
+    #[serde(default)]
+    pub video_codec: VideoCodec,
     /// Languages whose translation model was offered and put off; picking the language again offers it again
     #[serde(default)]
     pub translation_prompt_dismissed: Vec<Lang>,
@@ -72,6 +74,44 @@ pub enum WgpuCheck {
     Works,
 }
 
+/// "Video codec" in Settings, as the settings file and the UI name it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VideoCodec {
+    H264,
+    Vp8,
+    /// Also what a name this version doesn't know reads as
+    #[default]
+    #[serde(other)]
+    Auto,
+}
+
+impl VideoCodec {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::H264 => "h264",
+            Self::Vp8 => "vp8",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "h264" => Self::H264,
+            "vp8" => Self::Vp8,
+            _ => Self::Auto,
+        }
+    }
+
+    pub fn engine(self) -> engine::VideoCodec {
+        match self {
+            Self::Auto => engine::VideoCodec::Auto,
+            Self::H264 => engine::VideoCodec::H264,
+            Self::Vp8 => engine::VideoCodec::Vp8,
+        }
+    }
+}
+
 fn yes() -> bool {
     true
 }
@@ -100,6 +140,7 @@ impl Default for Settings {
             show_stats: false,
             subtitles: true,
             noise_suppression: desktop(),
+            video_codec: VideoCodec::Auto,
             translation_prompt_dismissed: Vec::new(),
             renderer: Renderer::Modern,
             wgpu: WgpuCheck::Untested,
