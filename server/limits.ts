@@ -68,7 +68,7 @@ const HOST_RE = /^[A-Za-z0-9.-]+(:\d+)?$/;
 /**
  * Locks the page down to itself: scripts, styles, sockets and fetches only from this server, never
  * framed by another site (it asks for camera and mic), and the room link isn't sent on as a referrer.
- * blob: scripts are the inline AudioWorklet in speech/whisperRecorder.ts.
+ * blob: scripts are the inline AudioWorklet in speech/utteranceRecorder.ts.
  */
 export function setSecurityHeaders(req: IncomingMessage, res: ServerResponse): void {
   const host = ownHost(req);
