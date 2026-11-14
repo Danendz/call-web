@@ -26,6 +26,7 @@ pub use camera::CameraAccess;
 pub use codec::VideoCodec;
 pub use controller::{ChatEvent, Command, Engine, Link, Phase, State};
 pub use media::Device;
+pub use peer::SHARE_SCREEN_BITRATE;
 pub use protocol::{
     ApiErrorCode, CallEndReason, ChatMessage, FriendState, FriendsLists, FullReason, Lang, MAX_CHAT_LENGTH,
     MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, MissedCall, OpenRoom, Presence, Reaction, TranslatedText, Translation,

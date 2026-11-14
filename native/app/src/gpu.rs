@@ -1,7 +1,9 @@
 //! Video converted to RGBA by the GPU when the window draws with wgpu. Each frame's Y, U and V planes go up as they
 //! are, 1.5 bytes a pixel instead of RGBA's 4, and a shader turns them into a texture Slint draws as an image: no
 //! per-pixel work on the CPU. Runs on the video threads, on the device and queue Slint draws with; Skia submits on
-//! that same queue, so a texture is written only after the frames that drew it before.
+//! that same queue, so a texture is written only after the frames that drew it before. The conversion is submitted
+//! from the UI thread, though: before resizing the window's surface wgpu waits for the queue to empty, and a submit
+//! from another thread during that wait is an error that panics (maximizing the window crashed the app).
 //!
 //! Only on Metal and D3D12, whose queues take submits from any thread. Skia submits to Vulkan's raw queue from the UI
 //! thread, and Vulkan needs every submit to one queue synchronized, which the video threads' wouldn't be.
@@ -182,9 +184,15 @@ impl Converter {
         })
     }
 
-    /// Converts `frame` into `out`, a [`Self::texture`] of the frame's size. A frame whose planes are shorter than
-    /// its size says is skipped (false): wgpu treats a short write as a bug and panics.
-    pub fn convert(&self, planes: &mut Option<Planes>, frame: &Frame<'_>, out: &wgpu::Texture) -> bool {
+    /// Uploads `frame` and records its conversion into `out`, a [`Self::texture`] of the frame's size, for
+    /// [`Self::submit`]. A frame whose planes are shorter than its size says is skipped (None): wgpu treats a short
+    /// write as a bug and panics.
+    pub fn convert(
+        &self,
+        planes: &mut Option<Planes>,
+        frame: &Frame<'_>,
+        out: &wgpu::Texture,
+    ) -> Option<wgpu::CommandBuffer> {
         let (width, height) = (frame.width, frame.height);
         let (chroma_width, chroma_height) = (width.div_ceil(2), height.div_ceil(2));
         let fits = |data: &[u8], stride: u32, row: u32, h: u32| {
@@ -203,7 +211,7 @@ impl Converter {
             || !fits(frame.y, frame.y_stride, width, height)
             || !chroma_fits
         {
-            return false;
+            return None;
         }
         let nv12 = matches!(frame.chroma, Chroma::Nv12 { .. });
         let planes = match planes {
@@ -243,8 +251,12 @@ impl Converter {
             pass.set_bind_group(0, &planes.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
-        self.queue.submit(Some(encoder.finish()));
-        true
+        Some(encoder.finish())
+    }
+
+    /// Runs a conversion from [`Self::convert`]. On the UI thread only, which resizes the window's surface.
+    pub fn submit(&self, commands: wgpu::CommandBuffer) {
+        self.queue.submit(Some(commands));
     }
 
     fn planes(&self, width: u32, height: u32, nv12: bool) -> Planes {

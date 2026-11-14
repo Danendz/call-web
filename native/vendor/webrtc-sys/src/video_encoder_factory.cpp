@@ -66,6 +66,10 @@
 #include "jetson/jetson_encoder_factory.h"
 #endif
 
+#if defined(_WIN32)
+#include "livekit/media_foundation_encoder.h"
+#endif
+
 namespace livekit_ffi {
 
 namespace {
@@ -328,6 +332,12 @@ rust::Vec<VideoEncoderBackend> video_encoder_backend_list() {
   }
 #endif
 
+#if defined(_WIN32)
+  if (MediaFoundationH264Available()) {
+    has_hardware_backend = true;
+  }
+#endif
+
 #if defined(USE_NVIDIA_VIDEO_CODEC)
   if (webrtc::NvidiaVideoEncoderFactory::IsSupported()) {
     backends.push_back(VideoEncoderBackend::Nvenc);
@@ -370,6 +380,13 @@ VideoEncoderFactory::InternalFactory::InternalFactory() {
 #endif
 
   AddJetsonFactory(factories_);
+
+#if defined(_WIN32)
+  if (MediaFoundationH264Available()) {
+    AddBackendFactory(factories_, VideoEncoderBackend::Hardware,
+                      CreateMediaFoundationEncoderFactory());
+  }
+#endif
 
   const PreferredHwEncoderConfig preferred_hw_encoder =
       GetPreferredHwEncoderConfig();

@@ -37,8 +37,9 @@ const VIDEO_MAX_BITRATE: u64 = 2_000_000;
 const VIDEO_60FPS_MAX_BITRATE: u64 = 3_000_000;
 // While sharing: the screen at up to 60 fps, and a small face for the camera at 30. The screen's cap is only a
 // ceiling: congestion control finds what the path carries below it, so a LAN or a good link gets a sharp, smooth
-// screen (a playing video needs far more than text), and a weak one isn't hurt
-const SHARE_SCREEN_BITRATE: u64 = 15_000_000;
+// screen (a playing video needs far more than text), and a weak one isn't hurt. "Screen share quality" in Settings
+// can move it
+pub const SHARE_SCREEN_BITRATE: u64 = 15_000_000;
 const SHARE_SCREEN_FPS: f64 = 60.0;
 const SHARE_CAMERA_BITRATE: u64 = 400_000;
 const SHARE_CAMERA_FPS: f64 = 30.0;
@@ -72,6 +73,7 @@ enum Input {
     ForceRelay(bool),
     Screen(Option<ScreenTracks>),
     VideoCodec(VideoCodec),
+    ScreenBitrate(u64),
     StatsShown(bool),
 }
 
@@ -84,6 +86,8 @@ pub struct PeerConfig {
     /// Our shared screen goes out in its own stream, so the other side can tell it from the camera.
     pub screen_stream_id: String,
     pub video_codec: VideoCodec,
+    /// The shared screen's ceiling, in bits per second
+    pub screen_bitrate: u64,
     /// The stats overlay is up, so stats are sampled every second instead of every few
     pub stats_shown: bool,
 }
@@ -145,6 +149,7 @@ impl Peer {
             pc,
             factory: factory.clone(),
             video_codec: config.video_codec,
+            screen_bitrate: config.screen_bitrate,
             hardware_h264,
             polite: config.polite,
             wait_for_offer: config.polite.then(|| Instant::now() + FIRST_OFFER_WAIT),
@@ -186,6 +191,10 @@ impl Peer {
     /// Changes the video codec mid-call: one renegotiation, see [`crate::codec`].
     pub fn set_video_codec(&self, pick: VideoCodec) {
         let _ = self.input.send(Input::VideoCodec(pick));
+    }
+
+    pub fn set_screen_bitrate(&self, bps: u64) {
+        let _ = self.input.send(Input::ScreenBitrate(bps));
     }
 
     pub fn set_stats_shown(&self, shown: bool) {
@@ -238,6 +247,7 @@ struct Session {
     pc: PeerConnection,
     factory: PeerConnectionFactory,
     video_codec: VideoCodec,
+    screen_bitrate: u64,
     hardware_h264: bool,
     polite: bool,
     ice_servers: Vec<IceServerConfig>,
@@ -322,6 +332,10 @@ impl Session {
                 self.apply_codecs();
                 // Codec preferences don't fire negotiation-needed by themselves
                 self.negotiate().await;
+            }
+            Input::ScreenBitrate(bps) => {
+                self.screen_bitrate = bps;
+                self.tune_senders();
             }
             Input::ForceRelay(relay) => {
                 if let Err(e) = self.pc.set_configuration(rtc_config(&self.ice_servers, relay)) {
@@ -464,7 +478,7 @@ impl Session {
                 continue;
             }
             let (max_bitrate, max_framerate) = match (screen, sharing) {
-                (true, _) => (SHARE_SCREEN_BITRATE, Some(SHARE_SCREEN_FPS)),
+                (true, _) => (self.screen_bitrate, Some(SHARE_SCREEN_FPS)),
                 (false, true) => (SHARE_CAMERA_BITRATE, Some(SHARE_CAMERA_FPS)),
                 (false, false) if camera_60 => (VIDEO_60FPS_MAX_BITRATE, None),
                 (false, false) => (VIDEO_MAX_BITRATE, None),

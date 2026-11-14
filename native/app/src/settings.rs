@@ -43,6 +43,11 @@ pub struct Settings {
     pub noise_suppression: bool,
     #[serde(default)]
     pub video_codec: VideoCodec,
+    #[serde(default)]
+    pub screen_quality: ScreenQuality,
+    /// Custom's ceiling in Mbps, kept while another option is picked
+    #[serde(default = "custom_mbps")]
+    pub screen_custom_mbps: u32,
     /// Languages whose translation model was offered and put off; picking the language again offers it again
     #[serde(default)]
     pub translation_prompt_dismissed: Vec<Lang>,
@@ -112,6 +117,58 @@ impl VideoCodec {
     }
 }
 
+/// "Screen share quality" in Settings: the shared screen's bitrate ceiling. Only a ceiling: congestion control still
+/// settles under it on a link that can't carry it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScreenQuality {
+    High,
+    Custom,
+    /// Also what a name this version doesn't know reads as
+    #[default]
+    #[serde(other)]
+    Balanced,
+}
+
+/// What Custom can be set to, in Mbps
+pub const CUSTOM_MBPS: std::ops::RangeInclusive<u32> = 1..=30;
+const HIGH_BITRATE: u64 = 30_000_000;
+
+impl ScreenQuality {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Balanced => "balanced",
+            Self::High => "high",
+            Self::Custom => "custom",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "high" => Self::High,
+            "custom" => Self::Custom,
+            _ => Self::Balanced,
+        }
+    }
+}
+
+impl Settings {
+    /// The screen's ceiling in bits per second
+    pub fn screen_bitrate(&self) -> u64 {
+        match self.screen_quality {
+            ScreenQuality::Balanced => engine::SHARE_SCREEN_BITRATE,
+            ScreenQuality::High => HIGH_BITRATE,
+            ScreenQuality::Custom => {
+                u64::from(self.screen_custom_mbps.clamp(*CUSTOM_MBPS.start(), *CUSTOM_MBPS.end())) * 1_000_000
+            }
+        }
+    }
+}
+
+fn custom_mbps() -> u32 {
+    (engine::SHARE_SCREEN_BITRATE / 1_000_000) as u32
+}
+
 fn yes() -> bool {
     true
 }
@@ -141,6 +198,8 @@ impl Default for Settings {
             subtitles: true,
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,
+            screen_quality: ScreenQuality::Balanced,
+            screen_custom_mbps: custom_mbps(),
             translation_prompt_dismissed: Vec::new(),
             renderer: Renderer::Modern,
             wgpu: WgpuCheck::Untested,
