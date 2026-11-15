@@ -40,6 +40,9 @@ component Feed inherits Rectangle {
     in property <int> rotation;
     // Your own camera shows like a mirror, as on the web
     in property <bool> mirror;
+    // On the stage, a picture shaped like the stage (both upright or both sideways) fills it, cut to fit, instead of
+    // leaving bars; a phone's way of showing a call
+    in property <bool> fill;
     in property <bool> off;
     in property <string> label;
     // Why a small red mark sits in the corner (they muted your sound); none while empty
@@ -49,7 +52,7 @@ component Feed inherits Rectangle {
     callback touched();
     callback box-changed(VideoBox);
 
-    out property <VideoBox> box: { width: picture.width / 1phx, height: picture.height / 1phx, cover: !main };
+    out property <VideoBox> box: { width: picture.width / 1phx, height: picture.height / 1phx, cover: covers };
     changed box => { root.box-changed(root.box); }
     init => { root.box-changed(root.box); }
 
@@ -61,6 +64,8 @@ component Feed inherits Rectangle {
     property <length> start-x;
     property <length> start-y;
     property <bool> turned: Math.mod(rotation, 180) != 0;
+    property <bool> upright: turned ? source.width > source.height : source.height > source.width;
+    property <bool> covers: !main || (fill && source.width > 0 && upright == (root.height > root.width));
 
     x: dragging ? drag-x : home-x;
     y: dragging ? drag-y : home-y;
@@ -86,8 +91,8 @@ component Feed inherits Rectangle {
         width: root.turned ? parent.height : parent.width;
         height: root.turned ? parent.width : parent.height;
         source: root.source;
-        // The stage shows all of the picture; a tile fills itself
-        image-fit: main ? contain : cover;
+        // The stage shows all of the picture unless it fills it; a tile fills itself
+        image-fit: root.covers ? cover : contain;
         transform-rotation: root.rotation * 1deg;
         // Slint scales after turning, so this flips the upright picture whatever the rotation
         transform-scale-x: root.mirror ? -1 : 1;
@@ -177,6 +182,16 @@ export component Feeds inherits Rectangle {
     in property <length> rail-top;
     // Picture-in-picture: the stage's video alone
     in property <bool> only-main;
+    // A phone: the stage's camera picture fills the screen
+    in property <bool> fill;
+    // Your camera's picture shows like a mirror; not the back camera's, which sees what you see
+    in property <bool> mirror-self: true;
+    // How far the stage reaches past this box on each side, behind the status bar and the home indicator. Only the
+    // stage's video goes there; tiles stay inside.
+    in property <length> bleed-left;
+    in property <length> bleed-top;
+    in property <length> bleed-right;
+    in property <length> bleed-bottom;
     // tl, tr, bl or br for each tile, remembered across calls
     in property <string> corner-self: "br";
     in property <string> corner-peer: "tr";
@@ -256,11 +271,12 @@ export component Feeds inherits Rectangle {
         hidden: !has-peer || peer-hidden || (only-main && main != "peer");
         off: !peer-cam-on || peer-video.width == 0;
         label: @tr("Their camera");
+        fill: root.fill;
         mark: root.peer-speaker-off ? @tr("They muted your sound") : "";
-        home-x: self.main ? 0 : tile-x(corner-peer, tile-w(peer-aspect));
-        home-y: self.main ? 0 : tile-y(corner-peer, tile-h(peer-aspect), peer-stack);
-        home-width: self.main ? root.width : tile-w(peer-aspect);
-        home-height: self.main ? root.height : tile-h(peer-aspect);
+        home-x: self.main ? -bleed-left : tile-x(corner-peer, tile-w(peer-aspect));
+        home-y: self.main ? -bleed-top : tile-y(corner-peer, tile-h(peer-aspect), peer-stack);
+        home-width: self.main ? root.width + bleed-left + bleed-right : tile-w(peer-aspect);
+        home-height: self.main ? root.height + bleed-top + bleed-bottom : tile-h(peer-aspect);
         parent-width: root.width;
         parent-height: root.height;
         picked => { pick("peer", corner-peer); }
@@ -273,10 +289,10 @@ export component Feeds inherits Rectangle {
         main: main == "screen";
         hidden: !has-screen || (only-main && main != "screen");
         label: @tr("Their screen");
-        home-x: self.main ? 0 : tile-x(corner-screen, tile-w(screen-aspect));
-        home-y: self.main ? 0 : tile-y(corner-screen, tile-h(screen-aspect), screen-stack);
-        home-width: self.main ? root.width : tile-w(screen-aspect);
-        home-height: self.main ? root.height : tile-h(screen-aspect);
+        home-x: self.main ? -bleed-left : tile-x(corner-screen, tile-w(screen-aspect));
+        home-y: self.main ? -bleed-top : tile-y(corner-screen, tile-h(screen-aspect), screen-stack);
+        home-width: self.main ? root.width + bleed-left + bleed-right : tile-w(screen-aspect);
+        home-height: self.main ? root.height + bleed-top + bleed-bottom : tile-h(screen-aspect);
         parent-width: root.width;
         parent-height: root.height;
         picked => { pick("screen", corner-screen); }
@@ -287,15 +303,16 @@ export component Feeds inherits Rectangle {
     you := Feed {
         source: self-video;
         rotation: self-rotation;
-        mirror: true;
+        mirror: root.mirror-self;
+        fill: root.fill;
         main: main == "self";
         hidden: !has-self || (only-main && main != "self");
         off: !self-cam-on;
         label: @tr("You");
-        home-x: self.main ? 0 : tile-x(corner-self, tile-w(self-aspect));
-        home-y: self.main ? 0 : tile-y(corner-self, tile-h(self-aspect), 0);
-        home-width: self.main ? root.width : tile-w(self-aspect);
-        home-height: self.main ? root.height : tile-h(self-aspect);
+        home-x: self.main ? -bleed-left : tile-x(corner-self, tile-w(self-aspect));
+        home-y: self.main ? -bleed-top : tile-y(corner-self, tile-h(self-aspect), 0);
+        home-width: self.main ? root.width + bleed-left + bleed-right : tile-w(self-aspect);
+        home-height: self.main ? root.height + bleed-top + bleed-bottom : tile-h(self-aspect);
         parent-width: root.width;
         parent-height: root.height;
         picked => { pick("self", corner-self); }

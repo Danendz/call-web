@@ -23,6 +23,10 @@ use crate::settings::{Renderer, Settings, WgpuCheck};
 
 #[cfg(not(target_os = "android"))]
 pub fn select_backend() -> Result<(), slint::PlatformError> {
+    // iOS has no OpenGL to fall back to
+    if cfg!(target_os = "ios") {
+        return selector().renderer_name("skia-wgpu".into()).require_wgpu_30(wgpu_configuration()).select();
+    }
     let mut settings = Settings::load();
     if settings.renderer == Renderer::Modern && settings.wgpu == WgpuCheck::Trying {
         fall_back(&mut settings, "the last launch on wgpu never drew a frame");
@@ -241,9 +245,14 @@ fn native_frame(attributes: WindowAttributes) -> WindowAttributes {
 pub fn watch_shown(ui: &crate::ui::AppWindow) {
     use slint::ComponentHandle;
     use slint::winit_030::{EventResult, WinitWindowAccessor, winit::event::WindowEvent};
-    ui.window().on_winit_window_event(|_, event| {
+    #[cfg(target_os = "ios")]
+    let weak = ui.as_weak();
+    // Slint takes one filter per window, so the long press for text boxes' menus is watched here too
+    ui.window().on_winit_window_event(move |_window, event| {
         match event {
             WindowEvent::Occluded(occluded) => crate::video::set_window_shown(!occluded),
+            #[cfg(target_os = "ios")]
+            WindowEvent::Touch(touch) => crate::ios::touch(&weak, _window.scale_factor(), touch),
             #[cfg(target_os = "windows")]
             WindowEvent::Resized(size) => crate::video::set_window_shown(size.width > 0 && size.height > 0),
             _ => {}

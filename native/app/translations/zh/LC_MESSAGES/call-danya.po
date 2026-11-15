@@ -110,6 +110,15 @@ msgstr "已复制"
 msgid "Copy"
 msgstr "复制"
 
+msgid "Cut"
+msgstr "剪切"
+
+msgid "Paste"
+msgstr "粘贴"
+
+msgid "Select All"
+msgstr "全选"
+
 msgid "Copy it now: it's shown only once."
 msgstr "现在就复制：它只显示这一次。"
 
@@ -187,6 +196,9 @@ msgstr "挂断"
 
 msgid "Headset"
 msgstr "耳机"
+
+msgid "Phone microphone"
+msgstr "手机麦克风"
 
 msgid "I saved it"
 msgstr "我已保存"

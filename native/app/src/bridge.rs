@@ -40,6 +40,8 @@ impl Bridge {
         let mics = Rc::new(VecModel::default());
         let speakers = Rc::new(VecModel::default());
         let cams = Rc::new(VecModel::default());
+        // On iOS the mics are the phone's audio routes, listed by `ios::audio`
+        #[cfg(not(target_os = "ios"))]
         ui.set_mics(ModelRc::from(mics.clone()));
         ui.set_speakers(ModelRc::from(speakers.clone()));
         ui.set_cams(ModelRc::from(cams.clone()));
@@ -127,9 +129,12 @@ impl Bridge {
         ui.set_mic_on(state.mic_on);
         ui.set_has_mic(state.has_mic);
         // Nothing picked means the system default, which the OS lists first
-        let mic = picked(&state.mics, state.mic_id.as_ref());
-        ui.set_mic_id(mic.map(|d| d.id.as_str()).unwrap_or_default().into());
-        ui.set_mic_label(mic.map(|d| d.label.as_str()).unwrap_or_default().into());
+        #[cfg(not(target_os = "ios"))]
+        {
+            let mic = picked(&state.mics, state.mic_id.as_ref());
+            ui.set_mic_id(mic.map(|d| d.id.as_str()).unwrap_or_default().into());
+            ui.set_mic_label(mic.map(|d| d.label.as_str()).unwrap_or_default().into());
+        }
         let speaker = picked(&state.speakers, state.speaker_id.as_ref());
         ui.set_speaker_id(speaker.map(|d| d.id.as_str()).unwrap_or_default().into());
         ui.set_speaker_label(speaker.map(|d| d.label.as_str()).unwrap_or_default().into());

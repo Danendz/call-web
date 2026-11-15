@@ -9,12 +9,14 @@ mod debug;
 mod friends;
 mod fsr;
 mod gpu;
+#[cfg(target_os = "ios")]
+pub mod ios;
 mod reactions;
 mod readable;
 mod screenshot;
 mod settings;
 mod translate;
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 mod update;
 pub(crate) mod video;
 pub mod window;
@@ -58,16 +60,24 @@ pub fn run() -> anyhow::Result<()> {
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
     ui.set_version(env!("CARGO_PKG_VERSION").into());
-    ui.set_touch(cfg!(target_os = "android"));
+    ui.set_touch(cfg!(mobile));
 
     #[cfg(target_os = "android")]
     android::attach(&ui, &settings);
+    #[cfg(target_os = "ios")]
+    {
+        ios::register();
+        ios::text_menus(&ui);
+        ios::attach_window_when_made(&ui);
+        ios::audio::attach(&ui);
+        ios::call::attach(&ui);
+    }
 
     let bridge = Bridge::new(&ui, lang, settings::data_dir());
     let call_started = bridge.call_started.clone();
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     let updater = update::Updater::start(
         &server,
         {
@@ -83,7 +93,7 @@ pub fn run() -> anyhow::Result<()> {
             }
         },
     );
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     ui.on_update_now({
         let updater = updater.clone();
         move || {
@@ -95,6 +105,8 @@ pub fn run() -> anyhow::Result<()> {
 
     #[cfg(target_os = "android")]
     android::updates(&ui, &server);
+    #[cfg(target_os = "ios")]
+    ios::update::start(&ui, &server);
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());
@@ -153,6 +165,10 @@ pub fn run() -> anyhow::Result<()> {
             }
             #[cfg(target_os = "android")]
             android::sync(&ui);
+            #[cfg(target_os = "ios")]
+            ios::audio::sync(&ui);
+            #[cfg(target_os = "ios")]
+            ios::call::sync(&ui);
         }
     });
     let ticker = slint::Timer::default();
@@ -275,11 +291,11 @@ pub fn run() -> anyhow::Result<()> {
             // Your own camera rides along as a tile, unless it's what's on the stage
             let tile = (feed != "self" && ui.get_cam_on()).then(|| video::Pixels::of(&ui.get_self_video())).flatten();
             let picture = screenshot::Picture {
-                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
+                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" && ui.get_mirror_self() },
                 tile: tile.map(|frame| screenshot::Shot {
                     frame,
                     rotation: ui.get_self_frame_rotation(),
-                    mirrored: true,
+                    mirrored: ui.get_mirror_self(),
                 }),
                 elapsed: ui.get_elapsed().to_string(),
                 lang: parse_lang(&ui.get_lang()),
@@ -344,6 +360,8 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(command(value.into()));
         }
     };
+    // On iOS a mic is picked with its route, by `ios::audio`
+    #[cfg(not(target_os = "ios"))]
     ui.on_pick_mic(remember(|s, id| s.mic = Some(id), Command::SelectMic));
     ui.on_pick_speaker(remember(|s, id| s.speaker = Some(id), Command::SelectSpeaker));
     ui.on_pick_cam(remember(|s, id| s.cam = Some(id), Command::SelectCam));
@@ -525,6 +543,8 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetScreenBitrate(settings.screen_bitrate()));
         }
     });
+    // iOS draws only on Metal, so there's nothing to pick
+    #[cfg(not(target_os = "ios"))]
     ui.set_renderer(renderer_code(settings.borrow().renderer).into());
     ui.on_set_renderer({
         let settings = settings.clone();
@@ -562,7 +582,7 @@ pub fn run() -> anyhow::Result<()> {
     drop(ui);
     drop(friends);
     drop(engine);
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     if let Some(updater) = updater {
         updater.install_on_exit();
     }

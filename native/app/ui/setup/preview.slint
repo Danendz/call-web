@@ -11,6 +11,8 @@ export component Preview inherits Rectangle {
     in property <image> video;
     // Clockwise degrees that turn the frames upright
     in property <int> video-rotation;
+    // Your own picture shows like a mirror, as on the web; the back camera's doesn't, as it sees what you see
+    in property <bool> mirror: true;
     in property <bool> cam-on;
     in property <bool> cam-granted;
     // Why there's no picture when the camera can't be used, e.g. "Camera: Not found"
@@ -41,9 +43,8 @@ export component Preview inherits Rectangle {
         source: video;
         image-fit: cover;
         transform-rotation: root.video-rotation * 1deg;
-        // Your own picture shows like a mirror, as on the web. Slint scales after turning, so this flips the upright
-        // picture whatever the rotation
-        transform-scale-x: -1;
+        // Slint scales after turning, so this flips the upright picture whatever the rotation
+        transform-scale-x: root.mirror ? -1 : 1;
         opacity: showing ? 1 : 0;
         animate opacity { duration: Theme.med; easing: Theme.ease; }
     }

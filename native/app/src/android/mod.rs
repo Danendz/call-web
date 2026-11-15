@@ -16,7 +16,7 @@ use jni::{JNIEnv, JavaVM};
 use slint::android::android_activity::{MainEvent, PollEvent};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use crate::ui::{AppPhase, AppWindow};
+use crate::ui::{AppPhase, AppWindow, DeviceItem};
 
 // Must match Shim.kt
 const ACTION_TOGGLE_MIC: jint = 1;
@@ -390,8 +390,12 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativeAudio(
 ) {
     on_ui(move |ui| {
         // One output is no choice
-        let mut outputs: Vec<SharedString> =
-            ROUTES.iter().enumerate().filter(|(i, _)| available & (1 << i) != 0).map(|(_, r)| (*r).into()).collect();
+        let mut outputs: Vec<DeviceItem> = ROUTES
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| available & (1 << i) != 0)
+            .map(|(_, r)| DeviceItem { id: (*r).into(), label: format!("@{r}").into() })
+            .collect();
         if outputs.len() < 2 {
             outputs.clear();
         }

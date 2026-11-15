@@ -4,6 +4,11 @@
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    platform_cfgs();
+    // iOS runs the engine built natively (crates/bergamot)
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        return Ok(());
+    }
     let wasm = PathBuf::from("../../../vendor/bergamot/bergamot.wasm");
     println!("cargo::rerun-if-changed={}", wasm.display());
     let target = std::env::var("TARGET")?;
@@ -22,4 +27,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let compiled = engine.precompile_module(&std::fs::read(&wasm)?)?;
     std::fs::write(PathBuf::from(std::env::var("OUT_DIR")?).join("bergamot.cwasm"), compiled)?;
     Ok(())
+}
+
+/// `cfg(desktop)` on macOS and Windows, `cfg(mobile)` on Android and iOS, so platform code says which it means
+/// instead of "not Android".
+fn platform_cfgs() {
+    println!("cargo::rustc-check-cfg=cfg(desktop, mobile)");
+    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("macos" | "windows") => println!("cargo::rustc-cfg=desktop"),
+        Ok("android" | "ios") => println!("cargo::rustc-cfg=mobile"),
+        _ => {}
+    }
 }

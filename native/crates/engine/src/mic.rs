@@ -22,6 +22,8 @@ pub(crate) fn open(name: Option<&str>, on_samples: impl FnMut(&[f32]) + Send + '
     if let Some(path) = std::env::var_os("CALL_FAKE_MIC") {
         return fake(std::path::Path::new(&path), on_samples);
     }
+    #[cfg(target_os = "ios")]
+    crate::audio_session::prepare();
     let host = cpal::default_host();
     let named = name
         .and_then(|name| host.input_devices().ok()?.find(|d| d.description().is_ok_and(|desc| desc.name() == name)));

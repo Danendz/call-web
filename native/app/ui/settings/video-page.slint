@@ -101,19 +101,22 @@ export component VideoPage inherits VerticalLayout {
                 }
             }
         }
-        Divider { }
-        SettingRow {
-            title: @tr("Graphics");
-            detail: !root.renderer-now ? @tr("Applies after restart.")
-                : root.renderer-locked ? @tr("Can't be changed during a call.") : "";
-            VerticalLayout {
-                alignment: center;
-                Segmented {
-                    value: root.renderer;
-                    options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
-                    picked(renderer) => {
-                        if !root.renderer-locked {
-                            root.set-renderer(renderer);
+        Shown {
+            shown: root.renderer != "";
+            Divider { }
+            SettingRow {
+                title: @tr("Graphics");
+                detail: !root.renderer-now ? @tr("Applies after restart.")
+                    : root.renderer-locked ? @tr("Can't be changed during a call.") : "";
+                VerticalLayout {
+                    alignment: center;
+                    Segmented {
+                        value: root.renderer;
+                        options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
+                        picked(renderer) => {
+                            if !root.renderer-locked {
+                                root.set-renderer(renderer);
+                            }
                         }
                     }
                 }

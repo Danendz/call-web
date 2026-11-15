@@ -14,6 +14,9 @@ component SetupPanel {
     in property <[DeviceItem]> speakers;
     in property <string> speaker-id;
     in property <string> speaker-label;
+    // A phone's audio routes, which take a mic along, in place of the speakers
+    in property <[DeviceItem]> outputs;
+    in property <string> output;
     in property <[DeviceItem]> cams;
     in property <string> cam-id;
     in property <string> cam-label;
@@ -23,6 +26,7 @@ component SetupPanel {
     callback set-lang(string);
     callback pick-mic(string);
     callback pick-speaker(string);
+    callback pick-output(string);
     callback pick-cam(string);
     callback join();
 
@@ -54,6 +58,16 @@ component SetupPanel {
             selected: root.speaker-id;
             selected-label: root.speaker-label;
             picked(id) => { root.pick-speaker(id); }
+        }
+
+        if root.outputs.length > 0: DeviceRow {
+            icon: root.output == "bluetooth" ? Icons.bluetooth : root.output == "earpiece" ? Icons.phone
+                : root.output == "headset" ? Icons.headphones : Icons.volume-2;
+            name: @tr("Speaker");
+            devices: root.outputs;
+            selected: root.output;
+            selected-label: "@" + root.output;
+            picked(id) => { root.pick-output(id); }
         }
 
         DeviceRow {
@@ -119,12 +133,16 @@ export component SetupScreen inherits Rectangle {
     in property <[DeviceItem]> speakers;
     in property <string> speaker-id;
     in property <string> speaker-label;
+    in property <[DeviceItem]> outputs;
+    in property <string> output;
     in property <bool> mic-on;
     in property <float> mic-level;
     in property <bool> has-mic;
     in property <string> mic-status;
     in property <image> video;
     in property <int> video-rotation;
+    // Like a mirror, except the back camera
+    in property <bool> mirror;
     in property <bool> cam-on;
     in property <bool> cam-granted;
     in property <bool> cam-pending;
@@ -136,14 +154,20 @@ export component SetupScreen inherits Rectangle {
     callback set-lang(string);
     callback pick-mic(string);
     callback pick-speaker(string);
+    callback pick-output(string);
     callback pick-cam(string);
     callback toggle-mic();
     callback toggle-cam();
     callback set-portrait(bool);
     callback join();
     callback back();
+    // A phone: the window's safe area already clears the status bar
+    in property <bool> touch;
+    // The Back button's top; on desktop below the macOS traffic lights, which sit over the content
+    property <length> back-y: touch ? 8px : 44px;
     property <bool> shown: false;
-    property <bool> wide: root.width >= 1000px;
+    // A phone held sideways is too short for the picture above the panel, so they sit side by side
+    property <bool> wide: root.width >= 1000px || (touch && root.width > root.height);
     property <length> panel-width: min(380px, root.width - 48px);
     init => { shown = true; }
 
@@ -157,10 +181,13 @@ export component SetupScreen inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
+            // Clear of the Back button, which a sideways phone's picture would reach
+            padding-top: root.touch ? root.back-y + 20px : 0;
             Preview {
-                // The web sizes the box from the frame's shape: min(640px, 64vh * ar) wide
+                // The web sizes the box from the frame's shape: min(640px, 64vh * ar) wide; a sideways phone gives it
+                // all the height there is
                 property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
-                width: min(min(640px, root.width - panel-width - 88px), root.height * 0.64 * ar);
+                width: min(min(640px, root.width - panel-width - 88px), (root.touch ? root.height - 48px - root.back-y - 20px : root.height * 0.64) * ar);
                 height: self.width / ar;
                 animate width, height { duration: Theme.slow; easing: Theme.ease; }
                 mic-on: root.mic-on;
@@ -168,6 +195,7 @@ export component SetupScreen inherits Rectangle {
                 mic-level: root.mic-level;
                 video: root.video;
                 video-rotation: root.video-rotation;
+                mirror: root.mirror;
                 cam-on: root.cam-on;
                 cam-granted: root.cam-granted;
                 cam-status: root.cam-status;
@@ -188,6 +216,8 @@ export component SetupScreen inherits Rectangle {
                 speakers: root.speakers;
                 speaker-id: root.speaker-id;
                 speaker-label: root.speaker-label;
+                outputs: root.outputs;
+                output: root.output;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -197,6 +227,7 @@ export component SetupScreen inherits Rectangle {
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
                 pick-speaker(id) => { root.pick-speaker(id); }
+                pick-output(id) => { root.pick-output(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
@@ -207,7 +238,7 @@ export component SetupScreen inherits Rectangle {
         alignment: center;
         spacing: 16px;
         padding: 24px;
-        padding-top: 88px;
+        padding-top: root.back-y + 44px;
         padding-bottom: 16px;
         opacity: shown ? 1 : 0;
         animate opacity { duration: Theme.slow; easing: Theme.ease; }
@@ -215,9 +246,9 @@ export component SetupScreen inherits Rectangle {
         HorizontalLayout {
             alignment: center;
             Preview {
-                // Whatever height the panel leaves, under the Back button's 88px and the layout's gaps
+                // Whatever height the panel leaves, under the Back button and the layout's gaps
                 property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
-                height: min((root.width - 48px) / ar, max(0px, root.height - 88px - 16px - 16px - panel.preferred-height));
+                height: min((root.width - 48px) / ar, max(0px, root.height - root.back-y - 44px - 16px - 16px - panel.preferred-height));
                 width: self.height * ar;
                 visible: self.height > 120px;
                 mic-on: root.mic-on;
@@ -225,6 +256,7 @@ export component SetupScreen inherits Rectangle {
                 mic-level: root.mic-level;
                 video: root.video;
                 video-rotation: root.video-rotation;
+                mirror: root.mirror;
                 cam-on: root.cam-on;
                 cam-granted: root.cam-granted;
                 cam-status: root.cam-status;
@@ -245,6 +277,8 @@ export component SetupScreen inherits Rectangle {
                 speakers: root.speakers;
                 speaker-id: root.speaker-id;
                 speaker-label: root.speaker-label;
+                outputs: root.outputs;
+                output: root.output;
                 mic-status: root.mic-status;
                 cams: root.cams;
                 cam-id: root.cam-id;
@@ -254,16 +288,17 @@ export component SetupScreen inherits Rectangle {
                 set-lang(lang) => { root.set-lang(lang); }
                 pick-mic(id) => { root.pick-mic(id); }
                 pick-speaker(id) => { root.pick-speaker(id); }
+                pick-output(id) => { root.pick-output(id); }
                 pick-cam(id) => { root.pick-cam(id); }
                 join => { root.join(); }
             }
         }
     }
 
-    // Back to new room / join by link. Below the macOS traffic lights, which sit over the content
+    // Back to new room / join by link
     Button {
         x: 16px;
-        y: 44px;
+        y: root.back-y;
         width: self.preferred-width;
         height: 36px;
         text: @tr("Back");

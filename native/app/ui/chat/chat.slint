@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
+import { TextMenu } from "../components/text-menu.slint";
 
 // One line as the bridge words it (the web's useFeed): the other person's in your language with what they wrote
 // under it, your own as written, and what they're saying right now as the last one
@@ -148,14 +149,17 @@ export component ChatOverlay inherits Rectangle {
             animate y { duration: Theme.med; easing: Theme.ease; }
             spacing: 8px;
 
-            if messages.length == 0: Text {
-                text: @tr("No messages yet. They disappear when the room closes.");
-                width: root.width - root.list-clear;
-                color: #ffffffbf;
-                font-size: 13px;
-                wrap: word-wrap;
-                opacity: root.idle ? 0 : 1;
-                animate opacity { duration: Theme.med; easing: Theme.ease; }
+            // Narrowed by padding rather than its width, so the layout measures its height at the width it wraps at
+            if messages.length == 0: HorizontalLayout {
+                padding-right: root.list-clear;
+                Text {
+                    text: @tr("No messages yet. They disappear when the room closes.");
+                    color: #ffffffbf;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                    opacity: root.idle ? 0 : 1;
+                    animate opacity { duration: Theme.med; easing: Theme.ease; }
+                }
             }
             list := Flickable {
                 // Grows with its lines, then scrolls; the band at the top is where lines fade, so a short list shows whole
@@ -209,15 +213,23 @@ export component ChatOverlay inherits Rectangle {
                         vertical-alignment: center;
                         height: parent.height;
                     }
-                    input := TextInput {
-                        x: 16px;
-                        width: parent.width - 32px;
-                        height: parent.height;
-                        color: Theme.text;
-                        vertical-alignment: center;
-                        single-line: true;
-                        accessible-label: @tr("Message");
-                        accepted => { send-button.clicked(); }
+                    TextMenu {
+                        can-copy: input.text != "";
+                        cut => { input.cut(); }
+                        copy => { input.copy(); }
+                        paste => { input.paste(); }
+                        select-all => { input.select-all(); }
+
+                        input := TextInput {
+                            x: 16px;
+                            width: parent.width - 32px;
+                            height: parent.height;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            single-line: true;
+                            accessible-label: @tr("Message");
+                            accepted => { send-button.clicked(); }
+                        }
                     }
                 }
                 send-button := Rectangle {

@@ -3,13 +3,19 @@ import { Icons } from "../components/icons.slint";
 
 export struct DeviceItem { id: string, label: string }
 
-// Android's cameras come as @front, @back and @external, named here in the app's language; Android's one mic has no
-// name, so it takes the row's
+// Android's cameras come as @front, @back and @external, and a phone's audio routes as @speaker, @earpiece,
+// @bluetooth and @headset, and an iPhone's own mic as @phone-mic, named here in the app's language; Android's one mic
+// has no name, so it takes the row's
 export global DeviceName {
     pure public function of(label: string, fallback: string) -> string {
         label == "@front" ? @tr("Front camera")
             : label == "@back" ? @tr("Back camera")
             : label == "@external" ? @tr("External camera")
+            : label == "@speaker" ? @tr("Speaker")
+            : label == "@earpiece" ? @tr("Phone earpiece")
+            : label == "@bluetooth" ? @tr("Bluetooth")
+            : label == "@headset" ? @tr("Headset")
+            : label == "@phone-mic" ? @tr("Phone microphone")
             : label != "" ? label : fallback
     }
 }

@@ -170,7 +170,8 @@ export component SettingsSheet inherits Rectangle {
         // Tall enough for everything, up to most of the window; the rows scroll past that
         height: root.sheet ? min(column.preferred-height, root.height * 0.9) : root.height;
         x: root.sheet ? (root.width - self.width) / 2 : root.shown ? root.width - self.width : root.width;
-        y: !root.sheet ? 0 : root.shown ? root.height - self.height : root.height;
+        // Closed, past the phone's home indicator or navigation bar, which the window goes on under
+        y: !root.sheet ? 0 : root.shown ? root.height - self.height : root.height + 80px;
         animate x, y { duration: Theme.sheet; easing: Theme.ease-sheet; }
         border-radius: 0;
         border-top-left-radius: Theme.radius-lg;

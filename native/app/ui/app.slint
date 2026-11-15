@@ -13,8 +13,9 @@ import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark, VideoBox } from "call/call.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
+import { TextAction, TextMenus } from "components/text-menu.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow, TextAction, TextMenus }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -56,6 +57,9 @@ export component AppWindow inherits Window {
     in property <[DeviceItem]> cams;
     in property <string> cam-id;
     in property <string> cam-label;
+    // Your camera's picture shows like a mirror, but not the back camera's, which sees what you see; Rust reads it
+    // for screenshots
+    out property <bool> mirror-self: cam-label != "@back";
     in property <bool> portrait;
     in property <image> self-video;
     in property <image> peer-video;
@@ -156,7 +160,7 @@ export component AppWindow inherits Window {
     // Set on a phone: a touch screen with an on-screen keyboard
     in property <bool> touch;
     // Where the call's sound plays on a phone ("speaker", "earpiece", "bluetooth"), and which of them there are
-    in property <[string]> outputs;
+    in property <[DeviceItem]> outputs;
     in property <string> output;
     callback pick-output(string);
     in property <string> background-guide;
@@ -267,9 +271,11 @@ export component AppWindow inherits Window {
     }
 
     title: "Call Danya";
-    icon: Icons.video;
-    min-width: 420px;
-    min-height: 560px;
+    // The title bar and taskbar on Windows; macOS and the phones take the bundle's (packaging/icon/make.sh)
+    icon: @image-url("app-icon.png");
+    // A phone's screen is the window, whatever its size; winit on iOS would clip a window held wider than it
+    min-width: root.touch ? 0px : 420px;
+    min-height: root.touch ? 0px : 560px;
     preferred-width: 1100px;
     preferred-height: 760px;
     background: Theme.bg;
@@ -278,6 +284,10 @@ export component AppWindow inherits Window {
     // Clear of the phone's status and navigation bars, which the window is drawn under, and of the on-screen keyboard,
     // which covers it without resizing it; zero on desktop. Holds focus when nothing else does, so the phone's Back
     // key lands here; what no screen takes goes back to Android, which puts the app in the background.
+    // How much of the window the on-screen keyboard covers. iOS keeps its size once it's put away and only moves it
+    // below the window, so it's what lies above the window's bottom edge
+    property <length> keyboard-height: max(0px, min(root.virtual-keyboard-size.height, root.height - root.virtual-keyboard-position.y));
+
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(event) => {
@@ -297,7 +307,7 @@ export component AppWindow inherits Window {
         x: root.safe-area-insets.left;
         y: root.safe-area-insets.top;
         width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
+        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.keyboard-height);
 
         if phase == AppPhase.start: StartScreen {
             version: root.version;
@@ -349,12 +359,16 @@ export component AppWindow inherits Window {
             speaker-id: root.speaker-id;
             speaker-label: root.speaker-label;
             pick-speaker(id) => { root.pick-speaker(id); }
+            outputs: root.outputs;
+            output: root.output;
+            pick-output(id) => { root.pick-output(id); }
             mic-on: root.mic-on;
             mic-level: root.mic-level;
             has-mic: root.has-mic;
             mic-status: root.has-mic ? "" : @tr("Microphone: Not found");
             video: root.self-video;
             video-rotation: root.self-frame-rotation;
+            mirror: root.mirror-self;
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cam-pending: root.cam-access == CamAccess.pending;
@@ -371,6 +385,7 @@ export component AppWindow inherits Window {
             pick-cam(id) => { root.pick-cam(id); }
             join => { root.join(); }
             back => { root.home(); }
+            touch: root.touch;
             // Only your camera's preview
             init => { root.feeds-seen(true, false, false); }
         }
@@ -417,6 +432,11 @@ export component AppWindow inherits Window {
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;
             self-frame-rotation: root.self-frame-rotation;
+            mirror-self: root.mirror-self;
+            bleed-left: root.safe-area-insets.left;
+            bleed-top: root.safe-area-insets.top;
+            bleed-right: root.safe-area-insets.right;
+            bleed-bottom: max(root.safe-area-insets.bottom, root.keyboard-height);
             stats: root.stats;
             force-relay: root.force-relay;
             show-stats: root.show-stats;
@@ -437,7 +457,7 @@ export component AppWindow inherits Window {
             toggle-transcribe => { root.toggle-transcribe(); }
             send-chat(text) => { root.send-chat(text) }
             touch: root.touch;
-            keyboard-shown: root.virtual-keyboard-size.height > 0;
+            keyboard-shown: root.keyboard-height > 0;
             pip: root.pip;
             outputs: root.outputs;
             output: root.output;
@@ -602,6 +622,7 @@ export component AppWindow inherits Window {
 
         // Up until it has animated out, after sign-in-open is cleared
         if root.sign-in-up: SignInDialog {
+            sheet: root.touch || root.width < 900px;
             open: root.sign-in-open && root.account == "signed-out";
             error: root.account-error;
             busy: root.account-busy;
@@ -618,6 +639,7 @@ export component AppWindow inherits Window {
         }
 
         if root.recovery-code != "": RecoveryDialog {
+            sheet: root.touch || root.width < 900px;
             code: root.recovery-code;
             closed => { root.recovery-saved(); }
         }

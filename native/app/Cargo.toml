@@ -34,7 +34,66 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "renderer-skia",
     "unstable-wgpu-30",
 ] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 velopack = "=1.2.161"
+
+# The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks, the edit menu, the call's audio route and CallKit
+# (src/ios/)
+[target.'cfg(target_os = "ios")'.dependencies]
+# The update check (ios/update.rs); the engine's model downloads already bring it in
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+block2 = "0.6"
+objc2 = "0.6"
+objc2-call-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "dispatch2",
+    "objc2-avf-audio",
+    "CXAction",
+    "CXAnswerCallAction",
+    "CXCallAction",
+    "CXCallController",
+    "CXCallUpdate",
+    "CXEndCallAction",
+    "CXError",
+    "CXHandle",
+    "CXProvider",
+    "CXProviderConfiguration",
+    "CXSetHeldCallAction",
+    "CXSetMutedCallAction",
+    "CXStartCallAction",
+    "CXTransaction",
+] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = [
+    "std",
+    "AVAudioSession",
+    "AVAudioSessionRoute",
+    "AVAudioSessionTypes",
+] }
+objc2-core-foundation = "0.3"
+objc2-foundation = "0.3"
+objc2-ui-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-core-foundation",
+    "UIAction",
+    "UIApplication",
+    "UIDevice",
+    "UIEditMenuInteraction",
+    "UIGeometry",
+    "UIImage",
+    "UIInteraction",
+    "UIMenu",
+    "UIMenuElement",
+    "UIResponder",
+    "UIScene",
+    "UISceneOptions",
+    "UISceneSession",
+    "UIView",
+    "UIWindow",
+    "UIWindowScene",
+] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Skia over Vulkan through wgpu, or over OpenGL, picked at runtime by our patched backend (vendor/README.md)
@@ -64,6 +123,8 @@ dev-mcp = ["slint/mcp"]
 slint-build = "=1.18.1"
 # Android: exports WebRTC's JNI symbols from our library, which webrtc-sys can't do for us
 webrtc-sys-build = "=0.3.21"
+# Windows: puts the icon into the .exe, which Explorer, the Start menu and the taskbar show
+winresource = "0.1"
 
 [lints]
 workspace = true

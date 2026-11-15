@@ -2,7 +2,7 @@
 //! Windows has none, so the app lists screens and windows itself (captured with Windows Graphics Capture). Frames are
 //! captured at up to 60 fps, scaled to fit 1080p, and sent through a screencast video source, which tunes the encoder
 //! for text and sharp edges; what it gives up when bandwidth runs short is set in `peer.rs`. The sound goes with it
-//! ([`crate::screen_audio`]). The capture itself is in `desktop.rs`; Android can't share yet.
+//! ([`crate::screen_audio`]). The capture itself is in `desktop.rs`; phones can't share yet.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,13 +21,13 @@ use libwebrtc::video_track::RtcVideoTrack;
 
 use crate::screen_audio;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 mod desktop;
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 pub(crate) use desktop::sources;
 
-/// Nothing to list on Android until MediaProjection (A4); there the share ends as soon as it starts.
-#[cfg(target_os = "android")]
+/// Nothing to list on phones until MediaProjection (A4) and ReplayKit (I5); there the share ends as soon as it starts.
+#[cfg(not(desktop))]
 pub(crate) fn sources() -> Vec<crate::media::Device> {
     Vec::new()
 }
@@ -84,9 +84,9 @@ pub(crate) fn start(
         }
         return Share { stop, _audio: audio };
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     desktop::capture(source, out, stopped, ended);
-    #[cfg(target_os = "android")]
+    #[cfg(not(desktop))]
     {
         let _ = (source, out, stopped);
         ended();

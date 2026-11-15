@@ -53,9 +53,9 @@ impl Media {
         &self.factory
     }
 
-    /// None on Android, where the mic follows the call's audio route (a headset brings its own; `Shim.kt`).
+    /// None on phones, where the mic follows the call's audio route (a headset brings its own; `Shim.kt` on Android).
     pub fn mics(&self) -> Vec<Device> {
-        if !self.platform_audio || cfg!(target_os = "android") {
+        if !self.platform_audio || cfg!(mobile) {
             return vec![];
         }
         (0..u16::try_from(self.factory.recording_devices()).unwrap_or(0))
@@ -64,9 +64,9 @@ impl Media {
             .collect()
     }
 
-    /// A mic can be captured. True on Android without a list: its one mic is the audio route's.
+    /// A mic can be captured. True on phones without a list: its one mic is the audio route's.
     pub fn has_mic(&self) -> bool {
-        self.platform_audio && (cfg!(target_os = "android") || !self.mics().is_empty())
+        self.platform_audio && (cfg!(mobile) || !self.mics().is_empty())
     }
 
     /// False if the mic is gone. A call's capture restarts on it: the ADM won't change device while recording.
@@ -86,9 +86,9 @@ impl Media {
         picked
     }
 
-    /// Where the call plays. None on Android, whose outputs are the call's audio routes instead (`Shim.kt`).
+    /// Where the call plays. None on phones, whose outputs are the call's audio routes instead (`Shim.kt`).
     pub fn speakers(&self) -> Vec<Device> {
-        if !self.platform_audio || cfg!(target_os = "android") {
+        if !self.platform_audio || cfg!(mobile) {
             return vec![];
         }
         (0..u16::try_from(self.factory.playout_devices()).unwrap_or(0))

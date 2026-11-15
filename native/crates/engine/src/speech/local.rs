@@ -14,7 +14,7 @@ use super::model::{SENSE_VOICE, SENSE_VOICE_TOKENS};
 use super::{Out, Recognizer, SpeechEvent};
 
 // A phone has fewer big cores and is also encoding video; two decode an utterance in a fraction of its length
-const THREADS: i32 = if cfg!(target_os = "android") { 2 } else { 4 };
+const THREADS: i32 = if cfg!(mobile) { 2 } else { 4 };
 
 /// The loaded model, kept between recordings: loading takes over a second on a phone. Live subtitles use the same
 /// one. SenseVoice is told the language, so a change of language loads it again.

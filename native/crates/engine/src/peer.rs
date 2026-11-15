@@ -467,9 +467,11 @@ impl Session {
     /// playing video stays watchable instead of freezing, and text is sharp again once it settles). While sharing,
     /// the camera shrinks to a small face so the screen gets the bandwidth. The mic gets priority so voices survive
     /// congestion. Video asks for three temporal layers (L1T3): a lost frame then only breaks the frames that
-    /// reference it, not everything up to the next keyframe. Hardware encoders mostly can't, and WebRTC refuses the
-    /// mode for them, so the rest is set again without it. Encodings only exist after negotiation, so this runs after
-    /// every description change.
+    /// reference it, not everything up to the next keyframe. H.264 is only sent from hardware encoders, which can't,
+    /// so it isn't asked for there; if WebRTC refuses it anyway the rest is set again without it. Not asking matters:
+    /// a refusal is a C++ exception, and where a library's own copy of `std::exception`'s type info gets linked in
+    /// (skia-bindings, in debug builds) it isn't caught and aborts the app. Encodings only exist after negotiation, so
+    /// this runs after every description change.
     fn tune_senders(&self) {
         let sharing = self.sharing;
         let camera_60 = crate::camera::fps() > 30;
@@ -486,6 +488,9 @@ impl Session {
             if params.encodings.is_empty() {
                 continue;
             }
+            // The codec it sends with comes first
+            let layers =
+                video && !params.codecs.first().is_some_and(|c| c.mime_type.eq_ignore_ascii_case("video/h264"));
             let (max_bitrate, max_framerate) = match (screen, sharing) {
                 (true, _) => (self.screen_bitrate, Some(SHARE_SCREEN_FPS)),
                 (false, true) => (SHARE_CAMERA_BITRATE, Some(SHARE_CAMERA_FPS)),
@@ -497,7 +502,7 @@ impl Session {
                     enc.max_bitrate = Some(max_bitrate);
                     enc.max_framerate = max_framerate;
                     enc.scale_resolution_down_by = Some(if sharing && !screen { SHARE_CAMERA_SCALE } else { 1.0 });
-                    enc.scalability_mode = Some(TEMPORAL_LAYERS.to_owned());
+                    enc.scalability_mode = layers.then(|| TEMPORAL_LAYERS.to_owned());
                 } else {
                     enc.priority = Priority::High;
                 }
@@ -510,7 +515,7 @@ impl Session {
                 });
             }
             let layered = sender.set_parameters(params.clone());
-            let result = if video && layered.is_err() {
+            let result = if layers && layered.is_err() {
                 params.encodings.iter_mut().for_each(|enc| enc.scalability_mode = None);
                 sender.set_parameters(params)
             } else {

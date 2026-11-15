@@ -1,4 +1,5 @@
 fn main() {
+    platform_cfgs();
     let config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("translations")
         // Strings are translated the same wherever they appear, so the .po has no per-component contexts
@@ -6,8 +7,18 @@ fn main() {
     if let Err(e) = slint_build::compile_with_config("ui/app.slint", config) {
         println!("cargo::error={e}");
     }
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
-        android();
+    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("android") => android(),
+        Ok("windows") => windows(),
+        _ => {}
+    }
+}
+
+/// The app icon (`packaging/icon/make.sh`) as the .exe's resource
+fn windows() {
+    println!("cargo::rerun-if-changed=../packaging/windows/call-danya.ico");
+    if let Err(e) = winresource::WindowsResource::new().set_icon("../packaging/windows/call-danya.ico").compile() {
+        println!("cargo::error=couldn't embed the icon: {e}");
     }
 }
 
@@ -27,5 +38,15 @@ fn android() {
     let Some(dest) = out.as_deref().and_then(|out| out.ancestors().nth(3)) else { return };
     if let Err(e) = std::fs::copy(&jar, dest.join("libwebrtc.jar")) {
         println!("cargo::error=couldn't copy {}: {e}", jar.display());
+    }
+}
+
+/// `cfg(desktop)` on macOS and Windows, `cfg(mobile)` on Android and iOS, as in the engine's build.rs.
+fn platform_cfgs() {
+    println!("cargo::rustc-check-cfg=cfg(desktop, mobile)");
+    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("macos" | "windows") => println!("cargo::rustc-cfg=desktop"),
+        Ok("android" | "ios") => println!("cargo::rustc-cfg=mobile"),
+        _ => {}
     }
 }
