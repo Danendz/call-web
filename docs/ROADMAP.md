@@ -66,7 +66,7 @@ A smoother, less raw UI, kept the same in both clients.
 
 - [x] **Friends list.** A missed call shows on the caller's row (count and time, ✕ to clear it) instead of in its own card, and is cleared on its own once the two talk. Friends are sorted missed, online, in a call, offline; the call button is off for someone offline. ⋯ opens a popover (a bottom sheet on a phone) with Remove and Block, each asked again before it's done.
 - [x] **Settings pages.** The root lists Audio, Video, Speech, Account (and Debug on native), each with a summary of its value; a page slides in with a back button in the header. Account moves into Settings on the web too.
-- [ ] **Every overlay animates.** Dialogs, the call overlay and menus fade and rise in and out, in one shared dialog shell on native.
+- [x] **Every overlay animates.** Dialogs, the call overlay and menus fade and rise in and out, in one shared dialog shell on native.
 - [ ] **Motion.** Lists animate as rows come, go and reorder; buttons answer a press; screens crossfade; presence and progress changes ease. All of it honors reduced motion.
 
 ## Phase 3 — Native only
