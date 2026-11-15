@@ -2,12 +2,12 @@
 //! thread. Lines are translated in the order asked; if they come faster than that, the oldest waiting ones are
 //! dropped, since newer live text has replaced them.
 
-#[cfg(not(any(target_os = "ios", feature = "native-translate")))]
+#[cfg(feature = "wasm-translate")]
 mod host;
 mod model;
-#[cfg(any(target_os = "ios", feature = "native-translate"))]
+#[cfg(not(feature = "wasm-translate"))]
 mod native;
-#[cfg(any(target_os = "ios", feature = "native-translate"))]
+#[cfg(not(feature = "wasm-translate"))]
 use native as host;
 
 use std::collections::VecDeque;

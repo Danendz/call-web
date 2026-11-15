@@ -1,14 +1,22 @@
-//! Compiles Bergamot's WebAssembly (vendor/bergamot, shared with the web app) to machine code for the target, so the
-//! app deserializes it at runtime instead of carrying Cranelift, which also took ~370 MB of memory to compile it.
-
-use std::path::PathBuf;
+//! Sets the platform cfgs and, with the `wasm-translate` feature, compiles Bergamot's WebAssembly (vendor/bergamot,
+//! shared with the web app) to machine code for the target, so the app deserializes it at runtime instead of carrying
+//! Cranelift, which also took ~370 MB of memory to compile it. Without it the app runs Bergamot built natively
+//! (crates/bergamot).
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     platform_cfgs();
-    // iOS runs the engine built natively (crates/bergamot)
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
-        return Ok(());
-    }
+    wasm()
+}
+
+#[cfg(not(feature = "wasm-translate"))]
+fn wasm() -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+#[cfg(feature = "wasm-translate")]
+fn wasm() -> Result<(), Box<dyn std::error::Error>> {
+    use std::path::PathBuf;
+
     let wasm = PathBuf::from("../../../vendor/bergamot/bergamot.wasm");
     println!("cargo::rerun-if-changed={}", wasm.display());
     let target = std::env::var("TARGET")?;

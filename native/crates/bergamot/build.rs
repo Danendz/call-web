@@ -1,9 +1,10 @@
 //! Builds bergamot-translator from source: the release Firefox's WASM build (vendor/bergamot) comes from, fetched once
-//! into `target/bergamot-src/`, patched for current Apple toolchains, then built with CMake per target into
+//! into `target/bergamot-src/`, patched for current toolchains, then built with CMake per target into
 //! `target/bergamot-build/<target>/` and linked statically. The C shim (`cpp/shim.cpp`) is compiled into Bergamot's own
 //! library target, so it gets that target's include paths and defines.
 //!
-//! Needs git, CMake and network on the first build; Apple targets only so far (iOS, its simulator, macOS on arm64).
+//! Needs git, CMake and network on the first build. Builds for the app's targets: macOS and iOS (NEON, Accelerate),
+//! Android (NEON, through the NDK cargo-ndk names) and Windows on x86-64 (intgemm's SSE to AVX-512, picked at runtime).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -62,6 +63,46 @@ const PATCHES: &[(&str, &str, &str)] = &[
         "    LOG(debug, \"Destroyed parameter object of type {}\", acceptedElementType_);\n",
         "",
     ),
+    // MSVC's warnings as errors, as with -Werror above
+    ("inference/marian-fork/CMakeLists.txt", "list(APPEND ALL_WARNINGS /WX; /W4;)", "list(APPEND ALL_WARNINGS /W4;)"),
+    // MSVC's whole-program optimization leaves objects only the same compiler's linker can read, at link time; Rust
+    // links them
+    ("inference/CMakeLists.txt", "/MT /O2 ${INTRINSICS} /MP /GL /DNDEBUG", "/MT /O2 ${INTRINSICS} /MP /DNDEBUG"),
+    (
+        "inference/marian-fork/CMakeLists.txt",
+        "/MT /O2 ${INTRINSICS} /MP /GL /DNDEBUG",
+        "/MT /O2 ${INTRINSICS} /MP /DNDEBUG",
+    ),
+    // PCRE2's headers expect its DLL on Windows unless told it's linked statically
+    (
+        "inference/3rd_party/ssplit-cpp/src/ssplit/regex.h",
+        "#define PCRE2_CODE_UNIT_WIDTH 8\n",
+        "#define PCRE2_CODE_UNIT_WIDTH 8\n#define PCRE2_STATIC\n",
+    ),
+    // PCRE2 is built apart, where Visual Studio builds Debug unless asked, against the DLL runtime unless asked
+    (
+        "inference/3rd_party/ssplit-cpp/cmake/FindPCRE2.cmake",
+        "    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>\n",
+        "    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release\n    INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release\n",
+    ),
+    (
+        "inference/3rd_party/ssplit-cpp/cmake/FindPCRE2.cmake",
+        "    ${PCRE2_JIT_OPTION}\n",
+        "    ${PCRE2_JIT_OPTION}\n    -DPCRE2_STATIC_RUNTIME=ON\n",
+    ),
+    // Marian makes a ruy context for every matrix product, which sets up ruy's allocator and reads the CPU's features
+    // each time; one per thread is reused instead. Contexts aren't shared between threads, and the translator's
+    // lives on one
+    (
+        "inference/marian-fork/src/tensors/cpu/ruy_interface.h",
+        "\n      ruy::Context context;\n",
+        "\n      static thread_local ruy::Context context;\n",
+    ),
+    (
+        "inference/marian-fork/src/tensors/cpu/prod_blas.h",
+        "                    const int ldc) {\n  ruy::Context context;\n",
+        "                    const int ldc) {\n  static thread_local ruy::Context context;\n",
+    ),
     // Compiles our shim into Bergamot's library
     (
         "inference/src/translator/CMakeLists.txt",
@@ -89,9 +130,11 @@ fn build() -> Result<(), String> {
 
     let target = env("TARGET")?;
     let platform = match target.as_str() {
-        "aarch64-apple-ios" => Some(("iphoneos", "iOS")),
-        "aarch64-apple-ios-sim" => Some(("iphonesimulator", "iOS")),
-        "aarch64-apple-darwin" => None,
+        "aarch64-apple-ios" => Platform::Ios("iphoneos"),
+        "aarch64-apple-ios-sim" => Platform::Ios("iphonesimulator"),
+        "aarch64-apple-darwin" => Platform::MacOs,
+        "aarch64-linux-android" => Platform::Android,
+        "x86_64-pc-windows-msvc" => Platform::Windows,
         other => return Err(format!("no build for {other} yet")),
     };
 
@@ -100,54 +143,136 @@ fn build() -> Result<(), String> {
     let build = target_dir.join("bergamot-build").join(&target);
     std::fs::create_dir_all(&build).map_err(|e| format!("{}: {e}", build.display()))?;
 
-    // Marian sets its own compile flags, so the toolchain file is how the target reaches it and PCRE2's sub-build
-    let mut toolchain = String::new();
-    if let Some((sysroot, system)) = platform {
-        toolchain = format!(
-            "set(CMAKE_SYSTEM_NAME {system})\nset(CMAKE_OSX_SYSROOT {sysroot})\nset(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)\n\
-             # Left empty when cross-compiling, and ruy's cpuinfo then leaves out its ARM code\n\
-             set(CMAKE_SYSTEM_PROCESSOR arm64)\n\
-             # Executables in a dependency would otherwise be app bundles, which its install rules don't allow\n\
-             set(CMAKE_MACOSX_BUNDLE OFF)\n"
-        );
-    }
-    let toolchain_file = build.join("toolchain.cmake");
-    write_if_changed(&toolchain_file, &toolchain)?;
-
     let mut configure = cmake();
     configure.arg("-S").arg(source.join("inference")).arg("-B").arg(&build);
-    if platform.is_some() {
-        configure.arg(format!("-DCMAKE_TOOLCHAIN_FILE={}", toolchain_file.display()));
+    match platform {
+        Platform::Ios(sysroot) => {
+            // Marian sets its own compile flags, so the toolchain file is how the target reaches it and PCRE2's
+            // sub-build
+            let toolchain = format!(
+                "set(CMAKE_SYSTEM_NAME iOS)\nset(CMAKE_OSX_SYSROOT {sysroot})\nset(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)\n\
+                 # Left empty when cross-compiling, and ruy's cpuinfo then leaves out its ARM code\n\
+                 set(CMAKE_SYSTEM_PROCESSOR arm64)\n\
+                 # Executables in a dependency would otherwise be app bundles, which its install rules don't allow\n\
+                 set(CMAKE_MACOSX_BUNDLE OFF)\n"
+            );
+            let toolchain_file = build.join("toolchain.cmake");
+            write_if_changed(&toolchain_file, &toolchain)?;
+            configure.arg(format!("-DCMAKE_TOOLCHAIN_FILE={}", toolchain_file.display()));
+        }
+        Platform::MacOs => {}
+        Platform::Android => {
+            // The NDK's own toolchain file; PCRE2's sub-build gets it too
+            configure.args([
+                format!("-DCMAKE_TOOLCHAIN_FILE={}", ndk_toolchain()?),
+                "-DANDROID_ABI=arm64-v8a".into(),
+                // The app's minSdk (android/app/build.gradle.kts)
+                "-DANDROID_PLATFORM=android-29".into(),
+                // The app's library carries its own C++ runtime, as WebRTC's prebuilt does
+                "-DANDROID_STL=c++_static".into(),
+            ]);
+        }
+        Platform::Windows => {
+            configure.args([
+                // Matches the app's static C runtime (+crt-static), which Bergamot's flags already ask for (/MT)
+                "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                // Float matrix products through ruy, as on Android: Marian otherwise wants MKL or OpenBLAS on x86
+                "-DUSE_RUY=ON",
+                "-DUSE_RUY_SGEMM=ON",
+                "-DUSE_MKL=OFF",
+                // Builds for SSE2 only (MSVC's default /arch); intgemm picks SSSE3, AVX2 or AVX-512 by the CPU at
+                // runtime, so the app still starts on any x86-64 CPU
+                "-DBUILD_ARCH=x86-64-v2",
+            ]);
+        }
     }
     configure.args([
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DBUILD_ARCH=armv8-a",
         "-DGIT_SUBMODULE=OFF",
         "-DCOMPILE_TESTS=OFF",
         "-DCOMPILE_UNIT_TESTS=OFF",
         "-DCOMPILE_LIBRARY_ONLY=ON",
         "-DUSE_STATIC_LIBS=ON",
         "-DSSPLIT_USE_INTERNAL_PCRE2=ON",
-        // Marian defines these, which turn its SSE code into NEON through simd_utils, only for its own sources;
-        // Bergamot's include the same headers
-        "-DCMAKE_CXX_FLAGS=-DARM -DFMA -DSSE",
     ]);
+    if !matches!(platform, Platform::Windows) {
+        configure.args([
+            "-DBUILD_ARCH=armv8-a",
+            // Marian defines these, which turn its SSE code into NEON through simd_utils, only for its own sources;
+            // Bergamot's include the same headers
+            "-DCMAKE_CXX_FLAGS=-DARM -DFMA -DSSE",
+        ]);
+    }
     configure.arg(format!("-DBERGAMOT_SHIM={}", shim.display()));
     run(&mut configure)?;
 
     let jobs = std::env::var("NUM_JOBS").unwrap_or_else(|_| "8".into());
-    run(cmake().arg("--build").arg(&build).args(["--target", "bergamot-translator-source", "-j", &jobs]))?;
+    run(cmake().arg("--build").arg(&build).args([
+        "--target",
+        "bergamot-translator-source",
+        "--config",
+        "Release",
+        "-j",
+        &jobs,
+    ]))?;
 
     let out = PathBuf::from(env("OUT_DIR")?);
-    for lib in archives(&build)? {
-        let lib = if lib.ends_with("libsentencepiece_train.a") { without_protobuf(&lib, &out)? } else { lib };
-        let (Some(dir), Some(name)) = (lib.parent(), lib.file_stem().and_then(|s| s.to_str())) else { continue };
+    let windows = matches!(platform, Platform::Windows);
+    for lib in archives(&build, if windows { "lib" } else { "a" })? {
+        let Some(name) = lib.file_stem().and_then(|s| s.to_str()).map(str::to_owned) else { continue };
+        let lib = if name.ends_with("sentencepiece_train") && !windows { without_protobuf(&lib, &out)? } else { lib };
+        let Some(dir) = lib.parent() else { continue };
         println!("cargo::rustc-link-search=native={}", dir.display());
-        println!("cargo::rustc-link-lib=static={}", name.trim_start_matches("lib"));
+        println!("cargo::rustc-link-lib=static={}", if windows { &name } else { name.trim_start_matches("lib") });
     }
-    println!("cargo::rustc-link-lib=framework=Accelerate");
-    println!("cargo::rustc-link-lib=c++");
+    match platform {
+        Platform::Ios(_) | Platform::MacOs => {
+            println!("cargo::rustc-link-lib=framework=Accelerate");
+            println!("cargo::rustc-link-lib=c++");
+        }
+        Platform::Android => link_ndk_cxx(&ndk_toolchain()?)?,
+        // Marian's file paths (pathie-cpp)
+        Platform::Windows => println!("cargo::rustc-link-lib=shlwapi"),
+    }
     Ok(())
+}
+
+/// The NDK's CMake toolchain file, which cargo-ndk names
+fn ndk_toolchain() -> Result<String, String> {
+    println!("cargo::rerun-if-env-changed=CARGO_NDK_CMAKE_TOOLCHAIN_PATH");
+    std::env::var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH")
+        .or_else(|_| env("ANDROID_NDK_HOME").map(|ndk| format!("{ndk}/build/cmake/android.toolchain.cmake")))
+}
+
+/// Links the NDK's static C++ runtime, which the build compiled against. Only its two archives are copied out: the folder
+/// they're in also has a static libc, which the linker would then take over the shared one.
+fn link_ndk_cxx(toolchain: &str) -> Result<(), String> {
+    let ndk = Path::new(toolchain).ancestors().nth(3).ok_or("the NDK's toolchain file isn't in an NDK")?;
+    let prebuilt = ndk.join("toolchains/llvm/prebuilt");
+    let host = std::fs::read_dir(&prebuilt)
+        .map_err(|e| format!("{}: {e}", prebuilt.display()))?
+        .flatten()
+        .next()
+        .ok_or_else(|| format!("{} is empty", prebuilt.display()))?;
+    let libs = host.path().join("sysroot/usr/lib/aarch64-linux-android");
+    let out = PathBuf::from(env("OUT_DIR")?).join("ndk-cxx");
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for name in ["c++_static", "c++abi"] {
+        let file = format!("lib{name}.a");
+        std::fs::copy(libs.join(&file), out.join(&file)).map_err(|e| format!("{file}: {e}"))?;
+        println!("cargo::rustc-link-lib=static={name}");
+    }
+    println!("cargo::rustc-link-search=native={}", out.display());
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum Platform {
+    /// With the SDK's name
+    Ios(&'static str),
+    MacOs,
+    Android,
+    Windows,
 }
 
 /// Clones the source at `COMMIT` with the submodules it needs and patches it, once.
@@ -157,12 +282,15 @@ fn fetch(dir: &Path) -> Result<PathBuf, String> {
         if dir.exists() {
             std::fs::remove_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
-        run(Command::new("git").args(["clone", "--quiet", "--filter=blob:none", "--no-checkout", REPO]).arg(dir))?;
+        // Line endings as committed, also where git would turn them into CRLF (Windows), so the patches match
+        run(Command::new("git")
+            .args(["-c", "core.autocrlf=false", "clone", "--quiet", "--filter=blob:none", "--no-checkout", REPO])
+            .arg(dir))?;
         run(Command::new("git").arg("-C").arg(dir).args(["checkout", "--quiet", COMMIT]))?;
         run(Command::new("git")
             .arg("-C")
             .arg(dir)
-            .args(["submodule", "update", "--init", "--recursive", "--depth", "1", "--"])
+            .args(["-c", "core.autocrlf=false", "submodule", "update", "--init", "--recursive", "--depth", "1", "--"])
             .args(SUBMODULES))?;
         std::fs::write(&done, COMMIT).map_err(|e| format!("{}: {e}", done.display()))?;
     }
@@ -198,8 +326,8 @@ fn without_protobuf(lib: &Path, out: &Path) -> Result<PathBuf, String> {
     Ok(copy)
 }
 
-/// Every static library the build made
-fn archives(dir: &Path) -> Result<Vec<PathBuf>, String> {
+/// Every static library the build made, by its extension
+fn archives(dir: &Path, extension: &str) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -208,7 +336,7 @@ fn archives(dir: &Path) -> Result<Vec<PathBuf>, String> {
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if path.extension().is_some_and(|e| e == "a") {
+            } else if path.extension().is_some_and(|e| e == extension) {
                 found.push(path);
             }
         }

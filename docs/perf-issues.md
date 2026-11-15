@@ -69,7 +69,14 @@ For scale, the headless `join` peer used 14–21% for the same call with no UI. 
 
 iOS won't let a sideloaded app map memory executable, so wasmtime can't run Bergamot's ahead-of-time machine code there. Measured on 2026-11-15 on an M-series Mac, zh→en, the 41 lines of `tests/bergamot_reference.json`: wasmtime's Pulley interpreter (after rewriting the module's atomics as plain loads, stores and helper calls, since Pulley has no threads) gave identical output, but took **~390 ms a line (max 670 ms)** against **~9 ms** for the machine code, about 45× slower, and loaded in ~460 ms against ~70 ms. The app translates the other person's live line every time it grows, so that would keep a core busy for as long as they talk. Pulley was dropped. A native C++ build of bergamot-translator replaces it, first on iOS, then on every platform if it's at least as fast as wasmtime there (Phase 5, I0).
 
-The native build (`crates/bergamot`, NEON + Accelerate), measured on 2026-11-15 on the same Mac with `tests/translate.rs` in release, loading included: en→zh 37 lines in **366 ms** against 434 ms for wasmtime, zh→en 42 lines in **403 ms** against 491 ms, so ~18% faster. Its output differs from WASM's on 14 and 11 of those lines (other rounding, so other word picks). In the iOS simulator the zh→en model loads in ~70 ms.
+The native build (`crates/bergamot`) now runs on every platform. Measured on 2026-11-15 with `tests/translate.rs` in release (en→zh 37 lines, zh→en 42 lines, after loading), three runs each, alternated:
+
+| | wasmtime | native | |
+|---|---|---|---|
+| macOS (M-series, NEON + Accelerate) | 9.6 / 10.3 ms a line | 7.4 / 8.2 ms a line | ~22% faster |
+| Android emulator (arm64 API 31 on the same Mac, NEON + ruy) | 10.1–10.3 / 10.8–11.4 ms a line | 7.3–7.4 / 8.3–8.4 ms a line | ~26% faster |
+
+Loading takes ~40–60 ms native against ~50–90 ms. The output differs from WASM's on 14 and 11 lines (other rounding, other word picks), the same lines on both. At first Android's native build was ~30% *slower* than wasmtime: Marian made a new `ruy::Context` (allocator, CPU feature detection) for every matrix product, which Accelerate's float path on Apple hid; one per thread fixed it. Windows (intgemm + ruy) builds but hasn't been measured. In the iOS simulator the zh→en model loads in ~70 ms.
 
 ## Server
 

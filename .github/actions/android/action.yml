@@ -21,5 +21,7 @@ runs:
         cd native && rustup target add aarch64-linux-android
     - uses: Swatinem/rust-cache@v2
       with: { workspaces: native, shared-key: "${{ inputs.cache-key }}" }
+    - uses: ./.github/actions/bergamot
+      with: { platform: android }
     - uses: ./.github/actions/sherpa-onnx
       with: { target: aarch64-linux-android }

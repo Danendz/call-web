@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: check }
+      - uses: ./.github/actions/bergamot
+        with: { platform: macOS }
       - uses: ./.github/actions/sherpa-onnx
       - run: cargo clippy --all-targets --locked
       - run: cargo test --locked --no-run
@@ -65,12 +67,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: "${{ matrix.key }}" }
       - if: matrix.key == 'release-ios'
-        uses: actions/cache@v4
-        with:
-          path: |
-            native/target/bergamot-src
-            native/target/bergamot-build
-          key: bergamot-ios-${{ hashFiles('native/crates/bergamot/**') }}
+        uses: ./.github/actions/bergamot
+        with: { platform: ios }
       - uses: ./.github/actions/sherpa-onnx
         with: { target: aarch64-apple-ios }
       - run: ${{ matrix.run }}

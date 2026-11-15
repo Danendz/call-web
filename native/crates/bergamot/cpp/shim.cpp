@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "translator/byte_array_util.h"
 #include "translator/service.h"
 
 using marian::bergamot::AlignedMemory;
@@ -18,6 +17,12 @@ using marian::bergamot::BlockingService;
 using marian::bergamot::MemoryBundle;
 using marian::bergamot::ResponseOptions;
 using marian::bergamot::TranslationModel;
+
+// A file's contents, read by Rust
+struct BergamotBytes {
+  const char* data;
+  size_t len;
+};
 
 struct BergamotTranslator {
   BergamotTranslator(const BlockingService::Config& config, std::shared_ptr<TranslationModel> model)
@@ -42,6 +47,13 @@ void fail(char** error, const char* what) {
   if (error != nullptr) *error = copy(what);
 }
 
+// A copy of a file's bytes at the alignment Marian reads it with
+AlignedMemory aligned(const BergamotBytes& bytes, size_t alignment) {
+  AlignedMemory memory(bytes.len, alignment);
+  std::memcpy(memory.begin(), bytes.data, bytes.len);
+  return memory;
+}
+
 BlockingService::Config serviceConfig() {
   BlockingService::Config config;
   config.cacheSize = 0;
@@ -52,23 +64,24 @@ BlockingService::Config serviceConfig() {
 
 extern "C" {
 
-// Loads a model from its files. `trg_vocab` may be null when one vocabulary serves both languages. On failure returns
-// null and sets `*error`.
-BergamotTranslator* bergamot_new(const char* config, const char* model, const char* lex, const char* src_vocab,
-                                 const char* trg_vocab, char** error) {
+// Loads a model from its files' bytes, which Rust reads: Marian opens files by narrow path, which on Windows can't name
+// a folder outside the system code page. `trg_vocab.data` may be null when one vocabulary serves both languages. On
+// failure returns null and sets `*error`.
+BergamotTranslator* bergamot_new(const char* config, BergamotBytes model, BergamotBytes lex, BergamotBytes src_vocab,
+                                 BergamotBytes trg_vocab, char** error) {
   try {
     MemoryBundle memory;
-    memory.models.emplace_back(marian::bergamot::loadFileToMemory(model, 256));
-    memory.shortlist = marian::bergamot::loadFileToMemory(lex, 64);
-    auto source = std::make_shared<AlignedMemory>(marian::bergamot::loadFileToMemory(src_vocab, 64));
+    memory.models.emplace_back(aligned(model, 256));
+    memory.shortlist = aligned(lex, 64);
+    auto source = std::make_shared<AlignedMemory>(aligned(src_vocab, 64));
     memory.vocabs.push_back(source);
-    if (trg_vocab != nullptr) {
-      memory.vocabs.push_back(std::make_shared<AlignedMemory>(marian::bergamot::loadFileToMemory(trg_vocab, 64)));
+    if (trg_vocab.data != nullptr) {
+      memory.vocabs.push_back(std::make_shared<AlignedMemory>(aligned(trg_vocab, 64)));
     } else {
       memory.vocabs.push_back(source);
     }
-    auto model = std::make_shared<TranslationModel>(std::string(config), std::move(memory));
-    return new BergamotTranslator{serviceConfig(), std::move(model)};
+    auto translation = std::make_shared<TranslationModel>(std::string(config), std::move(memory));
+    return new BergamotTranslator{serviceConfig(), std::move(translation)};
   } catch (const std::exception& e) {
     fail(error, e.what());
   } catch (...) {
