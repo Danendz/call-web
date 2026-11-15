@@ -1,5 +1,6 @@
 import { Phone, PhoneOff, X } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
+import { Exit } from "../ui/Exit";
 import type { FriendsSocket } from "./friendsSocket";
 import { startRinging, stopRinging } from "./ringtone";
 import { useFriendsT } from "./strings";
@@ -9,6 +10,11 @@ const NOTICE_SHOWN_MS = 6_000;
 
 /** A call coming in, your ring going out, or how it ended: shown over whatever page is open. */
 export function CallOverlay({ friends }: { friends: FriendsSocket }) {
+  return <Exit>{useCard(friends)}</Exit>;
+}
+
+/** The card for what's going on, or null */
+function useCard(friends: FriendsSocket) {
   const t = useFriendsT();
   const { incoming, outgoing, notice } = useSyncExternalStore(friends.subscribe, friends.getState);
   const call = incoming[0];
@@ -64,7 +70,12 @@ export function CallOverlay({ friends }: { friends: FriendsSocket }) {
     return (
       <div className="call-overlay notice" role="status">
         <span>{text}</span>
-        <button className="icon-btn small" aria-label={t.dismiss} title={t.dismiss} onClick={() => friends.dismissNotice()}>
+        <button
+          className="icon-btn small"
+          aria-label={t.dismiss}
+          title={t.dismiss}
+          onClick={() => friends.dismissNotice()}
+        >
           <X size={18} />
         </button>
       </div>

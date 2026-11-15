@@ -193,6 +193,7 @@ export component AppWindow inherits Window {
     in property <int> invites-max;
     in property <bool> password-changed;
     in-out property <bool> sign-in-open;
+    property <bool> sign-in-up;
     // Why the room can't be joined: "", "time-limit", "not-invited" or "elsewhere"
     in property <string> full-reason;
     callback sign-in(string, string);
@@ -307,7 +308,10 @@ export component AppWindow inherits Window {
             download-pack => { root.download-pack(); }
             dismiss-live-prompt => { root.dismiss-live-prompt(); }
             account: root.account;
-            open-sign-in => { root.sign-in-open = true; }
+            open-sign-in => {
+                root.sign-in-open = true;
+                root.sign-in-up = true;
+            }
             friends: root.friends;
             friend-requests: root.friend-requests;
             pending-requests: root.pending-requests;
@@ -560,15 +564,18 @@ export component AppWindow inherits Window {
             dismiss => { root.dismiss-translation-prompt(); }
         }
 
-        if root.sign-in-open && root.account == "signed-out": SignInDialog {
+        // Up until it has animated out, after sign-in-open is cleared
+        if root.sign-in-up: SignInDialog {
+            open: root.sign-in-open && root.account == "signed-out";
             error: root.account-error;
             busy: root.account-busy;
             sign-in(user, password) => { root.sign-in(user, password); }
             register(user, password, invite) => { root.register(user, password, invite); }
             recover(user, code, password) => { root.recover(user, code, password); }
             clear-error => { root.clear-account-error(); }
-            close => {
+            closed => {
                 root.sign-in-open = false;
+                root.sign-in-up = false;
                 root.clear-account-error();
                 keys.focus();
             }
@@ -576,7 +583,7 @@ export component AppWindow inherits Window {
 
         if root.recovery-code != "": RecoveryDialog {
             code: root.recovery-code;
-            saved => { root.recovery-saved(); }
+            closed => { root.recovery-saved(); }
         }
 
         // Rings show over every screen, a call too; picture-in-picture is too small for them

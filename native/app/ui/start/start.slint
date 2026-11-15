@@ -243,7 +243,7 @@ export component StartScreen inherits Rectangle {
 
     if asking: JoinDialog {
         submit(link) => { root.open-link(link) }
-        close => { asking = false; }
+        closed => { asking = false; }
     }
 
     // Asked once, while live subtitles are on

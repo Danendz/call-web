@@ -16,6 +16,11 @@
   animation: rise var(--med) var(--ease);
 }
 
+.translation-offer.leaving {
+  pointer-events: none;
+  animation: sink var(--fast) var(--ease) forwards;
+}
+
 .translation-offer p {
   margin: 0;
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
 import { useSubtitles } from "../settings/subtitles";
+import { Exit } from "../ui/Exit";
 import { useT } from "../ui/i18n";
 import { ModelAction } from "./ModelAction";
 import { pairFor, sizeMb, useModelStatus } from "./models";
@@ -47,25 +48,28 @@ export function TranslationOffer({ lang }: { lang: Lang }) {
   }, [lang]);
 
   const open = subtitles && status.kind !== "checking" && status.kind !== "ready" && !dismissed.includes(lang);
-  if (!open) return null;
   return (
-    <div className="translation-offer" role="dialog" aria-label={t.liveTranslation}>
-      <p>{status.kind === "failed" ? t.downloadFailed : t.liveTranslationOffer(LANG_NAMES[lang], sizeMb(pair))}</p>
-      <div className="translation-offer-actions">
-        {status.kind !== "downloading" && (
-          <button
-            type="button"
-            onClick={() => {
-              const next = [...dismissed, lang];
-              saveDismissed(next);
-              setDismissed(next);
-            }}
-          >
-            {t.notNow}
-          </button>
-        )}
-        <ModelAction lang={lang} primary />
-      </div>
-    </div>
+    <Exit>
+      {open && (
+        <div className="translation-offer" role="dialog" aria-label={t.liveTranslation}>
+          <p>{status.kind === "failed" ? t.downloadFailed : t.liveTranslationOffer(LANG_NAMES[lang], sizeMb(pair))}</p>
+          <div className="translation-offer-actions">
+            {status.kind !== "downloading" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [...dismissed, lang];
+                  saveDismissed(next);
+                  setDismissed(next);
+                }}
+              >
+                {t.notNow}
+              </button>
+            )}
+            <ModelAction lang={lang} primary />
+          </div>
+        </div>
+      )}
+    </Exit>
   );
 }

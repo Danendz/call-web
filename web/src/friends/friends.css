@@ -228,6 +228,11 @@ button.menu-item.bad {
   animation: rise var(--med) var(--ease);
 }
 
+.call-overlay.leaving {
+  pointer-events: none;
+  animation: sink var(--fast) var(--ease) forwards;
+}
+
 .call-overlay.notice {
   padding: 8px 8px 8px 18px;
 }

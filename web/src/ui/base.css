@@ -316,6 +316,14 @@ select:disabled {
   }
 }
 
+/* Exit's leaving animation, back the way rise came in */
+@keyframes sink {
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
