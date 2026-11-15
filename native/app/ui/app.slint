@@ -21,6 +21,18 @@ export enum CamAccess { pending, granted, denied, missing }
 
 export component AppWindow inherits Window {
     in property <AppPhase> phase: start;
+    // Which screen the phase shows: starting, waiting and in-call are all the call screen
+    property <int> screen: phase == AppPhase.setup ? 1
+        : phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call ? 2
+        : phase == AppPhase.full ? 3
+        : phase == AppPhase.ended ? 4
+        : 0;
+    // A new screen fades in from the background
+    property <bool> curtain;
+    changed screen => {
+        curtain = true;
+        curtain-timer.running = true;
+    }
     in property <string> lang: "en";
     in property <string> room-url;
     in property <bool> reconnecting;
@@ -483,6 +495,22 @@ export component AppWindow inherits Window {
                 text: @tr("New room");
                 icon: Icons.plus;
                 clicked => { root.new-room(); }
+            }
+        }
+
+        // The window's background over a screen that just came in, fading away to show it
+        Rectangle {
+            background: Theme.bg;
+            opacity: root.curtain ? 1 : 0;
+            visible: self.opacity > 0;
+            animate opacity { duration: root.curtain ? 0ms : Theme.med; easing: Theme.ease; }
+            curtain-timer := Timer {
+                interval: 1ms;
+                running: false;
+                triggered => {
+                    self.running = false;
+                    root.curtain = false;
+                }
             }
         }
 

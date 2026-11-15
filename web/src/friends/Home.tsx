@@ -1,14 +1,15 @@
-import { Ellipsis, Link2, Phone, Shield, UserMinus, UserRound, X } from "lucide-react";
+import { Link2, UserRound } from "lucide-react";
 import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { FriendState, Lang, MissedCall, Presence } from "../../../shared/protocol";
 import { api } from "../account/api";
 import { SettingsSheet } from "../settings/SettingsSheet";
 import { IconButton } from "../ui/IconButton";
-import { MenuPanel } from "../ui/MenuPanel";
 import { Spinner } from "../ui/Spinner";
 import { navigate, newRoomPath } from "../ui/router";
 import type { FriendsSocket } from "./friendsSocket";
+import { FriendRow } from "./FriendRow";
 import { useFriendsT } from "./strings";
+import { useFlip } from "./useFlip";
 import "./friends.css";
 
 /** Missed calls from one friend: how many, and the latest. */
@@ -39,11 +40,24 @@ function missedByFriend(calls: MissedCall[]): Map<string, Missed> {
 }
 
 /** Friends with presence and missed calls, requests and private rooms still open: the signed-in start page. */
-export function Home({ friends, username, lang, onLang }: { friends: FriendsSocket; username: string; lang: Lang; onLang: (lang: Lang) => void }) {
+export function Home({
+  friends,
+  username,
+  lang,
+  onLang,
+}: {
+  friends: FriendsSocket;
+  username: string;
+  lang: Lang;
+  onLang: (lang: Lang) => void;
+}) {
   const t = useFriendsT();
   const state = useSyncExternalStore(friends.subscribe, friends.getState);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const lists = state.lists;
+  // Rows glide to their new place when the order changes
+  const list = useRef<HTMLElement>(null);
+  useFlip(list);
   // Requests and blocks answer over /ws/user with a new list; a failed one just leaves the list as it was
   const act = (action: string, name: string) => void api(`/api/friends/${action}`, { username: name }).catch(() => {});
   const locale = lang === "zh" ? "zh-CN" : "en";
@@ -108,7 +122,7 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
         </section>
       )}
 
-      <section className="home-card">
+      <section className="home-card" ref={list}>
         {!lists && <FriendSkeletons />}
         {lists && lists.friends.length === 0 && <p className="muted small">{t.noFriends}</p>}
         {lists &&
@@ -127,7 +141,7 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
             );
           })}
         {lists?.outgoing.map((name) => (
-          <div className="row" key={name}>
+          <div className="row" key={name} data-flip={name}>
             <span className="name">
               {name}
               <span className="muted small">{t.waiting}</span>
@@ -150,53 +164,6 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
   );
 }
 
-function FriendRow({
-  friend,
-  missed,
-  calling,
-  onCall,
-  onClearMissed,
-  onAct,
-}: {
-  friend: FriendState;
-  /** "Missed call · 19:23", when there is one */
-  missed?: string;
-  calling: boolean;
-  onCall: () => void;
-  onClearMissed: () => void;
-  onAct: (action: string, name: string) => void;
-}) {
-  const t = useFriendsT();
-  return (
-    <div className="row friend">
-      <span className="name">
-        <span className={`presence ${friend.presence}`} aria-hidden />
-        {friend.username}
-        <span className="muted small">{t.presence[friend.presence]}</span>
-        {missed && (
-          <span className="missed small">
-            {missed}
-            <button type="button" className="missed-clear" aria-label={t.clearMissed(friend.username)} title={t.clearMissed(friend.username)} onClick={onClearMissed}>
-              <X size={14} />
-            </button>
-          </span>
-        )}
-      </span>
-      <span className="row-buttons">
-        <FriendMenu name={friend.username} onAct={onAct} />
-        <IconButton
-          label={t.call(friend.username)}
-          variant="active"
-          disabled={calling || friend.presence === "offline"}
-          onClick={onCall}
-        >
-          <Phone size={18} />
-        </IconButton>
-      </span>
-    </div>
-  );
-}
-
 /** Rows shaped like friends until the first list comes in */
 function FriendSkeletons() {
   return (
@@ -211,57 +178,6 @@ function FriendSkeletons() {
         </div>
       ))}
     </div>
-  );
-}
-
-/** ⋯ on a friend: Remove and Block, each asked again before it's done. */
-function FriendMenu({ name, onAct }: { name: string; onAct: (action: string, name: string) => void }) {
-  const t = useFriendsT();
-  const ref = useRef<HTMLSpanElement>(null);
-  const [open, setOpen] = useState(false);
-  const [confirm, setConfirm] = useState<"remove" | "block" | null>(null);
-  const close = () => setOpen(false);
-  const toggle = () => {
-    setConfirm(null);
-    setOpen(!open);
-  };
-  const act = (action: "remove" | "block") => {
-    onAct(action, name);
-    close();
-  };
-
-  return (
-    <span className="friend-menu" ref={ref}>
-      <IconButton label={t.moreFor(name)} variant="small" expanded={open} onClick={toggle}>
-        <Ellipsis size={18} />
-      </IconButton>
-      <MenuPanel label={t.moreFor(name)} open={open} onClose={close} within={ref}>
-        {confirm === null ? (
-          <>
-            <button type="button" role="menuitem" className="menu-item" onClick={() => setConfirm("remove")}>
-              <UserMinus size={18} />
-              <span>{t.remove}</span>
-            </button>
-            <button type="button" role="menuitem" className="menu-item bad" onClick={() => setConfirm("block")}>
-              <Shield size={18} />
-              <span>{t.block}</span>
-            </button>
-          </>
-        ) : (
-          <div className="menu-confirm" key={confirm}>
-            <p>{confirm === "remove" ? t.confirmRemove(name) : t.confirmBlock(name)}</p>
-            <div className="row-buttons">
-              <button type="button" onClick={() => setConfirm(null)}>
-                {t.cancel}
-              </button>
-              <button type="button" className={confirm === "block" ? "danger" : "primary"} onClick={() => act(confirm)}>
-                {confirm === "remove" ? t.remove : t.block}
-              </button>
-            </div>
-          </div>
-        )}
-      </MenuPanel>
-    </span>
   );
 }
 

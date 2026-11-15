@@ -205,10 +205,16 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_call_notice_with(with.into());
 
     let lists = state.lists.as_ref();
-    sync(&models.friends, friend_rows(lists.map(|l| (&l.friends[..], &l.missed[..])).unwrap_or_default()).into_iter());
-    sync(&models.requests, lists.map(|l| &l.incoming[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
-    sync(&models.pending, lists.map(|l| &l.outgoing[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
-    sync(&models.blocked, lists.map(|l| &l.blocked[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
+    let mut friends = friend_rows(lists.map(|l| (&l.friends[..], &l.missed[..])).unwrap_or_default());
+    for row in &mut friends {
+        let was = models.friends.iter().find(|old| old.name == row.name).map(|old| old.presence);
+        row.came_online = row.presence == "online" && was.is_some_and(|was| was != "online");
+    }
+    sync(&models.friends, friends.into_iter(), |r| r.name.clone());
+    let name = |n: &SharedString| n.clone();
+    sync(&models.requests, lists.map(|l| &l.incoming[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
+    sync(&models.pending, lists.map(|l| &l.outgoing[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
+    sync(&models.blocked, lists.map(|l| &l.blocked[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
     sync(
         &models.rooms,
         lists
@@ -216,6 +222,7 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
             .unwrap_or_default()
             .iter()
             .map(|r| RoomRow { room_id: r.room_id.as_str().into(), with: r.with.as_str().into() }),
+        |r| r.room_id.clone(),
     );
 }
 
@@ -237,6 +244,7 @@ fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<Friend
                 presence: presence.into(),
                 missed: count,
                 missed_at: if count > 0 { date_time(last).into() } else { SharedString::default() },
+                came_online: false,
             };
             (last, order, row)
         })
@@ -245,14 +253,38 @@ fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<Friend
     rows.into_iter().map(|(_, _, row)| row).collect()
 }
 
-/// Replaces the rows that differ, so a list that didn't change isn't rebuilt under the pointer.
-fn sync<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, rows: impl Iterator<Item = T>) {
+/// Brings the model to `rows` by moving, adding and removing rows by `key` and replacing only the rows that changed,
+/// so a row that stays keeps its element (only the ones that come in or move fade in) and a list that didn't change
+/// isn't rebuilt under the pointer.
+fn sync<T: Clone + PartialEq + 'static, K: PartialEq>(
+    model: &ModelRc<T>,
+    rows: impl Iterator<Item = T>,
+    key: impl Fn(&T) -> K,
+) {
     let Some(vec) = model.as_any().downcast_ref::<VecModel<T>>() else { return };
     let rows: Vec<T> = rows.collect();
-    if vec.iter().eq(rows.iter().cloned()) {
-        return;
+    let key_at = |i: usize| vec.row_data(i).map(|old| key(&old));
+    for (i, row) in rows.iter().enumerate() {
+        let k = key(row);
+        // The row here is gone, or moved down past this one: it comes back in further down
+        while key_at(i).is_some_and(|old| {
+            old != k && (key_at(i + 1).as_ref() == Some(&k) || !rows.iter().skip(i).any(|r| key(r) == old))
+        }) {
+            vec.remove(i);
+        }
+        match (i..vec.row_count()).find(|&j| key_at(j).as_ref() == Some(&k)) {
+            Some(j) if j > i => {
+                vec.remove(j);
+                vec.insert(i, row.clone());
+            }
+            Some(_) if vec.row_data(i).as_ref() != Some(row) => vec.set_row_data(i, row.clone()),
+            Some(_) => {}
+            None => vec.insert(i, row.clone()),
+        }
     }
-    vec.set_vec(rows);
+    while vec.row_count() > rows.len() {
+        vec.remove(rows.len());
+    }
 }
 
 fn date_time(epoch_ms: u64) -> String {
@@ -335,5 +367,32 @@ fn write_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> 
     #[cfg(not(unix))]
     {
         fs::write(path, contents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synced(from: &[&str], to: &[&str]) -> Vec<String> {
+        let model: ModelRc<SharedString> = ModelRc::from(Rc::new(VecModel::from_iter(from.iter().map(|&n| n.into()))));
+        sync(&model, to.iter().map(|&n| n.into()), |n| n.clone());
+        model.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn sync_reaches_the_new_order() {
+        for (from, to) in [
+            (&["a", "b", "c", "d"][..], &["b", "c", "d", "a"][..]),
+            (&["a", "b", "c", "d"], &["d", "a", "b", "c"]),
+            (&["a", "b"], &["b", "a"]),
+            (&["a", "b", "c"], &["a", "c"]),
+            (&["a", "c"], &["a", "b", "c", "e"]),
+            (&["a", "b", "c"], &[]),
+            (&[], &["c", "a"]),
+            (&["x", "a", "y", "b"], &["b", "z", "a"]),
+        ] {
+            assert_eq!(synced(from, to), to, "{from:?} -> {to:?}");
+        }
     }
 }
