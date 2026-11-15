@@ -34,7 +34,7 @@ const en = {
   unblock: "Unblock",
   deleteAccount: "Delete account",
   deleteBody: "Deletes your account, friends and missed calls for good. Enter your password to confirm.",
-  language: "Language",
+  signedInAs: (username: string) => `Signed in as ${username}`,
 
   errors: {
     "bad-request": "Something's wrong with that request.",
@@ -85,7 +85,7 @@ const zh: typeof en = {
   unblock: "取消屏蔽",
   deleteAccount: "删除账号",
   deleteBody: "将永久删除你的账号、好友和未接来电。输入密码确认。",
-  language: "语言",
+  signedInAs: (username) => `当前账号：${username}`,
 
   errors: {
     "bad-request": "请求有误。",

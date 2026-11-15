@@ -2,7 +2,7 @@ import { Ellipsis, Link2, Phone, Shield, UserMinus, UserRound, X } from "lucide-
 import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { FriendState, Lang, MissedCall, Presence } from "../../../shared/protocol";
 import { api } from "../account/api";
-import { AccountSheet } from "../account/AccountSheet";
+import { SettingsSheet } from "../settings/SettingsSheet";
 import { IconButton } from "../ui/IconButton";
 import { MenuPanel } from "../ui/MenuPanel";
 import { Spinner } from "../ui/Spinner";
@@ -42,7 +42,7 @@ function missedByFriend(calls: MissedCall[]): Map<string, Missed> {
 export function Home({ friends, username, lang, onLang }: { friends: FriendsSocket; username: string; lang: Lang; onLang: (lang: Lang) => void }) {
   const t = useFriendsT();
   const state = useSyncExternalStore(friends.subscribe, friends.getState);
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const lists = state.lists;
   // Requests and blocks answer over /ws/user with a new list; a failed one just leaves the list as it was
   const act = (action: string, name: string) => void api(`/api/friends/${action}`, { username: name }).catch(() => {});
@@ -71,7 +71,7 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
             <Link2 size={18} />
             {t.newRoomLink}
           </button>
-          <IconButton label={username} onClick={() => setAccountOpen(true)}>
+          <IconButton label={username} onClick={() => setSettingsOpen(true)}>
             <UserRound size={20} />
           </IconButton>
         </div>
@@ -138,13 +138,13 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
         <AddFriend />
       </section>
 
-      <AccountSheet
-        open={accountOpen}
-        onClose={() => setAccountOpen(false)}
-        username={username}
-        blocked={lists?.blocked ?? []}
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
         lang={lang}
         onLang={onLang}
+        account={{ username, blocked: lists?.blocked ?? [] }}
+        startPage="account"
       />
     </div>
   );

@@ -1,18 +1,18 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
-import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { LangSwitch } from "../setup/lang-switch.slint";
-import { Segmented } from "../components/segmented.slint";
 import { AccountSection } from "../account/account-section.slint";
-import { Switch, SettingRow, Group, Shown, Heading } from "rows.slint";
-import { DebugSection } from "debug-section.slint";
+import { Group, PageRow, Divider } from "rows.slint";
+import { AudioPage } from "audio-page.slint";
+import { VideoPage } from "video-page.slint";
+import { SpeechPage, ModelState } from "speech-page.slint";
+import { DebugPage } from "debug-page.slint";
 
-// Where the on-device speech model stands, as the engine's ModelStatus
-export enum ModelState { missing, downloading, ready, failed }
+export { ModelState }
 
 // The app's settings over whatever screen is up, like the web's SettingsSheet: from the bottom on a phone or a
-// narrow window, from the right as a side panel otherwise. A tap on the dim, Esc or Back close it.
+// narrow window, from the right as a side panel otherwise. The first page lists the pages; Back or Esc goes up from
+// one, and a tap on the dim, or Esc or Back on the first page, close it.
 export component SettingsSheet inherits Rectangle {
     // From the bottom instead of the right
     in property <bool> sheet;
@@ -82,6 +82,12 @@ export component SettingsSheet inherits Rectangle {
     // The panel is gone: the owner removes it
     callback closed();
 
+    // The open page: "audio", "video", "speech", "account" or "debug", or empty for the first page
+    property <string> page;
+    // Going back: the page comes in from the left
+    property <bool> back;
+    // A page is coming in: at its start offset for one tick, then it slides into place
+    property <bool> entering;
     property <bool> shown;
     property <bool> closing;
     init => { keys.focus(); }
@@ -104,6 +110,14 @@ export component SettingsSheet inherits Rectangle {
         exit-timer.running = true;
     }
 
+    function go(next: string) {
+        back = next == "";
+        page = next;
+        entering = true;
+        flick.content-y = 0;
+        page-timer.running = true;
+    }
+
     exit-timer := Timer {
         interval: Theme.sheet;
         running: false;
@@ -113,12 +127,25 @@ export component SettingsSheet inherits Rectangle {
         }
     }
 
+    page-timer := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.entering = false;
+        }
+    }
+
     keys := FocusScope {
         width: 0;
         height: 0;
         key-pressed(event) => {
             if (event.text == Key.Escape || event.text == Key.Back) {
-                root.dismiss();
+                if (root.page != "") {
+                    root.go("");
+                } else {
+                    root.dismiss();
+                }
                 return accept;
             }
             reject
@@ -170,10 +197,23 @@ export component SettingsSheet inherits Rectangle {
         column := VerticalLayout {
             HorizontalLayout {
                 padding: 16px;
+                padding-left: root.page == "" ? 16px : 8px;
                 padding-bottom: 8px;
-                spacing: 8px;
+                spacing: 4px;
+                if root.page != "": IconButton {
+                    icon: Icons.chevron-left;
+                    label: @tr("Back");
+                    size: 36px;
+                    transparent: true;
+                    clicked => { root.go(""); }
+                }
                 Text {
-                    text: @tr("Settings");
+                    text: root.page == "audio" ? @tr("Audio")
+                        : root.page == "video" ? @tr("Video")
+                        : root.page == "speech" ? @tr("Speech")
+                        : root.page == "account" ? @tr("Account")
+                        : root.page == "debug" ? @tr("Debug")
+                        : @tr("Settings");
                     color: Theme.text;
                     font-size: 20px;
                     font-weight: 650;
@@ -189,7 +229,7 @@ export component SettingsSheet inherits Rectangle {
                 }
             }
 
-            Flickable {
+            flick := Flickable {
                 preferred-height: content.preferred-height;
                 content-height: content.preferred-height;
                 vertical-stretch: 1;
@@ -199,312 +239,85 @@ export component SettingsSheet inherits Rectangle {
                     alignment: start;
                     padding: 16px;
                     padding-top: 8px;
-                    spacing: 8px;
 
-                    Group {
-                        SettingRow {
-                            title: @tr("Connection stats");
-                            VerticalLayout {
-                                alignment: center;
-                                Switch {
-                                    label: @tr("Connection stats");
-                                    checked: root.show-stats;
-                                    toggled => { root.set-show-stats(!root.show-stats); }
-                                }
-                            }
+                    if root.page == "": Group {
+                        PageRow {
+                            icon: Icons.mic;
+                            title: @tr("Audio");
+                            detail: @tr("Noise suppression: {}", root.noise-suppression ? @tr("On") : @tr("Off"));
+                            clicked => { root.go("audio"); }
                         }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
+                        Divider { }
+                        PageRow {
+                            icon: Icons.video;
+                            title: @tr("Video");
+                            detail: @tr("Video codec: {}", root.video-codec == "h264" ? "H.264" : root.video-codec == "vp8" ? "VP8" : @tr("Auto"));
+                            clicked => { root.go("video"); }
                         }
-                        SettingRow {
-                            title: @tr("Live subtitles");
-                            VerticalLayout {
-                                alignment: center;
-                                Switch {
-                                    label: @tr("Live subtitles");
-                                    checked: root.subtitles-on;
-                                    toggled => { root.set-subtitles-on(!root.subtitles-on); }
-                                }
-                            }
+                        Divider { }
+                        PageRow {
+                            icon: Icons.languages;
+                            title: @tr("Speech");
+                            detail: (root.lang == "zh" ? "中文" : "English") + " · " + @tr("Live subtitles: {}", root.subtitles-on ? @tr("On") : @tr("Off"));
+                            clicked => { root.go("speech"); }
                         }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
+                        if root.username != "": Divider { }
+                        if root.username != "": PageRow {
+                            icon: Icons.user-round;
+                            title: @tr("Account");
+                            detail: root.username;
+                            clicked => { root.go("account"); }
                         }
-                        // The model for the language picked under "I speak"
-                        SettingRow {
-                            title: @tr("Live translation");
-                            detail: root.translation-state == ModelState.ready ? @tr("Downloaded · {}", root.translation-size)
-                                : root.translation-state == ModelState.downloading ? @tr("Downloading… {}%", root.translation-progress)
-                                : root.translation-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
-                                : @tr("Not downloaded · {}", root.translation-size);
-                            detail-color: root.translation-state == ModelState.failed ? Theme.danger-text : Theme.muted;
-                            VerticalLayout {
-                                alignment: center;
-                                if root.translation-state == ModelState.missing: Button {
-                                    text: @tr("Download");
-                                    icon: Icons.download;
-                                    kind: ButtonKind.primary;
-                                    height-hint: 38px;
-                                    clicked => { root.download-translation(); }
-                                }
-                                if root.translation-state == ModelState.failed: Button {
-                                    text: @tr("Try again");
-                                    kind: ButtonKind.primary;
-                                    height-hint: 38px;
-                                    clicked => { root.download-translation(); }
-                                }
-                                if root.translation-state == ModelState.ready: Button {
-                                    text: @tr("Delete");
-                                    kind: ButtonKind.danger;
-                                    height-hint: 38px;
-                                    clicked => { root.delete-translation(); }
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        SettingRow {
-                            title: @tr("Noise suppression");
-                            detail: @tr("May slow down games or other heavy apps while you share your screen.");
-                            VerticalLayout {
-                                alignment: center;
-                                Switch {
-                                    label: @tr("Noise suppression");
-                                    checked: root.noise-suppression;
-                                    toggled => { root.set-noise-suppression(!root.noise-suppression); }
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        SettingRow {
-                            title: @tr("Graphics");
-                            detail: !root.renderer-now ? @tr("Applies after restart.")
-                                : root.renderer-locked ? @tr("Can't be changed during a call.") : "";
-                            VerticalLayout {
-                                alignment: center;
-                                Segmented {
-                                    value: root.renderer;
-                                    options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
-                                    picked(renderer) => {
-                                        if !root.renderer-locked {
-                                            root.set-renderer(renderer);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        // Upscaling makes no difference on a phone's small screen
-                        Shown {
-                            shown: !root.renderer-now;
-                            Rectangle {
-                                height: 1px;
-                                background: Theme.border;
-                            }
-                            SettingRow {
-                                title: @tr("Sharpen video");
-                                detail: root.renderer == "opengl" ? @tr("Only with Modern graphics.")
-                                    : @tr("Sharper when their video comes in smaller than it shows here.");
-                                VerticalLayout {
-                                    alignment: center;
-                                    Switch {
-                                        label: @tr("Sharpen video");
-                                        checked: root.sharpen-video;
-                                        toggled => { root.set-sharpen-video(!root.sharpen-video); }
-                                    }
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        // Three options don't fit beside the text, so they go under it
-                        VerticalLayout {
-                            SettingRow {
-                                padding-bottom: 0;
-                                title: @tr("Video codec");
-                                detail: @tr("If video freezes or breaks up, VP8 switches the whole call to it, for both of you.");
-                            }
-                            HorizontalLayout {
-                                padding: 16px;
-                                padding-top: 12px;
-                                alignment: start;
-                                Segmented {
-                                    options: [
-                                        { id: "auto", name: @tr("Auto") },
-                                        { id: "h264", name: "H.264" },
-                                        { id: "vp8", name: "VP8" },
-                                    ];
-                                    value: root.video-codec;
-                                    picked(id) => { root.set-video-codec(id); }
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        VerticalLayout {
-                            SettingRow {
-                                padding-bottom: 0;
-                                title: @tr("Screen share quality");
-                                detail: @tr("The most your shared screen may use. A slower connection still gets less.");
-                            }
-                            HorizontalLayout {
-                                padding: 16px;
-                                padding-top: 12px;
-                                spacing: 12px;
-                                alignment: start;
-                                Segmented {
-                                    options: [
-                                        { id: "balanced", name: @tr("Balanced") },
-                                        { id: "high", name: @tr("High") },
-                                        { id: "custom", name: @tr("Custom") },
-                                    ];
-                                    value: root.screen-quality;
-                                    picked(id) => { root.set-screen-quality(id); }
-                                }
-                                if root.screen-quality == "custom": HorizontalLayout {
-                                    alignment: start;
-                                    spacing: 4px;
-                                    IconButton {
-                                        y: (parent.height - self.height) / 2;
-                                        size: 32px;
-                                        transparent: true;
-                                        icon: Icons.chevron-left;
-                                        label: @tr("Less");
-                                        enabled: root.screen-mbps > 1;
-                                        clicked => { root.step-screen-mbps(-1); }
-                                    }
-                                    Text {
-                                        min-width: 64px;
-                                        text: @tr("{} Mbps", root.screen-mbps);
-                                        color: Theme.text;
-                                        font-size: Theme.font-size-small;
-                                        font-weight: 550;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-                                    IconButton {
-                                        y: (parent.height - self.height) / 2;
-                                        size: 32px;
-                                        transparent: true;
-                                        icon: Icons.chevron-right;
-                                        label: @tr("More");
-                                        enabled: root.screen-mbps < 30;
-                                        clicked => { root.step-screen-mbps(1); }
-                                    }
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        SettingRow {
-                            title: @tr("I speak");
-                            VerticalLayout {
-                                alignment: center;
-                                LangSwitch {
-                                    lang: root.lang;
-                                    picked(lang) => { root.set-lang(lang); }
-                                }
-                            }
+                        Divider { }
+                        PageRow {
+                            icon: Icons.activity;
+                            title: @tr("Debug");
+                            detail: @tr("Connection stats: {}", root.show-stats ? @tr("On") : @tr("Off"));
+                            clicked => { root.go("debug"); }
                         }
                     }
 
-                    Rectangle { height: 10px; }
-                    Heading { text: @tr("Speech to chat"); }
-
-                    Group {
-                        SettingRow {
-                            title: @tr("On-device recognition");
-                            detail: root.model-state == ModelState.ready ? @tr("Downloaded · {}", root.model-size)
-                                : root.model-state == ModelState.downloading ? @tr("Downloading… {}%", root.model-progress)
-                                : root.model-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
-                                : @tr("Not downloaded · {}", root.model-size);
-                            detail-color: root.model-state == ModelState.failed ? Theme.danger-text : Theme.muted;
-                            VerticalLayout {
-                                alignment: center;
-                                if root.model-state == ModelState.missing: Button {
-                                    text: @tr("Download");
-                                    icon: Icons.download;
-                                    kind: ButtonKind.primary;
-                                    height-hint: 38px;
-                                    clicked => { root.download-model(); }
-                                }
-                                if root.model-state == ModelState.failed: Button {
-                                    text: @tr("Try again");
-                                    kind: ButtonKind.primary;
-                                    height-hint: 38px;
-                                    clicked => { root.download-model(); }
-                                }
-                                if root.model-state == ModelState.downloading: Button {
-                                    text: @tr("Cancel");
-                                    height-hint: 38px;
-                                    clicked => { root.cancel-download(); }
-                                }
-                                if root.model-state == ModelState.ready: Button {
-                                    text: @tr("Delete");
-                                    kind: ButtonKind.danger;
-                                    height-hint: 38px;
-                                    clicked => { root.delete-model(); }
-                                }
-                            }
-                        }
-
-                        if root.model-state == ModelState.downloading: VerticalLayout {
-                            padding-left: 16px;
-                            padding-right: 16px;
-                            padding-bottom: 16px;
-                            Rectangle {
-                                height: 4px;
-                                border-radius: 2px;
-                                background: Theme.surface-3;
-                                Rectangle {
-                                    x: 0;
-                                    width: parent.width * root.model-progress / 100;
-                                    border-radius: 2px;
-                                    background: Theme.accent;
-                                    animate width { duration: Theme.med; easing: Theme.ease; }
-                                }
-                            }
-                        }
-
-                        if root.model-state == ModelState.ready: Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        if root.model-state == ModelState.ready: SettingRow {
-                            title: @tr("Recognize on this device");
-                            detail: root.on-device ? "" : @tr("Speech goes to the server");
-                            VerticalLayout {
-                                alignment: center;
-                                Switch {
-                                    label: @tr("Recognize on this device");
-                                    checked: root.on-device;
-                                    toggled => { root.set-on-device(!root.on-device); }
-                                }
-                            }
-                        }
+                    if root.page == "audio": AudioPage {
+                        noise-suppression: root.noise-suppression;
+                        set-noise-suppression(on) => { root.set-noise-suppression(on); }
                     }
 
-                    Text {
-                        text: @tr("Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device.");
-                        color: Theme.muted;
-                        font-size: Theme.font-size-small;
-                        wrap: word-wrap;
+                    if root.page == "video": VideoPage {
+                        video-codec: root.video-codec;
+                        screen-quality: root.screen-quality;
+                        screen-mbps: root.screen-mbps;
+                        renderer: root.renderer;
+                        renderer-now: root.renderer-now;
+                        renderer-locked: root.renderer-locked;
+                        sharpen-video: root.sharpen-video;
+                        set-video-codec(codec) => { root.set-video-codec(codec); }
+                        set-screen-quality(quality) => { root.set-screen-quality(quality); }
+                        step-screen-mbps(step) => { root.step-screen-mbps(step); }
+                        set-renderer(renderer) => { root.set-renderer(renderer); }
+                        set-sharpen-video(on) => { root.set-sharpen-video(on); }
                     }
 
-                    if root.username != "": Rectangle { height: 10px; }
-                    if root.username != "": AccountSection {
+                    if root.page == "speech": SpeechPage {
+                        lang: root.lang;
+                        subtitles-on: root.subtitles-on;
+                        translation-state: root.translation-state;
+                        translation-progress: root.translation-progress;
+                        translation-size: root.translation-size;
+                        model-state: root.model-state;
+                        model-progress: root.model-progress;
+                        model-size: root.model-size;
+                        on-device: root.on-device;
+                        set-lang(lang) => { root.set-lang(lang); }
+                        set-subtitles-on(on) => { root.set-subtitles-on(on); }
+                        download-translation => { root.download-translation(); }
+                        delete-translation => { root.delete-translation(); }
+                        download-model => { root.download-model(); }
+                        cancel-download => { root.cancel-download(); }
+                        delete-model => { root.delete-model(); }
+                        set-on-device(on) => { root.set-on-device(on); }
+                    }
+
+                    if root.page == "account": AccountSection {
                         username: root.username;
                         error: root.account-error;
                         busy: root.account-busy;
@@ -524,14 +337,15 @@ export component SettingsSheet inherits Rectangle {
                         clear-error => { root.clear-account-error(); }
                     }
 
-                    Rectangle { height: 10px; }
-                    DebugSection {
+                    if root.page == "debug": DebugPage {
+                        show-stats: root.show-stats;
                         record-stats: root.record-stats;
                         can-show-files: root.can-show-files;
                         fec: root.fec;
                         can-upscale: root.renderer == "modern" && !root.renderer-now;
                         compare-upscaling: root.compare-upscaling;
                         frame-saved: root.frame-saved;
+                        set-show-stats(on) => { root.set-show-stats(on); }
                         set-record-stats(on) => { root.set-record-stats(on); }
                         show-stats-files => { root.show-stats-files(); }
                         set-fec(on) => { root.set-fec(on); }
@@ -539,6 +353,16 @@ export component SettingsSheet inherits Rectangle {
                         save-frame => { root.save-frame(); }
                     }
                 }
+
+                states [
+                    entering when root.entering: {
+                        content.x: root.back ? -32px : 32px;
+                        content.opacity: 0;
+                        out {
+                            animate content.x, content.opacity { duration: Theme.med; easing: Theme.ease; }
+                        }
+                    }
+                ]
             }
         }
     }
