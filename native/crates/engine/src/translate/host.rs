@@ -15,6 +15,7 @@ use wasmtime::{
     ValType, bail, format_err,
 };
 
+use super::CONFIG;
 use super::model::{self, Pair};
 
 static COMPILED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bergamot.cwasm"));
@@ -32,23 +33,6 @@ const GEMM: &[(&str, &str)] = &[
     ("int8_prepare_bias", "int8PrepareBiasFallback"),
     ("int8_multiply_and_add_bias", "int8MultiplyAndAddBiasFallback"),
     ("int8_select_columns_of_b", "int8SelectColumnsOfBFallback"),
-];
-
-// Firefox's settings for its int8 "alphas" models (web/src/translate/worker.ts has the same)
-const CONFIG: &[(&str, &str)] = &[
-    ("beam-size", "1"),
-    ("normalize", "1.0"),
-    ("word-penalty", "0"),
-    ("max-length-break", "128"),
-    ("mini-batch-words", "1024"),
-    ("workspace", "128"),
-    ("max-length-factor", "2.0"),
-    ("skip-cost", "true"),
-    ("cpu-threads", "0"),
-    ("quiet", "true"),
-    ("quiet-translation", "true"),
-    ("gemm-precision", "int8shiftAlphaAll"),
-    ("alignment", "soft"),
 ];
 
 struct Class {

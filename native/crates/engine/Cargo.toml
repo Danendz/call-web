@@ -34,9 +34,18 @@ sherpa-onnx = { version = "2.0.1", default-features = false }
 # Downloading that model, and checking it
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 sha2 = "0.11"
+
 # Live subtitles' translation: Firefox's Bergamot engine (vendor/bergamot) is WebAssembly; build.rs compiles it ahead
-# of time, so the app only loads machine code and carries no compiler
+# of time, so the app only loads machine code and carries no compiler. iOS won't run that code, so it builds the engine
+# natively instead (crates/bergamot)
+[target.'cfg(not(target_os = "ios"))'.dependencies]
 wasmtime = { version = "50.0.1", default-features = false, features = ["runtime", "std", "threads"] }
+
+# The native Bergamot (crates/bergamot) where wasmtime runs too, to compare the two
+bergamot = { path = "../bergamot", optional = true }
+
+[features]
+native-translate = ["dep:bergamot"]
 
 [build-dependencies]
 wasmtime = { version = "50.0.1", default-features = false, features = ["cranelift", "all-arch", "std", "parallel-compilation", "threads"] }
@@ -62,8 +71,10 @@ objc2-foundation = "0.3"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-screen-capture-kit = "0.3"
 
-# Which way up the phone is held, for the camera's frames; the audio session, set for recording before a mic opens
+# Which way up the phone is held, for the camera's frames; the audio session, set for recording before a mic opens;
+# live subtitles' translation built natively, since iOS won't run wasmtime's machine code
 [target.'cfg(target_os = "ios")'.dependencies]
+bergamot = { path = "../bergamot" }
 objc2-av-foundation = { version = "0.3", features = ["objc2-core-media", "objc2-quartz-core"] }
 objc2-avf-audio = { version = "0.3", default-features = false, features = [
     "std",

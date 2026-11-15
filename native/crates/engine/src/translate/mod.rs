@@ -2,8 +2,13 @@
 //! thread. Lines are translated in the order asked; if they come faster than that, the oldest waiting ones are
 //! dropped, since newer live text has replaced them.
 
+#[cfg(not(any(target_os = "ios", feature = "native-translate")))]
 mod host;
 mod model;
+#[cfg(any(target_os = "ios", feature = "native-translate"))]
+mod native;
+#[cfg(any(target_os = "ios", feature = "native-translate"))]
+use native as host;
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -11,6 +16,23 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 pub use model::Pair;
 pub(crate) use model::{dir as model_dir, is_ready as model_ready};
+
+// Firefox's settings for its int8 "alphas" models (web/src/translate/worker.ts has the same)
+const CONFIG: &[(&str, &str)] = &[
+    ("beam-size", "1"),
+    ("normalize", "1.0"),
+    ("word-penalty", "0"),
+    ("max-length-break", "128"),
+    ("mini-batch-words", "1024"),
+    ("workspace", "128"),
+    ("max-length-factor", "2.0"),
+    ("skip-cost", "true"),
+    ("cpu-threads", "0"),
+    ("quiet", "true"),
+    ("quiet-translation", "true"),
+    ("gemm-precision", "int8shiftAlphaAll"),
+    ("alignment", "soft"),
+];
 
 /// Lines waiting their turn; past this the oldest are dropped
 const MAX_WAITING: usize = 6;

@@ -23,7 +23,8 @@ impl Pair {
         }
     }
 
-    /// The languages as Bergamot names them
+    /// The languages as Bergamot names them; only its WASM build takes them, to pick the browser's sentence splitter
+    #[cfg(not(any(target_os = "ios", feature = "native-translate")))]
     pub(crate) fn langs(self) -> (&'static str, &'static str) {
         match self {
             Pair::EnZh => ("en", "zh"),

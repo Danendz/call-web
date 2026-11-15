@@ -5,6 +5,10 @@ use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     platform_cfgs();
+    // iOS runs the engine built natively (crates/bergamot)
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        return Ok(());
+    }
     let wasm = PathBuf::from("../../../vendor/bergamot/bergamot.wasm");
     println!("cargo::rerun-if-changed={}", wasm.display());
     let target = std::env::var("TARGET")?;
