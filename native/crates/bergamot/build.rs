@@ -81,6 +81,11 @@ fn build() -> Result<(), String> {
     let shim = crate_dir.join("cpp/shim.cpp");
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed={}", shim.display());
+    println!("cargo::rerun-if-env-changed=RUSTC_WORKSPACE_WRAPPER");
+    // Clippy only checks the Rust, which links nothing, so CI's iOS lint skips the C++ build of several minutes
+    if std::env::var("RUSTC_WORKSPACE_WRAPPER").is_ok_and(|w| w.contains("clippy-driver")) {
+        return Ok(());
+    }
 
     let target = env("TARGET")?;
     let platform = match target.as_str() {

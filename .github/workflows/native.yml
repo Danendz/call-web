@@ -157,6 +157,13 @@ jobs:
       - run: rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
+      # Bergamot's C++ build (crates/bergamot) sits in target/ beside cargo's, where rust-cache would clear it
+      - uses: actions/cache@v4
+        with:
+          path: |
+            native/target/bergamot-src
+            native/target/bergamot-build
+          key: bergamot-ios-${{ hashFiles('native/crates/bergamot/**') }}
       - uses: ./.github/actions/sherpa-onnx
         with: { target: aarch64-apple-ios }
       - run: native/packaging/ios/release.sh build
@@ -268,6 +275,13 @@ jobs:
       - run: rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
+      # Bergamot's C++ build (crates/bergamot) sits in target/ beside cargo's, where rust-cache would clear it
+      - uses: actions/cache@v4
+        with:
+          path: |
+            native/target/bergamot-src
+            native/target/bergamot-build
+          key: bergamot-ios-${{ hashFiles('native/crates/bergamot/**') }}
       - uses: ./.github/actions/sherpa-onnx
         with: { target: aarch64-apple-ios }
       - run: native/packaging/ios/release.sh

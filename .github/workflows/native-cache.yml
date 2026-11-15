@@ -8,7 +8,7 @@ name: native-cache
 on:
   push:
     branches: [main]
-    paths: ["native/Cargo.lock", "native/rust-toolchain.toml", ".github/workflows/native-cache.yml", ".github/actions/**"]
+    paths: ["native/Cargo.lock", "native/crates/bergamot/**", "native/rust-toolchain.toml", ".github/workflows/native-cache.yml", ".github/actions/**"]
   workflow_dispatch:
 
 concurrency:
@@ -46,6 +46,34 @@ jobs:
         with: { workspaces: native, shared-key: release }
       - uses: ./.github/actions/sherpa-onnx
       - run: cargo build --release --locked
+
+  # Same keys as native.yml's iOS jobs; the release build also saves Bergamot's C++ build
+  ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { key: check-ios, run: "cargo clippy --target aarch64-apple-ios -p call-danya --locked" }
+          - { key: release-ios, run: "cargo build --target aarch64-apple-ios -p call-danya --bin call-danya --release --locked" }
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native, shared-key: "${{ matrix.key }}" }
+      - if: matrix.key == 'release-ios'
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/target/bergamot-src
+            native/target/bergamot-build
+          key: bergamot-ios-${{ hashFiles('native/crates/bergamot/**') }}
+      - uses: ./.github/actions/sherpa-onnx
+        with: { target: aarch64-apple-ios }
+      - run: ${{ matrix.run }}
 
   # Same keys and commands as native.yml's Android jobs
   android:
