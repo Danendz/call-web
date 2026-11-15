@@ -3,6 +3,31 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.4.0 — 2026-11-14
+
+Sharper, smoother video with hardware H.264 on Windows, and better live subtitles.
+
+### New
+
+- Windows: video and screen share are encoded and decoded on the graphics card, so screen share holds 60 fps
+- Pick the screen share quality in Settings: Balanced, High, or your own bitrate
+- Pick the video codec in Settings (Auto, H.264 or VP8); Auto uses H.264 where the device has a hardware encoder
+- Live subtitles work with "Recognize on this device" off too, recognized on the server
+- Pick the graphics backend in Settings (Modern or OpenGL); the app switches to OpenGL by itself if Modern doesn't start
+
+### Fixed
+
+- A lost frame no longer freezes the video until the next full picture arrives
+- Changing the whole screen during a share no longer freezes it for a moment
+- Resizing the window during a call no longer crashes the app
+- Rejoining a call on desktop sends your mic and plays the other person again
+- A browser joining after the app connects instead of staying on "Connecting"
+
+### Changed
+
+- Live subtitles use the same speech model as speech to chat, end lines at each pause and keep the start of the next one; the older live model is deleted and the new one downloaded in its place
+- Less CPU and memory: video is converted on the graphics card and skipped while hidden, and speech models give their memory back after a call
+
 ## 0.3.2 — 2026-11-13
 
 Chat now floats over the video, with reactions and subtitles in the same place.
