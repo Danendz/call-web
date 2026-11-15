@@ -1,6 +1,6 @@
 # Native app (Rust + Slint)
 
-Desktop client for macOS and Windows, and the Android app (Phase 4 in the roadmap) built from the same crates. It talks to the same server over the same `/ws` protocol as the web app, so a native user can call a browser user. The root `AGENTS.md` still applies (git workflow, China, security, roadmap); this file adds what's specific to Rust and Slint.
+Desktop client for macOS and Windows, the Android app (Phase 4 in the roadmap) and the iOS app (Phase 5) built from the same crates. It talks to the same server over the same `/ws` protocol as the web app, so a native user can call a browser user. The root `AGENTS.md` still applies (git workflow, China, security, roadmap); this file adds what's specific to Rust and Slint.
 
 Current goal: **parity with the web app**. Native-only features (overlay, tray, hotkeys) come after, see `docs/ROADMAP.md`.
 
@@ -15,6 +15,7 @@ native/
     src/             lib.rs (the app's run()), main.rs (desktop entry), android/ (Android entry), the bridge
     translations/    zh .po, bundled into the binary
   android/           Gradle project: the APK, MainActivity and what only Java can do
+  ios/               xcodegen spec, Info.plist and the build phase that runs cargo
   vendor/            third-party crates we patch (webrtc-sys, Slint's Android backend), outside the workspace; see its README
 ```
 
@@ -81,6 +82,25 @@ native/
 
   Where github.com can't be reached, the WebRTC prebuilt download fails: fetch `webrtc-android-arm64-release.zip` from LiveKit's `rust-sdks` release named in `webrtc-sys-build`'s `WEBRTC_TAG` (`gh release download` works when the site doesn't), unzip it and point `LK_CUSTOM_WEBRTC` at the folder for Android builds only.
 - **An emulator** (an arm64 API 31 image is closest to HarmonyOS 4.x) checks that the app starts, draws and joins; sound, echo cancellation and background behavior need a real phone.
+
+## iOS
+
+- **The app is the same binary as desktop** (`main.rs`), built by cargo for `aarch64-apple-ios` (`-sim` for the simulator) from a build phase in a thin Xcode project: `ios/project.yml` is the xcodegen spec (the generated `CallDanya.xcodeproj` isn't committed), `ios/build-rust.sh` runs cargo with a clean environment, copies the binary into the bundle, and adds what cargo can't link: `SherpaOnnxC.framework` (sherpa-onnx comes only as a framework on iOS) and the Chinese font. Xcode then signs the bundle. Xcode's Debug is a cargo debug build, which talks to `localhost:8090` (reachable from the simulator, not a phone).
+- **Platform code** goes in `cfg(target_os = "ios")` modules through `objc2`, no Swift. `app/src/ios.rs` adds the UIScene lifecycle iOS 27 requires (an app without it is stopped at launch), which winit 0.30 lacks: `Info.plist` names its scene delegate, and the window winit made is moved into the scene.
+- **Skia over wgpu on Metal only**, with no OpenGL fallback: iOS deprecated OpenGL ES.
+- **Chinese needs our font:** PingFang, iOS's only simplified-Chinese font, has hvgl outlines that Slint's font library skips and Skia can't draw. `build-rust.sh` downloads Noto Sans SC at a pinned commit, checks its SHA-256 and puts it in the bundle; `ios::fonts()` makes it the fallback after the system UI font.
+- **Translation:** wasmtime can't run machine code on iOS and its Pulley interpreter is too slow (`docs/perf-issues.md`), so iOS uses the server's translation until the native C++ engine (roadmap I3).
+- **Build and run** (needs Xcode, `brew install xcodegen`, `rustup target add aarch64-apple-ios`):
+
+  ```
+  cd ios && xcodegen
+  xcodebuild -project CallDanya.xcodeproj -scheme CallDanya -destination 'id=<device id>' -configuration Release \
+      -derivedDataPath build -allowProvisioningUpdates DEVELOPMENT_TEAM=<team id> build
+  xcrun devicectl device install app --device <device id> build/Build/Products/Release-iphoneos/CallDanya.app
+  xcrun devicectl device process launch --terminate-existing --console --device <device id> com.danendz.call-danya
+  ```
+
+  A free Apple ID's personal team works; keep its team ID on the command line, never in `project.yml`. `xcrun devicectl list devices` gives the device id, and `xcrun devicectl device capture screenshot --device <id> --destination <file.png>` takes a screenshot.
 
 ## Distribution
 
