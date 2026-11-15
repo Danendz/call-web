@@ -123,6 +123,9 @@ export component CallOverlay inherits Rectangle {
                         height: 44px;
                         border-radius: 22px;
                         background: Theme.accent-soft;
+                        // Pulses while it rings, like the web's ring-pulse
+                        transform-scale: Theme.reduced-motion || !root.showing ? 1
+                            : 1.06 - 0.06 * Math.cos(animation-tick() / 1.4s * 360deg);
                         Image {
                             source: Icons.phone;
                             colorize: Theme.accent;

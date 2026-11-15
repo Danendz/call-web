@@ -206,6 +206,20 @@ video.mirror {
 .waiting-card p {
   margin: 0;
   font-weight: 550;
+  /* Breathes while nobody's there */
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-card p {
+    animation: none !important;
+  }
 }
 
 .waiting-card .copy-link {
@@ -298,7 +312,11 @@ video.mirror {
   background: var(--glass-strong);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    12px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-6px) scale(0.98);

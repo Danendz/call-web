@@ -7,7 +7,8 @@ import { AccountText } from "../account/errors.slint";
 import { FriendMenu } from "friend-menu.slint";
 
 // presence: "online", "in-call" or "offline"; missed: how many calls from them you missed, the latest at missed-at
-export struct FriendRow { name: string, presence: string, missed: int, missed-at: string }
+// came-online: was offline or in a call on the last list
+export struct FriendRow { name: string, presence: string, missed: int, missed-at: string, came-online: bool }
 export struct RoomRow { room-id: string, with: string }
 
 // Turns while it's shown; stands still under reduced motion
@@ -58,11 +59,33 @@ component Card inherits Rectangle {
     }
 }
 
+// Fades in as it comes into the list; a row the re-sort moves comes back in this way at its new place
+component FadeIn inherits VerticalLayout {
+    property <bool> shown;
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Theme.med; easing: Theme.ease; }
+    // A tick after the first frame: set in init, there would be nothing to animate from
+    Timer {
+        interval: 1ms;
+        triggered => {
+            self.running = false;
+            root.shown = true;
+        }
+    }
+    @children
+}
+
 // A name on the left, controls on the right
 component Row inherits HorizontalLayout {
     in property <string> name;
     in property <string> detail;
     in property <color> dot: #00000000;
+    // Rings the dot out once: a friend just came online
+    in property <bool> ping;
+    property <bool> pinging;
+    property <duration> ping-at;
+    init => { if (ping) { start-ping(); } }
+    changed ping => { if (ping) { start-ping(); } }
     min-height: 52px;
     spacing: 10px;
     if root.dot != #00000000: VerticalLayout {
@@ -72,6 +95,18 @@ component Row inherits HorizontalLayout {
             height: 10px;
             border-radius: 5px;
             background: root.dot;
+            if root.pinging: Rectangle {
+                property <float> t: min(1, (animation-tick() - root.ping-at) / Theme.slow);
+                border-radius: self.width / 2;
+                background: root.dot;
+                opacity: 0.6 * (1 - t);
+                transform-scale: 1 + 1.6 * t;
+            }
+            Timer {
+                interval: Theme.slow;
+                running: root.pinging;
+                triggered => { root.pinging = false; }
+            }
         }
     }
     HorizontalLayout {
@@ -94,6 +129,13 @@ component Row inherits HorizontalLayout {
         }
     }
     @children
+
+    function start-ping() {
+        if (!Theme.reduced-motion) {
+            ping-at = animation-tick();
+            pinging = true;
+        }
+    }
 }
 
 // A friend row's shape, pulsing until the first list comes in
@@ -167,31 +209,35 @@ export component FriendsPanel inherits VerticalLayout {
 
     if root.rooms.length > 0: Card {
         title: @tr("Rooms");
-        for room in root.rooms: Row {
-            name: @tr("{} is still in the call", room.with);
-            Button {
-                text: @tr("Rejoin");
-                kind: ButtonKind.primary;
-                height-hint: 38px;
-                clicked => { root.rejoin(room.room-id); }
+        for room in root.rooms: FadeIn {
+            Row {
+                name: @tr("{} is still in the call", room.with);
+                Button {
+                    text: @tr("Rejoin");
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.rejoin(room.room-id); }
+                }
             }
         }
     }
 
     if root.incoming.length > 0: Card {
         title: @tr("Friend requests");
-        for name in root.incoming: Row {
-            name: name;
-            Button {
-                text: @tr("Accept");
-                kind: ButtonKind.primary;
-                height-hint: 38px;
-                clicked => { root.friend-action("accept", name); }
-            }
-            Button {
-                text: @tr("Decline");
-                height-hint: 38px;
-                clicked => { root.friend-action("remove", name); }
+        for name in root.incoming: FadeIn {
+            Row {
+                name: name;
+                Button {
+                    text: @tr("Accept");
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.friend-action("accept", name); }
+                }
+                Button {
+                    text: @tr("Decline");
+                    height-hint: 38px;
+                    clicked => { root.friend-action("remove", name); }
+                }
             }
         }
     }
@@ -213,11 +259,12 @@ export component FriendsPanel inherits VerticalLayout {
             font-size: Theme.font-size-small;
             wrap: word-wrap;
         }
-        for friend in root.friends: VerticalLayout {
+        for friend in root.friends: FadeIn {
             Row {
                 name: friend.name;
                 detail: friend.presence == "online" ? @tr("Online") : friend.presence == "in-call" ? @tr("In a call") : @tr("Offline");
                 dot: friend.presence == "online" ? Theme.good : friend.presence == "in-call" ? Theme.ok : Theme.surface-3;
+                ping: friend.came-online;
                 VerticalLayout {
                     alignment: center;
                     FriendMenu {
@@ -266,14 +313,16 @@ export component FriendsPanel inherits VerticalLayout {
                 }
             }
         }
-        for name in root.outgoing: Row {
-            name: name;
-            detail: @tr("Waiting for them to accept");
-            Button {
-                text: @tr("Withdraw");
-                height-hint: 36px;
-                font-size: Theme.font-size-small;
-                clicked => { root.friend-action("remove", name); }
+        for name in root.outgoing: FadeIn {
+            Row {
+                name: name;
+                detail: @tr("Waiting for them to accept");
+                Button {
+                    text: @tr("Withdraw");
+                    height-hint: 36px;
+                    font-size: Theme.font-size-small;
+                    clicked => { root.friend-action("remove", name); }
+                }
             }
         }
 
