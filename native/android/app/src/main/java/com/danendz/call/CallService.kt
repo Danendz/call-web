@@ -37,6 +37,11 @@ class CallService : Service() {
                 } else {
                     startForeground(ID, notification)
                 }
+                starting--
+                if (starting == 0 && stopWhenStarted) {
+                    stopWhenStarted = false
+                    stopSelf()
+                }
             }
         }
         // Gone with the process: a call can't come back on its own
@@ -82,14 +87,26 @@ class CallService : Service() {
         /** Title, text, "Mute", "Unmute", "Hang up", in the app's language. */
         private const val LABELS = 5
 
+        // On the main thread only, as show, hide and onStartCommand all run. Starts asked for whose startForeground
+        // hasn't run yet: Android kills the app if the service is stopped before then.
+        private var starting = 0
+        // The call ended while a start was pending: stop once it's foreground
+        private var stopWhenStarted = false
+
         fun show(context: Context, micOn: Boolean, labels: Array<String>) {
             val intent = Intent(context, CallService::class.java)
                 .putExtra(EXTRA_MIC_ON, micOn)
                 .putExtra(EXTRA_LABELS, labels)
+            starting++
+            stopWhenStarted = false
             context.startForegroundService(intent)
         }
 
         fun hide(context: Context) {
+            if (starting > 0) {
+                stopWhenStarted = true
+                return
+            }
             context.stopService(Intent(context, CallService::class.java))
         }
     }
