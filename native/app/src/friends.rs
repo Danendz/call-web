@@ -134,6 +134,8 @@ fn wire(ui: &AppWindow, friends: &Rc<Friends>) {
             let call_id = ui.get_incoming_call_id().to_string();
             if !call_id.is_empty() {
                 friends.send(FriendsCommand::Answer { call_id, accept });
+                #[cfg(target_os = "ios")]
+                crate::ios::call::answered(accept);
             }
         }
     });

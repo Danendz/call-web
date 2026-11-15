@@ -70,6 +70,7 @@ pub fn run() -> anyhow::Result<()> {
         ios::text_menus(&ui);
         ios::attach_window_when_made(&ui);
         ios::audio::attach(&ui);
+        ios::call::attach(&ui);
     }
 
     let bridge = Bridge::new(&ui, lang, settings::data_dir());
@@ -164,6 +165,8 @@ pub fn run() -> anyhow::Result<()> {
             android::sync(&ui);
             #[cfg(target_os = "ios")]
             ios::audio::sync(&ui);
+            #[cfg(target_os = "ios")]
+            ios::call::sync(&ui);
         }
     });
     let ticker = slint::Timer::default();

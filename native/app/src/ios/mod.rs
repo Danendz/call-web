@@ -11,9 +11,10 @@
 //! Also opens a text box's menu on a long press, which Slint does only on Android ([`touch`]), as iOS's own edit menu
 //! rather than Slint's ([`text_menus`]).
 //!
-//! The call's audio route is in [`audio`].
+//! The call's audio route is in [`audio`], and the call through CallKit in [`call`].
 
 pub mod audio;
+pub mod call;
 
 use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
