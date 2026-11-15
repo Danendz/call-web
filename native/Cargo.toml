@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "app"]
+# A plain `cargo build`/`test` at the root leaves out the native Bergamot: it builds only where something needs it (iOS,
+# or the engine's native-translate feature), has no build for Windows yet, and takes minutes of C++ elsewhere
+default-members = ["crates/protocol", "crates/engine", "crates/denoise", "app"]
 # Third-party code we patch (vendor/README.md): built as a dependency, not linted or formatted as ours
 exclude = ["vendor"]
 
