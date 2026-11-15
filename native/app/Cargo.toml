@@ -123,6 +123,8 @@ dev-mcp = ["slint/mcp"]
 slint-build = "=1.18.1"
 # Android: exports WebRTC's JNI symbols from our library, which webrtc-sys can't do for us
 webrtc-sys-build = "=0.3.21"
+# Windows: puts the icon into the .exe, which Explorer, the Start menu and the taskbar show
+winresource = "0.1"
 
 [lints]
 workspace = true

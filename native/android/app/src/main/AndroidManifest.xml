@@ -23,6 +23,7 @@
 
     <application
         android:label="Call Danya"
+        android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:hasCode="true">
 

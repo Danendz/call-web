@@ -10,7 +10,7 @@ import { clientIp, concurrencyLimit, rateLimit } from "./limits.js";
 
 // Velopack's names: releases.win.json, CallDanya-1.2.3-win-full.nupkg, CallDanya-win-Setup.exe; Android's
 // (packaging/android/release.sh): android.json, call-danya-1.2.3.apk, call-danya.apk; iOS's (packaging/ios/release.sh):
-// altstore.json, call-danya-1.2.3.ipa; the speech models' files
+// altstore.json, call-danya-1.2.3.ipa, call-danya.ipa, call-danya-icon.png; the speech models' files
 // (uploaded by hand): sensevoice-small-int8-2024-07-17.onnx. Nothing with a slash, so a request can only name a
 // file at the bucket's root.
 const FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -27,6 +27,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".pkg": "application/octet-stream",
   ".apk": "application/vnd.android.package-archive",
   ".ipa": "application/octet-stream",
+  ".png": "image/png",
 };
 
 type Bucket = { endpoint: URL; name: string; region: string; keyId: string; secret: string };

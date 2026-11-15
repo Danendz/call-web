@@ -7,7 +7,19 @@ const APPS = [
   { os: "Windows", file: "CallDanya-win-Setup.exe", icon: <Monitor size={20} />, note: "noteWindows" },
   { os: "macOS", file: "CallDanya-osx-Setup.pkg", icon: <Laptop size={20} />, note: "noteMac" },
   { os: "Android", file: "call-danya.apk", icon: <Smartphone size={20} />, note: "noteAndroid" },
+  { os: "iOS", file: "call-danya.ipa", icon: <Smartphone size={20} />, note: "noteIos" },
 ] as const;
+
+// iPadOS asks for desktop sites, so it says it's a Mac with a touch screen
+const onIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
+/** On an iPhone the iOS app is a source to add to AltStore, which installs and updates it; elsewhere, its .ipa. */
+function linkFor(app: (typeof APPS)[number]): { href: string; download?: true } {
+  if (app.os === "iOS" && onIos) {
+    return { href: `altstore://source?url=${encodeURIComponent(`${location.origin}/updates/altstore.json`)}` };
+  }
+  return { href: `/updates/${app.file}`, download: true };
+}
 
 /** The Download button and its popover with the native apps. Closes on outside tap and Esc. */
 export function DownloadApp() {
@@ -43,8 +55,7 @@ export function DownloadApp() {
             key={app.os}
             className="download-item"
             role="menuitem"
-            href={`/updates/${app.file}`}
-            download
+            {...linkFor(app)}
             tabIndex={open ? 0 : -1}
             onClick={() => setOpen(false)}
           >

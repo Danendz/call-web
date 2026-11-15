@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="a" gradientUnits="userSpaceOnUse" x1="180" y1="160" x2="630" y2="620">
+      <stop offset="0" stop-color="#86acff"/>
+      <stop offset="1" stop-color="#3656ee"/>
+    </linearGradient>
+    <linearGradient id="b" gradientUnits="userSpaceOnUse" x1="394" y1="400" x2="844" y2="860">
+      <stop offset="0" stop-color="#ffc56f"/>
+      <stop offset="1" stop-color="#ff5470"/>
+    </linearGradient>
+    <linearGradient id="mix" gradientUnits="userSpaceOnUse" x1="394" y1="400" x2="630" y2="500">
+      <stop offset="0" stop-color="#f0b0ff"/>
+      <stop offset="1" stop-color="#a274ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#05061a" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="inA"><rect x="180" y="160" width="450" height="340" rx="135"/></clipPath>
+  </defs>
+  <g id="art">
+    <g filter="url(#shadow)">
+      <path fill="url(#a)" d="M315 160H495A135 135 0 0 1 630 295V365A135 135 0 0 1 495 500H392C350 560 290 605 200 618C236 578 252 534 254 485A135 135 0 0 1 180 365V295A135 135 0 0 1 315 160Z"/>
+    </g>
+    <g filter="url(#shadow)">
+      <path fill="url(#b)" d="M529 400H709A135 135 0 0 1 844 535V605A135 135 0 0 1 770 725C772 774 788 818 824 858C734 845 674 800 632 740H529A135 135 0 0 1 394 605V535A135 135 0 0 1 529 400Z"/>
+    </g>
+    <path fill="url(#mix)" clip-path="url(#inA)" d="M529 400H709A135 135 0 0 1 844 535V605A135 135 0 0 1 709 740H529A135 135 0 0 1 394 605V535A135 135 0 0 1 529 400Z"/>
+    <g fill="#ffffff">
+      <rect x="282" y="288" width="34" height="84" rx="17"/>
+      <rect x="338" y="248" width="34" height="164" rx="17"/>
+      <rect x="394" y="268" width="34" height="124" rx="17"/>
+      <rect x="450" y="238" width="34" height="138" rx="17"/>
+      <rect x="506" y="283" width="34" height="64" rx="17"/>
+      <rect x="490" y="555" width="260" height="40" rx="20"/>
+      <rect x="490" y="630" width="170" height="40" rx="20" opacity="0.85"/>
+    </g>
+  </g>
+</svg>

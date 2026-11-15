@@ -48,7 +48,7 @@ else
     rm -rf target/velopack-app
     mkdir -p target/velopack-app
     cp target/release/call-danya.exe target/velopack-app/
-    pack --packDir target/velopack-app --mainExe call-danya.exe
+    pack --packDir target/velopack-app --mainExe call-danya.exe --icon packaging/windows/call-danya.ico
 fi
 
 vpk upload s3 -o "$out" --channel "$channel" --endpoint "$RELEASES_ENDPOINT" --bucket "$RELEASES_BUCKET" \

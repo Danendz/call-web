@@ -7,8 +7,18 @@ fn main() {
     if let Err(e) = slint_build::compile_with_config("ui/app.slint", config) {
         println!("cargo::error={e}");
     }
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
-        android();
+    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("android") => android(),
+        Ok("windows") => windows(),
+        _ => {}
+    }
+}
+
+/// The app icon (`packaging/icon/make.sh`) as the .exe's resource
+fn windows() {
+    println!("cargo::rerun-if-changed=../packaging/windows/call-danya.ico");
+    if let Err(e) = winresource::WindowsResource::new().set_icon("../packaging/windows/call-danya.ico").compile() {
+        println!("cargo::error=couldn't embed the icon: {e}");
     }
 }
 

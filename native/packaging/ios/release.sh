@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds the unsigned .ipa and uploads it to the releases bucket, which the server serves at
-# https://call.danendz.com/updates (server/updates.ts): call-danya-<version>.ipa and then altstore.json, the AltStore
+# https://call.danendz.com/updates (server/updates.ts): call-danya-<version>.ipa, call-danya.ipa (the same file under a
+# name that stays, for the website), the icon AltStore shows and then altstore.json, the AltStore
 # source that AltStore and SideStore read (add the source once, at that URL) and the app checks (app/src/ios/update.rs).
 # Unsigned, since a free Apple ID can't sign for others: AltStore or SideStore signs it on the phone with the user's
 # own Apple ID. Run by CI (native.yml) on macOS when app/Cargo.toml's version isn't published for iOS yet; skips if it
@@ -33,7 +34,6 @@ cp -R ios/build/Build/Products/Release-iphoneos/CallDanya.app "$out/Payload/"
 (cd "$out" && zip -qry "$ipa" Payload && rm -rf Payload)
 size=$(stat -f %z "$out/$ipa")
 sha256=$(shasum -a 256 "$out/$ipa" | cut -d' ' -f1)
-# AltStore requires an icon; call-danya-icon.png is uploaded to the bucket by hand, like the speech models
 cat > "$out/altstore.json" <<JSON
 {
   "name": "Call Danya",
@@ -66,6 +66,9 @@ export AWS_ACCESS_KEY_ID="$RELEASES_KEY_ID" AWS_SECRET_ACCESS_KEY="$RELEASES_SEC
 export AWS_DEFAULT_REGION="${RELEASES_REGION:-auto}"
 s3() { aws s3 --endpoint-url "$RELEASES_ENDPOINT" "$@"; }
 s3 cp "$out/$ipa" "s3://$RELEASES_BUCKET/$ipa" --content-type application/octet-stream
+s3 cp "$out/$ipa" "s3://$RELEASES_BUCKET/call-danya.ipa" --content-type application/octet-stream
+# AltStore requires an icon
+s3 cp ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png "s3://$RELEASES_BUCKET/call-danya-icon.png" --content-type image/png
 # Last, so the source never names an .ipa that isn't there yet
 s3 cp "$out/altstore.json" "s3://$RELEASES_BUCKET/altstore.json" --content-type application/json
 
