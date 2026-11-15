@@ -13,6 +13,7 @@ export function Sheet({
   onClose,
   side = "bottom",
   showTitle = false,
+  onEscape,
   children,
 }: {
   label: string;
@@ -21,13 +22,15 @@ export function Sheet({
   side?: "bottom" | "right";
   /** Show `label` as a heading; otherwise it's only read out by screen readers. */
   showTitle?: boolean;
+  /** Esc closes it, unless this calls preventDefault (to go back a step instead). */
+  onEscape?: (e: KeyboardEvent) => void;
   children: ReactNode;
 }) {
   return (
     <Drawer.Root open={open} onOpenChange={(next) => !next && onClose()} direction={side}>
       <Drawer.Portal>
         <Drawer.Overlay className="sheet-dim" />
-        <Drawer.Content className={`sheet ${side}`} aria-describedby={undefined}>
+        <Drawer.Content className={`sheet ${side}`} aria-describedby={undefined} onEscapeKeyDown={onEscape}>
           {side === "bottom" && (
             <div className="sheet-grip" aria-hidden>
               <span />

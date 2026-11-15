@@ -634,3 +634,30 @@ msgstr "将 {} 从好友中删除？"
 
 msgid "Block {}? They can't call you or send requests."
 msgstr "屏蔽 {}？对方将无法呼叫你或发送请求。"
+
+msgid "Audio"
+msgstr "音频"
+
+msgid "Video"
+msgstr "视频"
+
+msgid "Speech"
+msgstr "语音"
+
+msgid "On"
+msgstr "开"
+
+msgid "Off"
+msgstr "关"
+
+msgid "Noise suppression: {}"
+msgstr "降噪：{}"
+
+msgid "Video codec: {}"
+msgstr "视频编码：{}"
+
+msgid "Live subtitles: {}"
+msgstr "实时字幕：{}"
+
+msgid "Connection stats: {}"
+msgstr "连接统计：{}"
