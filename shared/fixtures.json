@@ -465,6 +465,10 @@
       "type": "missed-seen"
     },
     {
+      "type": "missed-seen",
+      "from": "friend_1"
+    },
+    {
       "type": "ping"
     }
   ],

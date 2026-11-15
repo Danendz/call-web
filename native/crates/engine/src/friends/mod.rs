@@ -193,9 +193,9 @@ impl Controller {
                 }
                 self.state.incoming.retain(|c| c.call_id != call_id);
             }
-            FriendsCommand::MissedSeen => {
+            FriendsCommand::MissedSeen(from) => {
                 if let Some(socket) = &self.socket {
-                    socket.send(UserClientMessage::MissedSeen);
+                    socket.send(UserClientMessage::MissedSeen { from: Some(from) });
                 }
             }
             FriendsCommand::DismissNotice => self.state.notice = None,

@@ -1,0 +1,91 @@
+/* MenuPanel: a popover above its button by default; a screen moves it with its own class */
+
+/* The list scrolls; the footer stays in view under it */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.menu-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.menu {
+  position: absolute;
+  right: -8px;
+  bottom: calc(100% + 16px);
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  max-height: min(70vh, 520px);
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: bottom right;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    visibility 0s linear var(--fast);
+}
+
+.menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease-spring);
+}
+
+button.menu-item {
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-weight: 500;
+}
+
+button.menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+button.menu-item:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.menu-item span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-item .check {
+  color: var(--accent-hover);
+}

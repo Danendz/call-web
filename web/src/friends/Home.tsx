@@ -1,15 +1,43 @@
-import { Ellipsis, Link2, Phone, UserRound } from "lucide-react";
-import { useState, useSyncExternalStore, type FormEvent } from "react";
-import type { FriendState, Lang } from "../../../shared/protocol";
+import { Ellipsis, Link2, Phone, Shield, UserMinus, UserRound, X } from "lucide-react";
+import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import type { FriendState, Lang, MissedCall, Presence } from "../../../shared/protocol";
 import { api } from "../account/api";
 import { AccountSheet } from "../account/AccountSheet";
 import { IconButton } from "../ui/IconButton";
+import { MenuPanel } from "../ui/MenuPanel";
 import { navigate, newRoomPath } from "../ui/router";
 import type { FriendsSocket } from "./friendsSocket";
 import { useFriendsT } from "./strings";
 import "./friends.css";
 
-/** Friends with presence, requests, missed calls and private rooms still open: the signed-in start page. */
+/** Missed calls from one friend: how many, and the latest. */
+interface Missed {
+  count: number;
+  at: number;
+}
+
+const PRESENCE_ORDER: Record<Presence, number> = { online: 0, "in-call": 1, offline: 2 };
+
+/** Friends with a missed call first (latest on top), then by presence and name. */
+function sortFriends(friends: FriendState[], missed: Map<string, Missed>): FriendState[] {
+  return [...friends].sort(
+    (a, b) =>
+      (missed.get(b.username)?.at ?? 0) - (missed.get(a.username)?.at ?? 0) ||
+      PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence] ||
+      a.username.localeCompare(b.username),
+  );
+}
+
+function missedByFriend(calls: MissedCall[]): Map<string, Missed> {
+  const by = new Map<string, Missed>();
+  for (const c of calls) {
+    const m = by.get(c.from);
+    by.set(c.from, { count: (m?.count ?? 0) + 1, at: Math.max(m?.at ?? 0, c.at) });
+  }
+  return by;
+}
+
+/** Friends with presence and missed calls, requests and private rooms still open: the signed-in start page. */
 export function Home({ friends, username, lang, onLang }: { friends: FriendsSocket; username: string; lang: Lang; onLang: (lang: Lang) => void }) {
   const t = useFriendsT();
   const state = useSyncExternalStore(friends.subscribe, friends.getState);
@@ -17,7 +45,12 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
   const lists = state.lists;
   // Requests and blocks answer over /ws/user with a new list; a failed one just leaves the list as it was
   const act = (action: string, name: string) => void api(`/api/friends/${action}`, { username: name }).catch(() => {});
-  const time = new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en", { dateStyle: "short", timeStyle: "short" });
+  const locale = lang === "zh" ? "zh-CN" : "en";
+  const today = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
+  const earlier = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" });
+  // Just the time for today's calls, so the tag fits on a phone
+  const when = (at: number) => (new Date(at).toDateString() === new Date().toDateString() ? today : earlier).format(at);
+  const missed = missedByFriend(lists?.missed ?? []);
 
   return (
     <div className="home">
@@ -35,23 +68,6 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
       </header>
 
       {!state.connected && <p className="muted small">{t.reconnecting}</p>}
-
-      {lists && lists.missed.length > 0 && (
-        <section className="home-card">
-          <div className="card-head">
-            <h2>{t.missedCalls}</h2>
-            <button className="link" onClick={() => friends.missedSeen()}>
-              {t.clear}
-            </button>
-          </div>
-          {lists.missed.map((m) => (
-            <div className="row" key={`${m.from}-${m.at}`}>
-              <span className="name">{m.from}</span>
-              <span className="muted small">{time.format(m.at)}</span>
-            </div>
-          ))}
-        </section>
-      )}
 
       {lists && lists.rooms.length > 0 && (
         <section className="home-card">
@@ -86,9 +102,21 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
 
       <section className="home-card">
         {lists && lists.friends.length === 0 && <p className="muted small">{t.noFriends}</p>}
-        {lists?.friends.map((f) => (
-          <FriendRow key={f.username} friend={f} calling={state.outgoing !== null} onCall={() => friends.ring(f.username)} onAct={act} />
-        ))}
+        {lists &&
+          sortFriends(lists.friends, missed).map((f) => {
+            const m = missed.get(f.username);
+            return (
+              <FriendRow
+                key={f.username}
+                friend={f}
+                missed={m && t.missed(m.count, when(m.at))}
+                calling={state.outgoing !== null}
+                onCall={() => friends.ring(f.username)}
+                onClearMissed={() => friends.missedSeen(f.username)}
+                onAct={act}
+              />
+            );
+          })}
         {lists?.outgoing.map((name) => (
           <div className="row" key={name}>
             <span className="name">
@@ -115,43 +143,99 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
 
 function FriendRow({
   friend,
+  missed,
   calling,
   onCall,
+  onClearMissed,
   onAct,
 }: {
   friend: FriendState;
+  /** "Missed call · 19:23", when there is one */
+  missed?: string;
   calling: boolean;
   onCall: () => void;
+  onClearMissed: () => void;
   onAct: (action: string, name: string) => void;
 }) {
   const t = useFriendsT();
-  const [more, setMore] = useState(false);
   return (
-    <div className="friend">
-      <div className="row">
-        <span className="name">
-          <span className={`presence ${friend.presence}`} aria-hidden />
-          {friend.username}
-          <span className="muted small">{t.presence[friend.presence]}</span>
-        </span>
-        <span className="row-buttons">
-          <IconButton label={t.moreFor(friend.username)} variant="small" expanded={more} onClick={() => setMore(!more)}>
-            <Ellipsis size={18} />
-          </IconButton>
-          <IconButton label={t.call(friend.username)} variant="active" disabled={calling} onClick={onCall}>
-            <Phone size={18} />
-          </IconButton>
-        </span>
-      </div>
-      {more && (
-        <div className="row-buttons more">
-          <button onClick={() => onAct("remove", friend.username)}>{t.remove}</button>
-          <button className="danger" onClick={() => onAct("block", friend.username)}>
-            {t.block}
-          </button>
-        </div>
-      )}
+    <div className="row friend">
+      <span className="name">
+        <span className={`presence ${friend.presence}`} aria-hidden />
+        {friend.username}
+        <span className="muted small">{t.presence[friend.presence]}</span>
+        {missed && (
+          <span className="missed small">
+            {missed}
+            <button type="button" className="missed-clear" aria-label={t.clearMissed(friend.username)} title={t.clearMissed(friend.username)} onClick={onClearMissed}>
+              <X size={14} />
+            </button>
+          </span>
+        )}
+      </span>
+      <span className="row-buttons">
+        <FriendMenu name={friend.username} onAct={onAct} />
+        <IconButton
+          label={t.call(friend.username)}
+          variant="active"
+          disabled={calling || friend.presence === "offline"}
+          onClick={onCall}
+        >
+          <Phone size={18} />
+        </IconButton>
+      </span>
     </div>
+  );
+}
+
+/** ⋯ on a friend: Remove and Block, each asked again before it's done. */
+function FriendMenu({ name, onAct }: { name: string; onAct: (action: string, name: string) => void }) {
+  const t = useFriendsT();
+  const ref = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState<"remove" | "block" | null>(null);
+  const close = () => setOpen(false);
+  const toggle = () => {
+    setConfirm(null);
+    setOpen(!open);
+  };
+  const act = (action: "remove" | "block") => {
+    onAct(action, name);
+    close();
+  };
+
+  return (
+    <span className="friend-menu" ref={ref}>
+      <IconButton label={t.moreFor(name)} variant="small" expanded={open} onClick={toggle}>
+        <Ellipsis size={18} />
+      </IconButton>
+      <MenuPanel label={t.moreFor(name)} open={open} onClose={close} within={ref}>
+        {confirm === null ? (
+          <>
+            <button type="button" role="menuitem" className="menu-item" onClick={() => setConfirm("remove")}>
+              <UserMinus size={18} />
+              <span>{t.remove}</span>
+            </button>
+            <button type="button" role="menuitem" className="menu-item bad" onClick={() => setConfirm("block")}>
+              <Shield size={18} />
+              <span>{t.block}</span>
+            </button>
+          </>
+        ) : (
+          <div className="menu-confirm" key={confirm}>
+            <p>{confirm === "remove" ? t.confirmRemove(name) : t.confirmBlock(name)}</p>
+            <div className="row-buttons">
+              <button type="button" onClick={() => setConfirm(null)}>
+                {t.cancel}
+              </button>
+              <button type="button" className={confirm === "block" ? "danger" : "primary"} onClick={() => act(confirm)}>
+                {confirm === "remove" ? t.remove : t.block}
+              </button>
+            </div>
+          </div>
+        )}
+      </MenuPanel>
+    </span>
   );
 }
 

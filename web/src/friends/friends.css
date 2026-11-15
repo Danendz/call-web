@@ -42,12 +42,6 @@
   color: var(--muted);
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .home .row {
   display: flex;
   align-items: center;
@@ -66,10 +60,66 @@
   overflow-wrap: anywhere;
 }
 
-.friend .more {
-  justify-content: flex-end;
-  padding-bottom: 8px;
+.missed {
+  display: inline-flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 2px;
+  color: var(--bad);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+button.missed-clear {
+  min-height: 0;
+  padding: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+
+button.missed-clear:hover {
+  background: var(--danger-soft);
+}
+
+/* The popover opens below ⋯ here, over the rows under it */
+.friend-menu {
+  position: relative;
+}
+
+.friend-menu .menu {
+  z-index: 10;
+  top: calc(100% + 6px);
+  bottom: auto;
+  width: 248px;
+  transform: translateY(-8px) scale(0.96);
+  transform-origin: top right;
+}
+
+.friend-menu .menu.open {
+  transform: none;
+}
+
+button.menu-item.bad {
+  color: var(--bad);
+}
+
+.menu-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 8px 6px;
   animation: fade-in var(--fast) var(--ease);
+}
+
+.menu-confirm p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-confirm .row-buttons {
+  justify-content: flex-end;
 }
 
 .presence {

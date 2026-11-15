@@ -109,7 +109,8 @@ pub enum FriendsCommand {
         call_id: String,
         accept: bool,
     },
-    MissedSeen,
+    /// Clears the missed calls from this friend
+    MissedSeen(String),
     DismissNotice,
     /// Counts the unused invite codes, for the account screen
     LoadInvites,

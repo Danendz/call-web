@@ -152,8 +152,8 @@ export type UserClientMessage =
   | { type: "ring"; to: string }
   | { type: "cancel"; callId: string }
   | { type: "answer"; callId: string; accept: boolean }
-  // Clears the missed calls in the next state
-  | { type: "missed-seen" }
+  // Clears the missed calls in the next state: all of them, or only those from one friend
+  | { type: "missed-seen"; from?: string }
   | { type: "ping" };
 
 export type UserServerMessage =

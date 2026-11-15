@@ -81,6 +81,10 @@ export function answer(sock: UserSocket, callId: string, accept: boolean): void 
   if (!roomId) return finish(r, "unavailable", true);
   rings.delete(r.id);
   clearTimeout(r.timer);
+  store
+    .missedAnswered(r.caller.id, r.callee.id)
+    .then(() => refresh([r.caller.id, r.callee.id]))
+    .catch((err: Error) => console.warn("missed calls:", err.message));
   send(r.from.ws, { type: "answered", callId, roomId });
   send(sock.ws, { type: "answered", callId, roomId });
   sendToUser(r.callee.id, { type: "call-ended", callId, reason: "answered-elsewhere" }, sock);

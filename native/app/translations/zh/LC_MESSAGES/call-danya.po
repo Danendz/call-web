@@ -89,9 +89,6 @@ msgstr "聊天"
 msgid "Choose camera"
 msgstr "选择摄像头"
 
-msgid "Clear"
-msgstr "清除"
-
 msgid "Close"
 msgstr "关闭"
 
@@ -241,9 +238,6 @@ msgstr "麦克风和扬声器"
 
 msgid "Microphone: Not found"
 msgstr "麦克风：未找到"
-
-msgid "Missed calls"
-msgstr "未接来电"
 
 msgid "More"
 msgstr "更多"
@@ -625,3 +619,18 @@ msgstr "将对方视频的当前画面保存为 PNG，包括不锐化和锐化�
 
 msgid "Save"
 msgstr "保存"
+
+msgid "{} missed calls · {}"
+msgstr "{} 个未接来电 · {}"
+
+msgid "Missed call · {}"
+msgstr "未接来电 · {}"
+
+msgid "Clear missed calls from {}"
+msgstr "清除 {} 的未接来电"
+
+msgid "Remove {} from friends?"
+msgstr "将 {} 从好友中删除？"
+
+msgid "Block {}? They can't call you or send requests."
+msgstr "屏蔽 {}？对方将无法呼叫你或发送请求。"

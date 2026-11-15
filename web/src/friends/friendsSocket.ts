@@ -72,8 +72,9 @@ export class FriendsSocket {
     this.set({ incoming: this.state.incoming.filter((c) => c.callId !== callId) });
   }
 
-  missedSeen(): void {
-    this.send({ type: "missed-seen" });
+  /** Clears the missed calls from one friend. */
+  missedSeen(from: string): void {
+    this.send({ type: "missed-seen", from });
   }
 
   dismissNotice(): void {
