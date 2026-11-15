@@ -90,7 +90,7 @@ export component DebugSection inherits VerticalLayout {
         }
         SettingRow {
             title: @tr("Video error correction");
-            detail: @tr("Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call, and only with the other person on this app with it on too.");
+            detail: @tr("Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call. Works only when both of you use this app and have it on.");
             VerticalLayout {
                 alignment: center;
                 Switch {

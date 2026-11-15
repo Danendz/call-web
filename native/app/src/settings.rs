@@ -39,7 +39,7 @@ pub struct Settings {
     #[serde(default)]
     pub record_stats: bool,
     /// "Video error correction" in Settings' Debug group: FlexFEC, from the next call
-    #[serde(default)]
+    #[serde(default = "yes")]
     pub fec: bool,
     /// "Sharpen video" in Settings: the other person's video upscaled with FSR where it's drawn bigger than it came
     #[serde(default = "yes")]
@@ -205,7 +205,7 @@ impl Default for Settings {
             live_prompt_seen: false,
             show_stats: false,
             record_stats: false,
-            fec: false,
+            fec: true,
             sharpen_video: true,
             subtitles: true,
             noise_suppression: desktop(),

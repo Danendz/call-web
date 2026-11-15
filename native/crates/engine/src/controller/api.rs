@@ -130,7 +130,7 @@ pub enum Command {
     SetStatsShown(bool),
     /// "Record call stats": each call's stats go into a file of their own in the data folder, see [`crate::stats_log_dir`]
     SetStatsLog(bool),
-    /// FlexFEC on video, from the next connection on; both sides need it on for it to be used
+    /// FlexFEC on video, from the next connection on (the app turns it on at start); used only when both sides have it on
     SetFec(bool),
     /// DeepFilterNet on the mic instead of WebRTC's own noise suppression; any time, live in a call
     SetNoiseSuppression(bool),

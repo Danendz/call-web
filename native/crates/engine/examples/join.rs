@@ -12,7 +12,7 @@
 //! each pause ending a line. `CODEC=h264` or `CODEC=vp8` picks the video codec as Settings does (default
 //! auto), and `SWITCH=<codec>` changes it 10 s into its stay, as Settings does mid-call; the stats it logs name the
 //! codec in use. `RECORD=1` with `DATA_DIR` writes the call's stats log into `<folder>/call-stats/`, as Settings'
-//! "Record call stats" does. `FEC=1` turns FlexFEC on, as Settings' Debug switch does.
+//! "Record call stats" does. FlexFEC is on as in the app; `FEC=0` turns it off, as Settings' Debug switch does.
 
 // A dev tool: bad arguments just stop it
 #![allow(clippy::panic)]
@@ -91,7 +91,7 @@ fn main() {
     // Stats come only while asked for, like the overlay; they name the codec in use
     engine.send(Command::SetStatsShown(true));
     engine.send(Command::SetStatsLog(std::env::var_os("RECORD").is_some()));
-    engine.send(Command::SetFec(std::env::var_os("FEC").is_some()));
+    engine.send(Command::SetFec(std::env::var_os("FEC").is_none_or(|v| v != "0")));
     engine.send(Command::OpenRoom(room));
     if std::env::var_os("TRANSCRIBE").is_some() {
         engine.send(Command::SetTranscribe(true));
