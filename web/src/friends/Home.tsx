@@ -5,6 +5,7 @@ import { api } from "../account/api";
 import { AccountSheet } from "../account/AccountSheet";
 import { IconButton } from "../ui/IconButton";
 import { MenuPanel } from "../ui/MenuPanel";
+import { Spinner } from "../ui/Spinner";
 import { navigate, newRoomPath } from "../ui/router";
 import type { FriendsSocket } from "./friendsSocket";
 import { useFriendsT } from "./strings";
@@ -55,7 +56,16 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
   return (
     <div className="home">
       <header className="home-head">
-        <h1>{t.friends}</h1>
+        <h1>
+          {t.friends}
+          {/* The list stays as it was meanwhile */}
+          {lists && !state.connected && (
+            <span className="reconnecting" role="status" title={t.reconnecting}>
+              <Spinner size={18} />
+              <span className="sr-only">{t.reconnecting}</span>
+            </span>
+          )}
+        </h1>
         <div className="home-actions">
           <button onClick={() => navigate(newRoomPath())}>
             <Link2 size={18} />
@@ -66,8 +76,6 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
           </IconButton>
         </div>
       </header>
-
-      {!state.connected && <p className="muted small">{t.reconnecting}</p>}
 
       {lists && lists.rooms.length > 0 && (
         <section className="home-card">
@@ -101,6 +109,7 @@ export function Home({ friends, username, lang, onLang }: { friends: FriendsSock
       )}
 
       <section className="home-card">
+        {!lists && <FriendSkeletons />}
         {lists && lists.friends.length === 0 && <p className="muted small">{t.noFriends}</p>}
         {lists &&
           sortFriends(lists.friends, missed).map((f) => {
@@ -184,6 +193,23 @@ function FriendRow({
           <Phone size={18} />
         </IconButton>
       </span>
+    </div>
+  );
+}
+
+/** Rows shaped like friends until the first list comes in */
+function FriendSkeletons() {
+  return (
+    <div aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <div className="row" key={i}>
+          <span className="name">
+            <span className="skeleton presence" />
+            <span className="skeleton line" />
+          </span>
+          <span className="skeleton circle" />
+        </div>
+      ))}
     </div>
   );
 }

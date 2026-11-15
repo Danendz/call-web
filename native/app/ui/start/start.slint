@@ -44,6 +44,7 @@ export component StartScreen inherits Rectangle {
     in property <[string]> pending-requests;
     in property <[RoomRow]> open-rooms;
     in property <bool> friends-connected;
+    in property <bool> friends-loaded;
     in property <bool> calling;
     in property <string> account-error;
     callback ring(string);
@@ -128,6 +129,7 @@ export component StartScreen inherits Rectangle {
                     area-height: root.height;
                     rooms: root.open-rooms;
                     connected: root.friends-connected;
+                    loaded: root.friends-loaded;
                     calling: root.calling;
                     error: root.account-error;
                     ring(name) => { root.ring(name); }

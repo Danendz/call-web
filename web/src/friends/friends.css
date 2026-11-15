@@ -138,6 +138,57 @@ button.menu-item.bad {
   background: var(--ok);
 }
 
+.home-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reconnecting {
+  display: inline-flex;
+  color: var(--muted);
+  animation: fade-in var(--med) var(--ease);
+}
+
+/* Placeholder rows while the first list loads */
+.skeleton {
+  background: var(--surface-3);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton.line {
+  width: 140px;
+  height: 14px;
+  border-radius: 7px;
+}
+
+.row:nth-child(2) .skeleton.line {
+  width: 96px;
+}
+
+.row:nth-child(3) .skeleton.line {
+  width: 120px;
+}
+
+.skeleton.circle {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
+}
+
 .add-friend {
   display: flex;
   flex-wrap: wrap;

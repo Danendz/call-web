@@ -177,6 +177,7 @@ export component AppWindow inherits Window {
     in property <[string]> blocked;
     in property <[RoomRow]> open-rooms;
     in property <bool> friends-connected;
+    in property <bool> friends-loaded;
     // Whom your ring is going to, who's calling you, and how your last ring ended (CallOverlay)
     in property <string> calling;
     in property <string> incoming-from;
@@ -313,6 +314,7 @@ export component AppWindow inherits Window {
             sheet: root.touch || root.width < 900px;
             open-rooms: root.open-rooms;
             friends-connected: root.friends-connected;
+            friends-loaded: root.friends-loaded;
             calling: root.calling != "";
             account-error: root.account-error;
             ring(name) => { root.ring(name); }
