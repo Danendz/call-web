@@ -142,6 +142,10 @@ export component SetupScreen inherits Rectangle {
     callback set-portrait(bool);
     callback join();
     callback back();
+    // A phone: the window's safe area already clears the status bar
+    in property <bool> touch;
+    // The Back button's top; on desktop below the macOS traffic lights, which sit over the content
+    property <length> back-y: touch ? 8px : 44px;
     property <bool> shown: false;
     property <bool> wide: root.width >= 1000px;
     property <length> panel-width: min(380px, root.width - 48px);
@@ -207,7 +211,7 @@ export component SetupScreen inherits Rectangle {
         alignment: center;
         spacing: 16px;
         padding: 24px;
-        padding-top: 88px;
+        padding-top: root.back-y + 44px;
         padding-bottom: 16px;
         opacity: shown ? 1 : 0;
         animate opacity { duration: Theme.slow; easing: Theme.ease; }
@@ -215,9 +219,9 @@ export component SetupScreen inherits Rectangle {
         HorizontalLayout {
             alignment: center;
             Preview {
-                // Whatever height the panel leaves, under the Back button's 88px and the layout's gaps
+                // Whatever height the panel leaves, under the Back button and the layout's gaps
                 property <float> ar: root.portrait ? 9 / 16 : 16 / 9;
-                height: min((root.width - 48px) / ar, max(0px, root.height - 88px - 16px - 16px - panel.preferred-height));
+                height: min((root.width - 48px) / ar, max(0px, root.height - root.back-y - 44px - 16px - 16px - panel.preferred-height));
                 width: self.height * ar;
                 visible: self.height > 120px;
                 mic-on: root.mic-on;
@@ -260,10 +264,10 @@ export component SetupScreen inherits Rectangle {
         }
     }
 
-    // Back to new room / join by link. Below the macOS traffic lights, which sit over the content
+    // Back to new room / join by link
     Button {
         x: 16px;
-        y: 44px;
+        y: root.back-y;
         width: self.preferred-width;
         height: 36px;
         text: @tr("Back");

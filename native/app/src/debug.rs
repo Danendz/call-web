@@ -56,7 +56,7 @@ pub fn wire(ui: &AppWindow, engine: &Rc<Engine>, settings: &Rc<RefCell<Settings>
         }
     });
 
-    ui.set_can_show_files(cfg!(not(target_os = "android")) && settings::data_dir().is_some());
+    ui.set_can_show_files(cfg!(desktop) && settings::data_dir().is_some());
     ui.on_show_stats_files(|| {
         if let Some(data) = settings::data_dir() {
             show_folder(&engine::stats_log_dir(&data));
@@ -163,7 +163,7 @@ fn png(mut pixels: slint::SharedPixelBuffer<slint::Rgba8Pixel>) -> Option<Vec<u8
 
 /// Opens a folder in Finder or Explorer, made first if nothing was saved in it yet.
 fn show_folder(dir: &std::path::Path) {
-    if cfg!(target_os = "android") {
+    if cfg!(mobile) {
         return;
     }
     if let Err(e) = std::fs::create_dir_all(dir) {

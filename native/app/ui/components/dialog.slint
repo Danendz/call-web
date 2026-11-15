@@ -1,9 +1,13 @@
 import { Theme } from "../theme.slint";
 
-// A card over a dimmed backdrop that rises and fades in, and back out before it's gone. Ask it to go with dismiss();
-// the owner removes it on closed(). A click outside the card or Esc/Back dismisses it unless it's `required`.
+// A card over a dimmed backdrop that rises and fades in, and back out before it's gone; on a phone a sheet that slides
+// up from the bottom, which stays put as the keyboard or its own content changes its height, where a centered card
+// would jump. Ask it to go with dismiss(); the owner removes it on closed(). A click outside the card or Esc/Back
+// dismisses it unless it's `required`.
 export component Dialog inherits Rectangle {
     in property <length> card-width: 420px;
+    // From the bottom instead of the middle
+    in property <bool> sheet;
     // Has to be answered: the backdrop and Esc/Back don't close it
     in property <bool> required;
     // False starts it going, like dismiss(): for an owner whose reason to show it went away
@@ -26,7 +30,7 @@ export component Dialog inherits Rectangle {
     }
 
     exit-timer := Timer {
-        interval: Theme.med;
+        interval: root.sheet ? Theme.sheet : Theme.med;
         running: false;
         triggered => {
             self.running = false;
@@ -41,6 +45,8 @@ export component Dialog inherits Rectangle {
         closing = true;
         shown = false;
         exit-timer.running = true;
+        // Out of any field in the card: one removed while focused leaves the on-screen keyboard up
+        keys.focus();
     }
 
     changed open => {
@@ -49,8 +55,8 @@ export component Dialog inherits Rectangle {
         }
     }
 
-    background: shown ? #00000099 : #00000000;
-    animate background { duration: Theme.med; easing: Theme.ease; }
+    background: !shown ? #00000000 : sheet ? Theme.sheet-dim : #00000099;
+    animate background { duration: sheet ? Theme.sheet : Theme.med; easing: sheet ? Theme.ease-sheet : Theme.ease; }
 
     TouchArea {
         clicked => {
@@ -71,19 +77,35 @@ export component Dialog inherits Rectangle {
         }
 
         Rectangle {
-            width: min(root.card-width, root.width - 32px);
-            height: min(content.preferred-height, root.height - 32px);
-            y: (root.height - self.height) / 2 + (root.shown ? 0 : 10px);
-            opacity: root.shown ? 1 : 0;
+            // How far below its place the sheet is as it slides in or out, closed past the phone's home indicator or
+            // navigation bar, which the window goes on under. Apart from y, so the sheet stays on the keyboard as it
+            // moves, which an animation of y would trail; from the content's height, which doesn't change as the
+            // keyboard goes, so the slide isn't started again
+            property <length> slide: root.shown ? 0 : content.preferred-height + 80px;
+            width: root.sheet ? min(root.width, 520px) : min(root.card-width, root.width - 32px);
+            height: min(content.preferred-height, root.height - (root.sheet ? 16px : 32px));
+            y: root.sheet ? root.height - self.height + self.slide : (root.height - self.height) / 2 + (root.shown ? 0 : 10px);
+            opacity: root.sheet || root.shown ? 1 : 0;
             border-radius: Theme.radius-lg;
+            border-bottom-left-radius: root.sheet ? 0 : Theme.radius-lg;
+            border-bottom-right-radius: root.sheet ? 0 : Theme.radius-lg;
             border-width: 1px;
             border-color: Theme.glass-border;
             background: Theme.surface;
             drop-shadow-blur: 30px;
-            drop-shadow-offset-y: 10px;
+            drop-shadow-offset-y: root.sheet ? 0 : 10px;
             drop-shadow-color: Theme.shadow;
-            clip: true;
-            animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+            clip: !root.sheet;
+            animate y { duration: root.sheet ? 0ms : Theme.med; easing: Theme.ease; }
+            animate slide { duration: Theme.sheet; easing: Theme.ease-sheet; }
+            animate opacity { duration: Theme.med; easing: Theme.ease; }
+
+            // Under the sheet's bottom edge, so its spring shows no gap
+            if root.sheet: Rectangle {
+                y: parent.height - 1px;
+                height: 80px;
+                background: Theme.surface;
+            }
 
             // Swallows clicks so they don't reach the backdrop
             TouchArea { clicked => { root.card-clicked(); } }
@@ -91,6 +113,13 @@ export component Dialog inherits Rectangle {
             // Scrolls when a short window can't fit it
             Flickable {
                 content-height: content.preferred-height;
+                // Slint scrolls a focused field clear of the on-screen keyboard; the sheet already sits on it, and a
+                // field it caught mid-slide would be scrolled away and back
+                changed content-y => {
+                    if (content.preferred-height <= self.height) {
+                        self.content-y = 0;
+                    }
+                }
                 content := VerticalLayout {
                     width: parent.width;
                     padding: 22px;

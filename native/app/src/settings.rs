@@ -187,11 +187,11 @@ fn yes() -> bool {
 }
 
 fn desktop() -> bool {
-    !cfg!(target_os = "android")
+    cfg!(desktop)
 }
 
 fn upright() -> bool {
-    cfg!(target_os = "android")
+    cfg!(mobile)
 }
 
 impl Default for Settings {
@@ -262,7 +262,8 @@ pub fn data_dir() -> Option<PathBuf> {
 pub fn data_dir() -> Option<PathBuf> {
     let base = if cfg!(target_os = "windows") {
         PathBuf::from(std::env::var_os("APPDATA")?)
-    } else if cfg!(target_os = "macos") {
+    } else if cfg!(target_vendor = "apple") {
+        // On iOS, HOME is the app's own container
         PathBuf::from(std::env::var_os("HOME")?).join("Library/Application Support")
     } else {
         std::env::var_os("XDG_CONFIG_HOME")

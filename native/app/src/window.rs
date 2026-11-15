@@ -23,6 +23,10 @@ use crate::settings::{Renderer, Settings, WgpuCheck};
 
 #[cfg(not(target_os = "android"))]
 pub fn select_backend() -> Result<(), slint::PlatformError> {
+    // iOS has no OpenGL to fall back to
+    if cfg!(target_os = "ios") {
+        return selector().renderer_name("skia-wgpu".into()).require_wgpu_30(wgpu_configuration()).select();
+    }
     let mut settings = Settings::load();
     if settings.renderer == Renderer::Modern && settings.wgpu == WgpuCheck::Trying {
         fall_back(&mut settings, "the last launch on wgpu never drew a frame");

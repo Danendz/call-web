@@ -268,8 +268,9 @@ export component AppWindow inherits Window {
 
     title: "Call Danya";
     icon: Icons.video;
-    min-width: 420px;
-    min-height: 560px;
+    // A phone's screen is the window, whatever its size; winit on iOS would clip a window held wider than it
+    min-width: root.touch ? 0px : 420px;
+    min-height: root.touch ? 0px : 560px;
     preferred-width: 1100px;
     preferred-height: 760px;
     background: Theme.bg;
@@ -278,6 +279,10 @@ export component AppWindow inherits Window {
     // Clear of the phone's status and navigation bars, which the window is drawn under, and of the on-screen keyboard,
     // which covers it without resizing it; zero on desktop. Holds focus when nothing else does, so the phone's Back
     // key lands here; what no screen takes goes back to Android, which puts the app in the background.
+    // How much of the window the on-screen keyboard covers. iOS keeps its size once it's put away and only moves it
+    // below the window, so it's what lies above the window's bottom edge
+    property <length> keyboard-height: max(0px, min(root.virtual-keyboard-size.height, root.height - root.virtual-keyboard-position.y));
+
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(event) => {
@@ -297,7 +302,7 @@ export component AppWindow inherits Window {
         x: root.safe-area-insets.left;
         y: root.safe-area-insets.top;
         width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
-        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
+        height: root.height - root.safe-area-insets.top - max(root.safe-area-insets.bottom, root.keyboard-height);
 
         if phase == AppPhase.start: StartScreen {
             version: root.version;
@@ -371,6 +376,7 @@ export component AppWindow inherits Window {
             pick-cam(id) => { root.pick-cam(id); }
             join => { root.join(); }
             back => { root.home(); }
+            touch: root.touch;
             // Only your camera's preview
             init => { root.feeds-seen(true, false, false); }
         }
@@ -437,7 +443,7 @@ export component AppWindow inherits Window {
             toggle-transcribe => { root.toggle-transcribe(); }
             send-chat(text) => { root.send-chat(text) }
             touch: root.touch;
-            keyboard-shown: root.virtual-keyboard-size.height > 0;
+            keyboard-shown: root.keyboard-height > 0;
             pip: root.pip;
             outputs: root.outputs;
             output: root.output;
@@ -602,6 +608,7 @@ export component AppWindow inherits Window {
 
         // Up until it has animated out, after sign-in-open is cleared
         if root.sign-in-up: SignInDialog {
+            sheet: root.touch || root.width < 900px;
             open: root.sign-in-open && root.account == "signed-out";
             error: root.account-error;
             busy: root.account-busy;
@@ -618,6 +625,7 @@ export component AppWindow inherits Window {
         }
 
         if root.recovery-code != "": RecoveryDialog {
+            sheet: root.touch || root.width < 900px;
             code: root.recovery-code;
             closed => { root.recovery-saved(); }
         }

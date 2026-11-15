@@ -229,7 +229,8 @@ export component MenuPanel inherits Rectangle {
             : min((root.opens-below ? root.height - root.anchor-bottom : root.anchor-top) - 32px, root.height * 0.7, 520px));
         x: root.sheet ? (root.width - self.width) / 2
             : max(8px, min(root.width - self.width - 8px, root.align-left ? root.anchor-left - 8px : root.anchor-right + 8px - self.width));
-        y: root.sheet ? (root.shown ? self.rest + root.drag : root.height)
+        // A closed sheet goes past the phone's home indicator or navigation bar, which the window goes on under
+        y: root.sheet ? (root.shown ? self.rest + root.drag : root.height + 80px)
             : root.opens-below ? root.anchor-bottom + 6px : root.anchor-top - self.height - 16px;
         animate y {
             duration: root.sheet && !root.dragging ? Theme.sheet : 0ms;

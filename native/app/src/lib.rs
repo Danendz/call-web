@@ -9,12 +9,14 @@ mod debug;
 mod friends;
 mod fsr;
 mod gpu;
+#[cfg(target_os = "ios")]
+mod ios;
 mod reactions;
 mod readable;
 mod screenshot;
 mod settings;
 mod translate;
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 mod update;
 pub(crate) mod video;
 pub mod window;
@@ -58,16 +60,27 @@ pub fn run() -> anyhow::Result<()> {
     select_translation(lang);
     ui.set_lang(lang_code(lang).into());
     ui.set_version(env!("CARGO_PKG_VERSION").into());
-    ui.set_touch(cfg!(target_os = "android"));
+    ui.set_touch(cfg!(mobile));
 
     #[cfg(target_os = "android")]
     android::attach(&ui, &settings);
+    #[cfg(target_os = "ios")]
+    {
+        ios::register();
+        let weak = ui.as_weak();
+        // The window exists once the event loop runs
+        slint::Timer::single_shot(Duration::ZERO, move || {
+            if let Some(ui) = weak.upgrade() {
+                ios::attach_window(&ui);
+            }
+        });
+    }
 
     let bridge = Bridge::new(&ui, lang, settings::data_dir());
     let call_started = bridge.call_started.clone();
     BRIDGE.with(|b| *b.borrow_mut() = Some(bridge));
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     let updater = update::Updater::start(
         &server,
         {
@@ -83,7 +96,7 @@ pub fn run() -> anyhow::Result<()> {
             }
         },
     );
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     ui.on_update_now({
         let updater = updater.clone();
         move || {
@@ -562,7 +575,7 @@ pub fn run() -> anyhow::Result<()> {
     drop(ui);
     drop(friends);
     drop(engine);
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     if let Some(updater) = updater {
         updater.install_on_exit();
     }

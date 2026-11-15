@@ -59,8 +59,12 @@ pub fn show(saved: &str) {
     crate::android::open_picture(saved);
 }
 
+/// Nothing to open it in yet: iOS keeps it in the app's Documents, which the Files app shows.
+#[cfg(target_os = "ios")]
+pub fn show(_saved: &str) {}
+
 /// Shows the picture selected in Finder or Explorer.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn show(saved: &str) {
     let path = Path::new(saved);
     let opened = if cfg!(target_os = "macos") {
@@ -78,7 +82,8 @@ pub fn show(saved: &str) {
 #[cfg(not(target_os = "android"))]
 fn pictures_dir() -> Option<PathBuf> {
     let home = std::env::var_os(if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" })?;
-    Some(PathBuf::from(home).join("Pictures"))
+    // The app's own container on iOS, whose Documents the Files app shows
+    Some(PathBuf::from(home).join(if cfg!(target_os = "ios") { "Documents" } else { "Pictures" }))
 }
 
 /// call-20261107-1554.jpg, then -2, -3… when two land in the same minute.

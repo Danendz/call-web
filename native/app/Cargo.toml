@@ -34,7 +34,23 @@ slint = { version = "=1.18.1", default-features = false, features = [
     "renderer-skia",
     "unstable-wgpu-30",
 ] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 velopack = "=1.2.161"
+
+# The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks (src/ios.rs)
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-ui-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "UIResponder",
+    "UIScene",
+    "UISceneOptions",
+    "UISceneSession",
+    "UIView",
+    "UIWindow",
+    "UIWindowScene",
+] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Skia over Vulkan through wgpu, or over OpenGL, picked at runtime by our patched backend (vendor/README.md)

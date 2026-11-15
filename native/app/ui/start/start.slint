@@ -242,6 +242,7 @@ export component StartScreen inherits Rectangle {
     }
 
     if asking: JoinDialog {
+        sheet: root.sheet;
         submit(link) => { root.open-link(link) }
         closed => { asking = false; }
     }

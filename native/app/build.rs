@@ -1,4 +1,5 @@
 fn main() {
+    platform_cfgs();
     let config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("translations")
         // Strings are translated the same wherever they appear, so the .po has no per-component contexts
@@ -27,5 +28,15 @@ fn android() {
     let Some(dest) = out.as_deref().and_then(|out| out.ancestors().nth(3)) else { return };
     if let Err(e) = std::fs::copy(&jar, dest.join("libwebrtc.jar")) {
         println!("cargo::error=couldn't copy {}: {e}", jar.display());
+    }
+}
+
+/// `cfg(desktop)` on macOS and Windows, `cfg(mobile)` on Android and iOS, as in the engine's build.rs.
+fn platform_cfgs() {
+    println!("cargo::rustc-check-cfg=cfg(desktop, mobile)");
+    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("macos" | "windows") => println!("cargo::rustc-cfg=desktop"),
+        Ok("android" | "ios") => println!("cargo::rustc-cfg=mobile"),
+        _ => {}
     }
 }
