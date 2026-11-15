@@ -69,6 +69,7 @@ pub fn run() -> anyhow::Result<()> {
         ios::register();
         ios::text_menus(&ui);
         ios::attach_window_when_made(&ui);
+        ios::audio::attach(&ui);
     }
 
     let bridge = Bridge::new(&ui, lang, settings::data_dir());
@@ -161,6 +162,8 @@ pub fn run() -> anyhow::Result<()> {
             }
             #[cfg(target_os = "android")]
             android::sync(&ui);
+            #[cfg(target_os = "ios")]
+            ios::audio::sync(&ui);
         }
     });
     let ticker = slint::Timer::default();
@@ -352,6 +355,8 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(command(value.into()));
         }
     };
+    // On iOS a mic is picked with its route, by `ios::audio`
+    #[cfg(not(target_os = "ios"))]
     ui.on_pick_mic(remember(|s, id| s.mic = Some(id), Command::SelectMic));
     ui.on_pick_speaker(remember(|s, id| s.speaker = Some(id), Command::SelectSpeaker));
     ui.on_pick_cam(remember(|s, id| s.cam = Some(id), Command::SelectCam));

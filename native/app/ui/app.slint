@@ -160,7 +160,7 @@ export component AppWindow inherits Window {
     // Set on a phone: a touch screen with an on-screen keyboard
     in property <bool> touch;
     // Where the call's sound plays on a phone ("speaker", "earpiece", "bluetooth"), and which of them there are
-    in property <[string]> outputs;
+    in property <[DeviceItem]> outputs;
     in property <string> output;
     callback pick-output(string);
     in property <string> background-guide;
@@ -358,6 +358,9 @@ export component AppWindow inherits Window {
             speaker-id: root.speaker-id;
             speaker-label: root.speaker-label;
             pick-speaker(id) => { root.pick-speaker(id); }
+            outputs: root.outputs;
+            output: root.output;
+            pick-output(id) => { root.pick-output(id); }
             mic-on: root.mic-on;
             mic-level: root.mic-level;
             has-mic: root.has-mic;

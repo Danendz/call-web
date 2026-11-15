@@ -62,9 +62,14 @@ objc2-foundation = "0.3"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-screen-capture-kit = "0.3"
 
-# Which way up the phone is held, for the camera's frames
+# Which way up the phone is held, for the camera's frames; the audio session, set for recording before a mic opens
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2-av-foundation = { version = "0.3", features = ["objc2-core-media", "objc2-quartz-core"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = [
+    "std",
+    "AVAudioSession",
+    "AVAudioSessionTypes",
+] }
 
 # Media Foundation camera capture, raw formats only: its MJPEG decoding would add another libjpeg
 [target.'cfg(target_os = "windows")'.dependencies]

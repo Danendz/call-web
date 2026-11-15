@@ -197,6 +197,9 @@ msgstr "挂断"
 msgid "Headset"
 msgstr "耳机"
 
+msgid "Phone microphone"
+msgstr "手机麦克风"
+
 msgid "I saved it"
 msgstr "我已保存"
 

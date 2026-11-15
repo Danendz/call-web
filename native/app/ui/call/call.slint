@@ -84,7 +84,7 @@ export component CallScreen inherits Rectangle {
     in property <bool> keyboard-shown;
     // Android's picture-in-picture window, too small for anything but the video
     in property <bool> pip;
-    in property <[string]> outputs;
+    in property <[DeviceItem]> outputs;
     in property <string> output;
     callback pick-output(string);
     callback toggle-mic();

@@ -1,6 +1,8 @@
 //! Everything in the app that isn't UI. The UI sends [`Command`]s and renders the [`State`] snapshots it gets
 //! back, like the web's `CallController`.
 
+#[cfg(target_os = "ios")]
+pub mod audio_session;
 mod camera;
 mod codec;
 mod controller;
