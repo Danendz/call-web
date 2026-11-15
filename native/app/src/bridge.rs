@@ -8,8 +8,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use engine::{
-    CallStats, CameraAccess, ChatEvent, Device, Lang, Link, Model as SpeechModel, ModelStatus, Pair, Path, Phase,
-    SpeechNotice, State, TranslatorEvent, VideoStats,
+    CallStats, CameraAccess, ChatEvent, Device, FullReason, Lang, Link, Model as SpeechModel, ModelStatus, Pair, Path,
+    Phase, SpeechNotice, State, TranslatorEvent, VideoStats,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -101,6 +101,17 @@ impl Bridge {
             Phase::Full => AppPhase::Full,
             Phase::Ended => AppPhase::Ended,
         });
+        ui.set_full_reason(
+            match state.full_reason {
+                Some(FullReason::TimeLimit) => "time-limit",
+                Some(FullReason::NotInvited) => "not-invited",
+                Some(FullReason::Elsewhere) => "elsewhere",
+                Some(FullReason::RoomLimit) => "room-limit",
+                Some(FullReason::Busy) => "busy",
+                None | Some(FullReason::Unknown) => "",
+            }
+            .into(),
+        );
         ui.set_lang(crate::lang_code(state.lang).into());
         self.chat.borrow_mut().set_lang(state.lang);
         ui.set_room_url(state.room_url.clone().unwrap_or_default().into());

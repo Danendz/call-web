@@ -17,6 +17,10 @@ const en = {
   privateRoomBody: "Only the two people in this call can join it.",
   joinedElsewhere: "You joined from another device",
   joinedElsewhereBody: "The call goes on there.",
+  roomLimit: "Too many new rooms",
+  roomLimitBody: "You've started as many rooms as you can for now. Try again later.",
+  busy: "No free rooms",
+  busyBody: "The server can't open more rooms right now. Try again in a few minutes.",
   backToFriends: "Back to friends",
   signIn: "Sign in",
 
@@ -122,6 +126,10 @@ const zh: Strings = {
   privateRoomBody: "只有这次通话的两个人可以加入。",
   joinedElsewhere: "你在另一台设备上加入了",
   joinedElsewhereBody: "通话在那台设备上继续。",
+  roomLimit: "新房间太多了",
+  roomLimitBody: "你暂时不能再创建新房间了，请稍后再试。",
+  busy: "没有空闲房间",
+  busyBody: "服务器暂时无法开新房间，请过几分钟再试。",
   backToFriends: "返回好友",
   signIn: "登录",
 

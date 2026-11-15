@@ -80,7 +80,7 @@ export interface MediaMessage {
   speakerOff?: boolean;
 }
 
-export type FullReason = "time-limit" | "not-invited" | "elsewhere";
+export type FullReason = "time-limit" | "not-invited" | "elsewhere" | "room-limit" | "busy";
 
 // The utterance being said so far, in the speaker's language, relayed to the other person and never stored. Each one
 // replaces the last with the same id; the spoken chat line with that liveId finishes it, and empty text drops it
@@ -109,9 +109,10 @@ export type ServerMessage =
     }
   | { type: "peer-joined"; polite: boolean; callElapsedMs: number }
   | { type: "peer-left" }
-  // The room can't be joined, and the client stops reconnecting. No reason: two people are already in it (or the
-  // server is out of rooms). "time-limit": an anonymous room's call ran out its time. "not-invited": a private room
-  // of two other accounts. "elsewhere": the same account joined it from another device.
+  // The room can't be joined, and the client stops reconnecting. No reason: two people are already in it.
+  // "time-limit": an anonymous room's call ran out its time. "not-invited": a private room of two other accounts.
+  // "elsewhere": the same account joined it from another device. "room-limit": the room doesn't exist and this
+  // address or account has started as many as it may for now. "busy": the server is out of rooms.
   | { type: "full"; reason?: FullReason }
   | { type: "signal"; payload: SignalPayload }
   | { type: "chat"; message: ChatMessage }

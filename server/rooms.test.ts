@@ -77,3 +77,13 @@ test("the Rooms tab lists a room the other person is still in, until both leave"
   join(roomId, null, null, late.ws, { ip, userId: alice.id });
   assert.equal(late.sent[0].type, "joined");
 });
+
+test("an address out of new anonymous rooms is told so, not that the room is full", () => {
+  const from = { ip: "192.0.2.1", userId: null };
+  const joined = [0, 1, 2, 3, 4].map((i) => [`limit-${i}`, join(`limit-${i}`, null, null, fakeSocket().ws, from)!] as const);
+  const refused = fakeSocket();
+  assert.equal(join("limit-5", null, null, refused.ws, from), null);
+  assert.deepEqual(refused.sent, [{ type: "full", reason: "room-limit" }]);
+  // Their expiry timers would keep the test running
+  for (const [roomId, clientId] of joined) leave(roomId, clientId);
+});

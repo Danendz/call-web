@@ -347,6 +347,18 @@ msgstr "删除"
 msgid "Room is full"
 msgstr "房间已满"
 
+msgid "Too many new rooms"
+msgstr "新房间太多了"
+
+msgid "You've started as many rooms as you can for now. Try again later."
+msgstr "你暂时不能再创建新房间了，请稍后再试。"
+
+msgid "No free rooms"
+msgstr "没有空闲房间"
+
+msgid "The server can't open more rooms right now. Try again in a few minutes."
+msgstr "服务器暂时无法开新房间，请过几分钟再试。"
+
 msgid "Room link"
 msgstr "房间链接"
 
