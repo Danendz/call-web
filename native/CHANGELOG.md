@@ -26,7 +26,7 @@ The app comes to iPhone, gets its own icon, and video holds up better on weak co
 
 ### Changed
 
-- Android draws with Vulkan and converts video on the graphics card, using less battery; OpenGL stays as the fallback
+- Android draws with Vulkan and converts video on the graphics card, as desktop does; OpenGL stays as the fallback
 
 ## 0.4.0 — 2026-11-14
 
