@@ -38,3 +38,6 @@ strip = "symbols"
 # why and how to update it: vendor/README.md.
 [patch.crates-io]
 webrtc-sys = { path = "vendor/webrtc-sys" }
+# Slint's Android backend, made to pick Skia over wgpu (Vulkan) or OpenGL at runtime and fall back to OpenGL by itself;
+# why and how to update it: vendor/README.md.
+i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }

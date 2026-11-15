@@ -8,11 +8,11 @@ use std::rc::Rc;
 
 use chrono::{DateTime, Local};
 use engine::friends::{Account, FriendAction, Friends, FriendsCommand, FriendsEvent, FriendsState, SessionToken};
-use engine::{ApiErrorCode, CallEndReason, Command, Engine, Presence};
+use engine::{ApiErrorCode, CallEndReason, Command, Engine, FriendState, MissedCall, Presence};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::settings;
-use crate::ui::{AppWindow, FriendRow, MissedRow, RoomRow};
+use crate::ui::{AppWindow, FriendRow, RoomRow};
 
 thread_local! {
     // What the friends thread's state and events reach on the UI thread: models and the engine aren't `Send`
@@ -74,7 +74,10 @@ fn wire(ui: &AppWindow, friends: &Rc<Friends>) {
     ui.on_recovery_saved(send(|| FriendsCommand::RecoverySaved));
     ui.on_clear_account_error(send(|| FriendsCommand::ClearError));
     ui.on_cancel_ring(send(|| FriendsCommand::CancelRing));
-    ui.on_missed_seen(send(|| FriendsCommand::MissedSeen));
+    ui.on_missed_seen({
+        let friends = friends.clone();
+        move |from| friends.send(FriendsCommand::MissedSeen(from.into()))
+    });
     ui.on_dismiss_call_notice(send(|| FriendsCommand::DismissNotice));
     ui.on_load_invites(send(|| FriendsCommand::LoadInvites));
     ui.on_new_invite(send(|| FriendsCommand::NewInvite));
@@ -150,7 +153,6 @@ struct Models {
     requests: ModelRc<SharedString>,
     pending: ModelRc<SharedString>,
     blocked: ModelRc<SharedString>,
-    missed: ModelRc<MissedRow>,
     rooms: ModelRc<RoomRow>,
 }
 
@@ -161,14 +163,12 @@ impl Models {
             requests: ModelRc::from(Rc::new(VecModel::default())),
             pending: ModelRc::from(Rc::new(VecModel::default())),
             blocked: ModelRc::from(Rc::new(VecModel::default())),
-            missed: ModelRc::from(Rc::new(VecModel::default())),
             rooms: ModelRc::from(Rc::new(VecModel::default())),
         };
         ui.set_friends(models.friends.clone());
         ui.set_friend_requests(models.requests.clone());
         ui.set_pending_requests(models.pending.clone());
         ui.set_blocked(models.blocked.clone());
-        ui.set_missed(models.missed.clone());
         ui.set_open_rooms(models.rooms.clone());
         models
     }
@@ -195,6 +195,7 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_invites_max(i32::try_from(max).unwrap_or(i32::MAX));
     ui.set_password_changed(state.password_changed);
     ui.set_friends_connected(state.connected);
+    ui.set_friends_loaded(state.lists.is_some());
     ui.set_calling(state.outgoing.as_ref().map(|o| o.to.as_str()).unwrap_or_default().into());
     let incoming = state.incoming.first();
     ui.set_incoming_from(incoming.map(|c| c.from.as_str()).unwrap_or_default().into());
@@ -204,29 +205,16 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_call_notice_with(with.into());
 
     let lists = state.lists.as_ref();
-    sync(
-        &models.friends,
-        lists.map(|l| &l.friends[..]).unwrap_or_default().iter().map(|f| FriendRow {
-            name: f.username.as_str().into(),
-            presence: match f.presence {
-                Presence::Online => "online",
-                Presence::InCall => "in-call",
-                Presence::Offline | Presence::Unknown => "offline",
-            }
-            .into(),
-        }),
-    );
-    sync(&models.requests, lists.map(|l| &l.incoming[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
-    sync(&models.pending, lists.map(|l| &l.outgoing[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
-    sync(&models.blocked, lists.map(|l| &l.blocked[..]).unwrap_or_default().iter().map(|n| n.as_str().into()));
-    sync(
-        &models.missed,
-        lists
-            .map(|l| &l.missed[..])
-            .unwrap_or_default()
-            .iter()
-            .map(|m| MissedRow { from: m.from.as_str().into(), at: date_time(m.at).into() }),
-    );
+    let mut friends = friend_rows(lists.map(|l| (&l.friends[..], &l.missed[..])).unwrap_or_default());
+    for row in &mut friends {
+        let was = models.friends.iter().find(|old| old.name == row.name).map(|old| old.presence);
+        row.came_online = row.presence == "online" && was.is_some_and(|was| was != "online");
+    }
+    sync(&models.friends, friends.into_iter(), |r| r.name.clone());
+    let name = |n: &SharedString| n.clone();
+    sync(&models.requests, lists.map(|l| &l.incoming[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
+    sync(&models.pending, lists.map(|l| &l.outgoing[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
+    sync(&models.blocked, lists.map(|l| &l.blocked[..]).unwrap_or_default().iter().map(|n| n.as_str().into()), name);
     sync(
         &models.rooms,
         lists
@@ -234,24 +222,80 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
             .unwrap_or_default()
             .iter()
             .map(|r| RoomRow { room_id: r.room_id.as_str().into(), with: r.with.as_str().into() }),
+        |r| r.room_id.clone(),
     );
 }
 
-/// Replaces the rows that differ, so a list that didn't change isn't rebuilt under the pointer.
-fn sync<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, rows: impl Iterator<Item = T>) {
+/// Friends with a missed call first (the latest on top), then online, in a call and offline, each by name, like the
+/// web's `sortFriends`. Missed calls from someone who isn't a friend aren't shown.
+fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<FriendRow> {
+    let mut rows: Vec<(u64, u8, FriendRow)> = friends
+        .iter()
+        .map(|f| {
+            let from_them = missed.iter().filter(|m| m.from == f.username);
+            let (count, last) = from_them.fold((0, 0), |(n, last), m| (n + 1, last.max(m.at)));
+            let (presence, order) = match f.presence {
+                Presence::Online => ("online", 0),
+                Presence::InCall => ("in-call", 1),
+                Presence::Offline | Presence::Unknown => ("offline", 2),
+            };
+            let row = FriendRow {
+                name: f.username.as_str().into(),
+                presence: presence.into(),
+                missed: count,
+                missed_at: if count > 0 { date_time(last).into() } else { SharedString::default() },
+                came_online: false,
+            };
+            (last, order, row)
+        })
+        .collect();
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then_with(|| a.2.name.cmp(&b.2.name)));
+    rows.into_iter().map(|(_, _, row)| row).collect()
+}
+
+/// Brings the model to `rows` by moving, adding and removing rows by `key` and replacing only the rows that changed,
+/// so a row that stays keeps its element (only the ones that come in or move fade in) and a list that didn't change
+/// isn't rebuilt under the pointer.
+fn sync<T: Clone + PartialEq + 'static, K: PartialEq>(
+    model: &ModelRc<T>,
+    rows: impl Iterator<Item = T>,
+    key: impl Fn(&T) -> K,
+) {
     let Some(vec) = model.as_any().downcast_ref::<VecModel<T>>() else { return };
     let rows: Vec<T> = rows.collect();
-    if vec.iter().eq(rows.iter().cloned()) {
-        return;
+    let key_at = |i: usize| vec.row_data(i).map(|old| key(&old));
+    for (i, row) in rows.iter().enumerate() {
+        let k = key(row);
+        // The row here is gone, or moved down past this one: it comes back in further down
+        while key_at(i).is_some_and(|old| {
+            old != k && (key_at(i + 1).as_ref() == Some(&k) || !rows.iter().skip(i).any(|r| key(r) == old))
+        }) {
+            vec.remove(i);
+        }
+        match (i..vec.row_count()).find(|&j| key_at(j).as_ref() == Some(&k)) {
+            Some(j) if j > i => {
+                vec.remove(j);
+                vec.insert(i, row.clone());
+            }
+            Some(_) if vec.row_data(i).as_ref() != Some(row) => vec.set_row_data(i, row.clone()),
+            Some(_) => {}
+            None => vec.insert(i, row.clone()),
+        }
     }
-    vec.set_vec(rows);
+    while vec.row_count() > rows.len() {
+        vec.remove(rows.len());
+    }
 }
 
 fn date_time(epoch_ms: u64) -> String {
     i64::try_from(epoch_ms)
         .ok()
         .and_then(DateTime::from_timestamp_millis)
-        .map(|at| at.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string())
+        .map(|at| at.with_timezone(&Local))
+        // Just the time for today's calls, so the tag fits on a phone
+        .map(|at| {
+            at.format(if at.date_naive() == Local::now().date_naive() { "%H:%M" } else { "%Y-%m-%d %H:%M" }).to_string()
+        })
         .unwrap_or_default()
 }
 
@@ -323,5 +367,32 @@ fn write_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> 
     #[cfg(not(unix))]
     {
         fs::write(path, contents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synced(from: &[&str], to: &[&str]) -> Vec<String> {
+        let model: ModelRc<SharedString> = ModelRc::from(Rc::new(VecModel::from_iter(from.iter().map(|&n| n.into()))));
+        sync(&model, to.iter().map(|&n| n.into()), |n| n.clone());
+        model.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn sync_reaches_the_new_order() {
+        for (from, to) in [
+            (&["a", "b", "c", "d"][..], &["b", "c", "d", "a"][..]),
+            (&["a", "b", "c", "d"], &["d", "a", "b", "c"]),
+            (&["a", "b"], &["b", "a"]),
+            (&["a", "b", "c"], &["a", "c"]),
+            (&["a", "c"], &["a", "b", "c", "e"]),
+            (&["a", "b", "c"], &[]),
+            (&[], &["c", "a"]),
+            (&["x", "a", "y", "b"], &["b", "z", "a"]),
+        ] {
+            assert_eq!(synced(from, to), to, "{from:?} -> {to:?}");
+        }
     }
 }

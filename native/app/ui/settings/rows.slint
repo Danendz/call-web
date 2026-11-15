@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
 
 // An on/off switch, like the OS's own
 export component Switch inherits Rectangle {
@@ -87,4 +88,70 @@ export component Heading inherits Text {
     color: Theme.muted;
     font-size: Theme.font-size-small;
     font-weight: 600;
+}
+
+// A line between two rows of a group
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+// A page on Settings' first page: its icon, its settings at a glance, and an arrow into it
+export component PageRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> detail;
+    callback clicked();
+
+    background: touch.has-hover ? Theme.menu-hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease; }
+    accessible-role: button;
+    accessible-label: root.title;
+    accessible-description: root.detail;
+    accessible-action-default => { root.clicked(); }
+
+    HorizontalLayout {
+        padding: 16px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.muted;
+                width: 20px;
+                height: 20px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.font-size;
+            }
+            if root.detail != "": Text {
+                text: root.detail;
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                overflow: elide;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.chevron-right;
+                colorize: Theme.muted;
+                width: 18px;
+                height: 18px;
+            }
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
 }

@@ -4,7 +4,7 @@ import { Theme } from "theme.slint";
 import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
-import { StartScreen, ModelState, FriendRow, MissedRow, RoomRow } from "start/start.slint";
+import { StartScreen, ModelState, FriendRow, RoomRow } from "start/start.slint";
 import { SignInDialog } from "account/sign-in-dialog.slint";
 import { RecoveryDialog } from "account/recovery-dialog.slint";
 import { CallOverlay } from "friends/call-overlay.slint";
@@ -14,13 +14,25 @@ import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark, VideoBox } from "call/call.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, MissedRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
 
 export component AppWindow inherits Window {
     in property <AppPhase> phase: start;
+    // Which screen the phase shows: starting, waiting and in-call are all the call screen
+    property <int> screen: phase == AppPhase.setup ? 1
+        : phase == AppPhase.starting || phase == AppPhase.waiting || phase == AppPhase.in-call ? 2
+        : phase == AppPhase.full ? 3
+        : phase == AppPhase.ended ? 4
+        : 0;
+    // A new screen fades in from the background
+    property <bool> curtain;
+    changed screen => {
+        curtain = true;
+        curtain-timer.running = true;
+    }
     in property <string> lang: "en";
     in property <string> room-url;
     in property <bool> reconnecting;
@@ -175,9 +187,9 @@ export component AppWindow inherits Window {
     in property <[string]> friend-requests;
     in property <[string]> pending-requests;
     in property <[string]> blocked;
-    in property <[MissedRow]> missed;
     in property <[RoomRow]> open-rooms;
     in property <bool> friends-connected;
+    in property <bool> friends-loaded;
     // Whom your ring is going to, who's calling you, and how your last ring ended (CallOverlay)
     in property <string> calling;
     in property <string> incoming-from;
@@ -193,6 +205,7 @@ export component AppWindow inherits Window {
     in property <int> invites-max;
     in property <bool> password-changed;
     in-out property <bool> sign-in-open;
+    property <bool> sign-in-up;
     // Why the room can't be joined: "", "time-limit", "not-invited", "elsewhere", "room-limit" or "busy"
     in property <string> full-reason;
     callback sign-in(string, string);
@@ -205,7 +218,7 @@ export component AppWindow inherits Window {
     callback ring(string);
     callback cancel-ring();
     callback answer(bool);
-    callback missed-seen();
+    callback missed-seen(string);
     callback dismiss-call-notice();
     callback rejoin(string);
     callback load-invites();
@@ -307,18 +320,22 @@ export component AppWindow inherits Window {
             download-pack => { root.download-pack(); }
             dismiss-live-prompt => { root.dismiss-live-prompt(); }
             account: root.account;
-            open-sign-in => { root.sign-in-open = true; }
+            open-sign-in => {
+                root.sign-in-open = true;
+                root.sign-in-up = true;
+            }
             friends: root.friends;
             friend-requests: root.friend-requests;
             pending-requests: root.pending-requests;
-            missed: root.missed;
+            sheet: root.touch || root.width < 900px;
             open-rooms: root.open-rooms;
             friends-connected: root.friends-connected;
+            friends-loaded: root.friends-loaded;
             calling: root.calling != "";
             account-error: root.account-error;
             ring(name) => { root.ring(name); }
             friend-action(action, name) => { root.friend-action(action, name); }
-            missed-seen => { root.missed-seen(); }
+            missed-seen(name) => { root.missed-seen(name); }
             rejoin(id) => { root.rejoin(id); }
             clear-account-error => { root.clear-account-error(); }
         }
@@ -487,6 +504,22 @@ export component AppWindow inherits Window {
             }
         }
 
+        // The window's background over a screen that just came in, fading away to show it
+        Rectangle {
+            background: Theme.bg;
+            opacity: root.curtain ? 1 : 0;
+            visible: self.opacity > 0;
+            animate opacity { duration: root.curtain ? 0ms : Theme.med; easing: Theme.ease; }
+            curtain-timer := Timer {
+                interval: 1ms;
+                running: false;
+                triggered => {
+                    self.running = false;
+                    root.curtain = false;
+                }
+            }
+        }
+
         // Over whichever screen opened it; a phase change (the call ending) leaves it open
         if root.settings-open: SettingsSheet {
             sheet: root.touch || root.width < 900px;
@@ -503,6 +536,8 @@ export component AppWindow inherits Window {
             screen-quality: root.screen-quality;
             screen-mbps: root.screen-mbps;
             renderer: root.renderer;
+            renderer-now: root.touch;
+            renderer-locked: root.touch && root.phase != AppPhase.start;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;
@@ -565,15 +600,18 @@ export component AppWindow inherits Window {
             dismiss => { root.dismiss-translation-prompt(); }
         }
 
-        if root.sign-in-open && root.account == "signed-out": SignInDialog {
+        // Up until it has animated out, after sign-in-open is cleared
+        if root.sign-in-up: SignInDialog {
+            open: root.sign-in-open && root.account == "signed-out";
             error: root.account-error;
             busy: root.account-busy;
             sign-in(user, password) => { root.sign-in(user, password); }
             register(user, password, invite) => { root.register(user, password, invite); }
             recover(user, code, password) => { root.recover(user, code, password); }
             clear-error => { root.clear-account-error(); }
-            close => {
+            closed => {
                 root.sign-in-open = false;
+                root.sign-in-up = false;
                 root.clear-account-error();
                 keys.focus();
             }
@@ -581,7 +619,7 @@ export component AppWindow inherits Window {
 
         if root.recovery-code != "": RecoveryDialog {
             code: root.recovery-code;
-            saved => { root.recovery-saved(); }
+            closed => { root.recovery-saved(); }
         }
 
         // Rings show over every screen, a call too; picture-in-picture is too small for them

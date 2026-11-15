@@ -1,0 +1,168 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { LangSwitch } from "../setup/lang-switch.slint";
+import { Switch, SettingRow, Group, Heading, Divider } from "rows.slint";
+
+// Where the on-device speech model stands, as the engine's ModelStatus
+export enum ModelState { missing, downloading, ready, failed }
+
+// Settings' Speech page: the language you speak, live subtitles and their translation, and speech to chat
+export component SpeechPage inherits VerticalLayout {
+    in property <string> lang;
+    in property <bool> subtitles-on;
+    in property <ModelState> translation-state;
+    in property <int> translation-progress;
+    in property <string> translation-size;
+    in property <ModelState> model-state;
+    in property <int> model-progress;
+    in property <string> model-size;
+    in property <bool> on-device;
+    callback set-lang(string);
+    callback set-subtitles-on(bool);
+    callback download-translation();
+    callback delete-translation();
+    callback download-model();
+    callback cancel-download();
+    callback delete-model();
+    callback set-on-device(bool);
+
+    spacing: 8px;
+
+    Group {
+        SettingRow {
+            title: @tr("I speak");
+            VerticalLayout {
+                alignment: center;
+                LangSwitch {
+                    lang: root.lang;
+                    picked(lang) => { root.set-lang(lang); }
+                }
+            }
+        }
+        Divider { }
+        SettingRow {
+            title: @tr("Live subtitles");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Live subtitles");
+                    checked: root.subtitles-on;
+                    toggled => { root.set-subtitles-on(!root.subtitles-on); }
+                }
+            }
+        }
+        Divider { }
+        // The model for the language picked under "I speak"
+        SettingRow {
+            title: @tr("Live translation");
+            detail: root.translation-state == ModelState.ready ? @tr("Downloaded · {}", root.translation-size)
+                : root.translation-state == ModelState.downloading ? @tr("Downloading… {}%", root.translation-progress)
+                : root.translation-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
+                : @tr("Not downloaded · {}", root.translation-size);
+            detail-color: root.translation-state == ModelState.failed ? Theme.danger-text : Theme.muted;
+            VerticalLayout {
+                alignment: center;
+                if root.translation-state == ModelState.missing: Button {
+                    text: @tr("Download");
+                    icon: Icons.download;
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.download-translation(); }
+                }
+                if root.translation-state == ModelState.failed: Button {
+                    text: @tr("Try again");
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.download-translation(); }
+                }
+                if root.translation-state == ModelState.ready: Button {
+                    text: @tr("Delete");
+                    kind: ButtonKind.danger;
+                    height-hint: 38px;
+                    clicked => { root.delete-translation(); }
+                }
+            }
+        }
+    }
+
+    Rectangle { height: 10px; }
+    Heading { text: @tr("Speech to chat"); }
+
+    Group {
+        SettingRow {
+            title: @tr("On-device recognition");
+            detail: root.model-state == ModelState.ready ? @tr("Downloaded · {}", root.model-size)
+                : root.model-state == ModelState.downloading ? @tr("Downloading… {}%", root.model-progress)
+                : root.model-state == ModelState.failed ? @tr("The download stopped. Try again to continue where it left off.")
+                : @tr("Not downloaded · {}", root.model-size);
+            detail-color: root.model-state == ModelState.failed ? Theme.danger-text : Theme.muted;
+            VerticalLayout {
+                alignment: center;
+                if root.model-state == ModelState.missing: Button {
+                    text: @tr("Download");
+                    icon: Icons.download;
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.download-model(); }
+                }
+                if root.model-state == ModelState.failed: Button {
+                    text: @tr("Try again");
+                    kind: ButtonKind.primary;
+                    height-hint: 38px;
+                    clicked => { root.download-model(); }
+                }
+                if root.model-state == ModelState.downloading: Button {
+                    text: @tr("Cancel");
+                    height-hint: 38px;
+                    clicked => { root.cancel-download(); }
+                }
+                if root.model-state == ModelState.ready: Button {
+                    text: @tr("Delete");
+                    kind: ButtonKind.danger;
+                    height-hint: 38px;
+                    clicked => { root.delete-model(); }
+                }
+            }
+        }
+
+        if root.model-state == ModelState.downloading: VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 16px;
+            Rectangle {
+                height: 4px;
+                border-radius: 2px;
+                background: Theme.surface-3;
+                Rectangle {
+                    x: 0;
+                    width: parent.width * root.model-progress / 100;
+                    border-radius: 2px;
+                    background: Theme.accent;
+                    animate width { duration: Theme.med; easing: Theme.ease; }
+                }
+            }
+        }
+
+        if root.model-state == ModelState.ready: Divider { }
+        if root.model-state == ModelState.ready: SettingRow {
+            title: @tr("Recognize on this device");
+            detail: root.on-device ? "" : @tr("Speech goes to the server");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Recognize on this device");
+                    checked: root.on-device;
+                    toggled => { root.set-on-device(!root.on-device); }
+                }
+            }
+        }
+    }
+
+    Text {
+        text: @tr("Recognizing speech on this device turns it into chat faster, keeps working when the server's speech limit is used up, and your voice never leaves the device.");
+        color: Theme.muted;
+        font-size: Theme.font-size-small;
+        wrap: word-wrap;
+    }
+}

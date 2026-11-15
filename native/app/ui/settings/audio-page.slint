@@ -1,0 +1,22 @@
+import { Switch, SettingRow, Group } from "rows.slint";
+
+// Settings' Audio page
+export component AudioPage inherits VerticalLayout {
+    in property <bool> noise-suppression;
+    callback set-noise-suppression(bool);
+
+    Group {
+        SettingRow {
+            title: @tr("Noise suppression");
+            detail: @tr("May slow down games or other heavy apps while you share your screen.");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Noise suppression");
+                    checked: root.noise-suppression;
+                    toggled => { root.set-noise-suppression(!root.noise-suppression); }
+                }
+            }
+        }
+    }
+}

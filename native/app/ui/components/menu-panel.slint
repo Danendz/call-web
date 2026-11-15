@@ -1,11 +1,13 @@
 import { Theme } from "../theme.slint";
-import { Icons } from "../components/icons.slint";
+import { Icons } from "icons.slint";
 
-// A row in a pill menu, with a check on the picked one
+// A row in a menu, with a check on the picked one
 export component MenuItem inherits Rectangle {
     in property <image> icon;
     in property <string> text;
     in property <bool> checked;
+    // Red, for an action that can't be taken back
+    in property <bool> danger;
     in property <bool> enabled: true;
     callback activated();
 
@@ -25,14 +27,14 @@ export component MenuItem inherits Rectangle {
         spacing: 12px;
         if root.icon.width > 0: Image {
             source: root.icon;
-            colorize: Theme.text;
+            colorize: root.danger ? Theme.bad : Theme.text;
             width: 18px;
             height: 18px;
             y: (parent.height - self.height) / 2;
         }
         Text {
             text: root.text;
-            color: Theme.text;
+            color: root.danger ? Theme.bad : Theme.text;
             font-weight: 500;
             vertical-alignment: center;
             overflow: elide;
@@ -119,7 +121,7 @@ export component MenuHead inherits Rectangle {
     }
 }
 
-// A pill menu's panel. It fills its PopupWindow, which covers the whole window: a popover above its button, or
+// A menu's panel. It fills its PopupWindow, which covers the whole window: a popover above its button (or below), or
 // on a phone or a narrow window a bottom sheet that feels like the web's (vaul): it follows a drag down, closes
 // past a quarter of its height or on a flick, springs back otherwise and only gives a little when pulled up. A tap
 // on the dim, Esc or Back close it too. The list scrolls when it doesn't fit; a drag down only moves the sheet
@@ -130,6 +132,9 @@ export component MenuPanel inherits Rectangle {
     // The menu button's right edge and top, in this panel's coordinates: the popover opens above it
     in property <length> anchor-right;
     in property <length> anchor-top;
+    // Opens below the button instead, from its bottom edge here, unless there's more room above it
+    in property <bool> below;
+    in property <length> anchor-bottom;
     in property <length> popover-width: 236px;
     // A popover opens from the button's left edge instead, at this x, like the web's split menus
     in property <bool> align-left;
@@ -145,6 +150,8 @@ export component MenuPanel inherits Rectangle {
 
     property <bool> shown;
     property <bool> closing;
+    property <bool> opens-below: below && (root.height - anchor-bottom - 24px >= body.preferred-height
+        || root.height - anchor-bottom > anchor-top);
     // How far the sheet is pulled from where it rests, down positive; raw is the finger's distance
     property <length> drag;
     property <length> raw-drag;
@@ -218,10 +225,12 @@ export component MenuPanel inherits Rectangle {
         width: root.sheet ? min(root.width, 520px) : root.popover-width;
         // A popover stops at the web's .menu max-height, min(70vh, 520px); a long list scrolls inside it
         height: min(body.preferred-height,
-            root.sheet ? min(root.height * 0.8, 640px) : min(root.anchor-top - 32px, root.height * 0.7, 520px));
+            root.sheet ? min(root.height * 0.8, 640px)
+            : min((root.opens-below ? root.height - root.anchor-bottom : root.anchor-top) - 32px, root.height * 0.7, 520px));
         x: root.sheet ? (root.width - self.width) / 2
             : max(8px, min(root.width - self.width - 8px, root.align-left ? root.anchor-left - 8px : root.anchor-right + 8px - self.width));
-        y: !root.sheet ? root.anchor-top - self.height - 16px : root.shown ? self.rest + root.drag : root.height;
+        y: root.sheet ? (root.shown ? self.rest + root.drag : root.height)
+            : root.opens-below ? root.anchor-bottom + 6px : root.anchor-top - self.height - 16px;
         animate y {
             duration: root.sheet && !root.dragging ? Theme.sheet : 0ms;
             easing: Theme.ease-sheet;
@@ -229,7 +238,7 @@ export component MenuPanel inherits Rectangle {
         // A popover springs open from the button, like the web's .menu.open
         opacity: root.sheet || root.shown ? 1 : 0;
         transform-scale: root.sheet || root.shown ? 1 : 0.94;
-        transform-origin: { x: root.align-left ? 0 : self.width, y: self.height };
+        transform-origin: { x: root.align-left ? 0 : self.width, y: root.opens-below ? 0 : self.height };
         animate opacity { duration: Theme.med; easing: Theme.ease; }
         animate transform-scale { duration: Theme.med; easing: Theme.ease-spring; }
         border-radius: root.sheet ? 0 : Theme.radius;

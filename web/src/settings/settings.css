@@ -1,3 +1,19 @@
+/* "‹ Back" and the page's title */
+.settings-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 12px 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settings-head .icon-btn {
+  margin-left: -8px;
+}
+
 .settings {
   display: flex;
   flex-direction: column;
@@ -5,6 +21,53 @@
   min-height: 0;
   padding: 0 4px 8px;
   overflow-y: auto;
+}
+
+/* A page coming in: from the right going in, from the left going back */
+.settings.from-right {
+  animation: page-from-right var(--med) var(--ease);
+}
+
+.settings.from-left {
+  animation: page-from-left var(--med) var(--ease);
+}
+
+@keyframes page-from-right {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+
+@keyframes page-from-left {
+  from {
+    transform: translateX(-32px);
+    opacity: 0;
+  }
+}
+
+/* A category on the first page */
+button.settings-row.page {
+  justify-content: flex-start;
+  gap: 0;
+  width: 100%;
+  min-height: 60px;
+  padding: 0 12px 0 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-weight: 450;
+  text-align: left;
+  color: var(--text);
+}
+
+button.settings-row.page:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.settings-row .row-arrow {
+  flex: none;
+  color: var(--muted);
 }
 
 .settings-row {

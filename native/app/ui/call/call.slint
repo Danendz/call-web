@@ -266,6 +266,8 @@ export component CallScreen inherits Rectangle {
                     Text {
                         text: starting ? @tr("Starting…") : @tr("Waiting for the other person to join…");
                         color: Theme.text;
+                        // Breathes while nobody's there
+                        opacity: Theme.reduced-motion ? 1 : 0.775 + 0.225 * Math.cos(animation-tick() / 2.4s * 360deg);
                         font-weight: 550;
                         horizontal-alignment: center;
                         wrap: word-wrap;

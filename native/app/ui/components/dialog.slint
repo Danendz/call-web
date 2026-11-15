@@ -1,0 +1,108 @@
+import { Theme } from "../theme.slint";
+
+// A card over a dimmed backdrop that rises and fades in, and back out before it's gone. Ask it to go with dismiss();
+// the owner removes it on closed(). A click outside the card or Esc/Back dismisses it unless it's `required`.
+export component Dialog inherits Rectangle {
+    in property <length> card-width: 420px;
+    // Has to be answered: the backdrop and Esc/Back don't close it
+    in property <bool> required;
+    // False starts it going, like dismiss(): for an owner whose reason to show it went away
+    in property <bool> open: true;
+    // A click on the card, outside what's in it
+    callback card-clicked();
+    // Gone from screen: remove it now
+    callback closed();
+
+    property <bool> shown;
+    property <bool> closing;
+
+    // Opens a tick after the first frame: set in init, there would be nothing to animate from
+    enter-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            self.running = false;
+            root.shown = true;
+        }
+    }
+
+    exit-timer := Timer {
+        interval: Theme.med;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.closed();
+        }
+    }
+
+    public function dismiss() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        shown = false;
+        exit-timer.running = true;
+    }
+
+    changed open => {
+        if (!open) {
+            dismiss();
+        }
+    }
+
+    background: shown ? #00000099 : #00000000;
+    animate background { duration: Theme.med; easing: Theme.ease; }
+
+    TouchArea {
+        clicked => {
+            if (!root.required) {
+                root.dismiss();
+            }
+        }
+    }
+
+    // Holds Esc/Back as it bubbles up from a field in the card, or when nothing in it has focus
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (!root.required && (event.text == Key.Escape || event.text == Key.Back)) {
+                root.dismiss();
+                return accept;
+            }
+            reject
+        }
+
+        Rectangle {
+            width: min(root.card-width, root.width - 32px);
+            height: min(content.preferred-height, root.height - 32px);
+            y: (root.height - self.height) / 2 + (root.shown ? 0 : 10px);
+            opacity: root.shown ? 1 : 0;
+            border-radius: Theme.radius-lg;
+            border-width: 1px;
+            border-color: Theme.glass-border;
+            background: Theme.surface;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+            clip: true;
+            animate y, opacity { duration: Theme.med; easing: Theme.ease; }
+
+            // Swallows clicks so they don't reach the backdrop
+            TouchArea { clicked => { root.card-clicked(); } }
+
+            // Scrolls when a short window can't fit it
+            Flickable {
+                content-height: content.preferred-height;
+                content := VerticalLayout {
+                    width: parent.width;
+                    padding: 22px;
+                    spacing: 14px;
+                    @children
+                }
+            }
+        }
+    }
+
+    // Focus for Esc/Back, unless what's inside takes it for a field
+    public function focus-keys() {
+        keys.focus();
+    }
+}

@@ -11,7 +11,7 @@ component Heading inherits Text {
     font-weight: 650;
 }
 
-// The account part of Settings, while signed in: invite codes, password, blocked users, signing out, deleting.
+// Settings' Account page, while signed in: invite codes, password, blocked users, signing out, deleting.
 export component AccountSection inherits VerticalLayout {
     in property <string> username;
     in property <string> error;
@@ -34,7 +34,6 @@ export component AccountSection inherits VerticalLayout {
 
     spacing: 10px;
 
-    Heading { text: @tr("Account"); }
     HorizontalLayout {
         spacing: 10px;
         Image {

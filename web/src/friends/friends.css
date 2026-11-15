@@ -42,13 +42,8 @@
   color: var(--muted);
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .home .row {
+  animation: fade-in var(--med) var(--ease);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -66,13 +61,71 @@
   overflow-wrap: anywhere;
 }
 
-.friend .more {
-  justify-content: flex-end;
-  padding-bottom: 8px;
+.missed {
+  animation: fade-in var(--fast) var(--ease);
+  display: inline-flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 2px;
+  color: var(--bad);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+button.missed-clear {
+  min-height: 0;
+  padding: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+
+button.missed-clear:hover {
+  background: var(--danger-soft);
+}
+
+/* The popover opens below ⋯ here, over the rows under it */
+.friend-menu {
+  position: relative;
+}
+
+.friend-menu .menu {
+  z-index: 10;
+  top: calc(100% + 6px);
+  bottom: auto;
+  width: 248px;
+  transform: translateY(-8px) scale(0.96);
+  transform-origin: top right;
+}
+
+.friend-menu .menu.open {
+  transform: none;
+}
+
+button.menu-item.bad {
+  color: var(--bad);
+}
+
+.menu-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 8px 6px;
   animation: fade-in var(--fast) var(--ease);
 }
 
+.menu-confirm p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-confirm .row-buttons {
+  justify-content: flex-end;
+}
+
 .presence {
+  position: relative;
   flex: none;
   width: 10px;
   height: 10px;
@@ -86,6 +139,77 @@
 
 .presence.in-call {
   background: var(--ok);
+}
+
+/* Rings out once as they come online */
+.presence.online.ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: presence-ping var(--slow) var(--ease) forwards;
+}
+
+@keyframes presence-ping {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+.home-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reconnecting {
+  display: inline-flex;
+  color: var(--muted);
+  animation: fade-in var(--med) var(--ease);
+}
+
+/* Placeholder rows while the first list loads */
+.skeleton {
+  background: var(--surface-3);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton.line {
+  width: 140px;
+  height: 14px;
+  border-radius: 7px;
+}
+
+.row:nth-child(2) .skeleton.line {
+  width: 96px;
+}
+
+.row:nth-child(3) .skeleton.line {
+  width: 120px;
+}
+
+.skeleton.circle {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
 }
 
 .add-friend {
@@ -125,6 +249,11 @@
   box-shadow: var(--shadow);
   translate: -50% 0;
   animation: rise var(--med) var(--ease);
+}
+
+.call-overlay.leaving {
+  pointer-events: none;
+  animation: sink var(--fast) var(--ease) forwards;
 }
 
 .call-overlay.notice {

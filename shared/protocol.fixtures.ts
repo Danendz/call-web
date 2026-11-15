@@ -122,6 +122,7 @@ export const userClientMessages = [
   { type: "answer", callId: "k1", accept: true },
   { type: "answer", callId: "k1", accept: false },
   { type: "missed-seen" },
+  { type: "missed-seen", from: "friend_1" },
   { type: "ping" },
 ] satisfies UserClientMessage[];
 

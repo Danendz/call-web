@@ -1,65 +1,37 @@
 import { LogOut } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { MAX_PASSWORD_LENGTH, type InvitesResponse, type NewInviteResponse } from "../../../shared/api";
-import { LANGS, type Lang } from "../../../shared/protocol";
-import { LANG_NAMES } from "../call/speech/lang";
 import { CopyLink } from "../ui/CopyLink";
-import { Sheet } from "../ui/Sheet";
 import { ApiFailure, api } from "./api";
 import { signOut, signedOut } from "./session";
 import { useAccountT } from "./strings";
 import "./account.css";
 
-/** Language, invite codes, password, blocked users, signing out and deleting the account. */
-export function AccountSheet({
-  open,
-  onClose,
-  username,
-  blocked,
-  lang,
-  onLang,
-}: {
-  open: boolean;
-  onClose: () => void;
-  username: string;
-  blocked: string[];
-  lang: Lang;
-  onLang: (lang: Lang) => void;
-}) {
+/** Settings' Account page: invite codes, password, blocked users, signing out and deleting the account. */
+export function AccountPage({ username, blocked }: { username: string; blocked: string[] }) {
   const t = useAccountT();
   return (
-    <Sheet label={`${t.account}: ${username}`} open={open} onClose={onClose} side="right" showTitle>
-      <div className="account-sheet">
-        <label className="row">
-          <span>{t.language}</span>
-          <select value={lang} onChange={(e) => onLang(e.target.value as Lang)}>
-            {LANGS.map((l) => (
-              <option key={l} value={l}>
-                {LANG_NAMES[l]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {open && <Invites />}
-        <ChangePassword />
-        {blocked.length > 0 && (
-          <section>
-            <h2>{t.blocked}</h2>
-            {blocked.map((name) => (
-              <div className="row" key={name}>
-                <span>{name}</span>
-                <button onClick={() => void api("/api/friends/unblock", { username: name }).catch(() => {})}>{t.unblock}</button>
-              </div>
-            ))}
-          </section>
-        )}
-        <button onClick={() => void signOut()}>
-          <LogOut size={18} />
-          {t.signOut}
-        </button>
-        <DeleteAccount />
-      </div>
-    </Sheet>
+    <div className="account-settings">
+      <p className="muted small">{t.signedInAs(username)}</p>
+      <Invites />
+      <ChangePassword />
+      {blocked.length > 0 && (
+        <section>
+          <h2>{t.blocked}</h2>
+          {blocked.map((name) => (
+            <div className="row" key={name}>
+              <span>{name}</span>
+              <button onClick={() => void api("/api/friends/unblock", { username: name }).catch(() => {})}>{t.unblock}</button>
+            </div>
+          ))}
+        </section>
+      )}
+      <button onClick={() => void signOut()}>
+        <LogOut size={18} />
+        {t.signOut}
+      </button>
+      <DeleteAccount />
+    </div>
   );
 }
 
