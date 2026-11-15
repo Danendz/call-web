@@ -566,6 +566,9 @@ msgstr "图形"
 msgid "Applies after restart."
 msgstr "重启后生效。"
 
+msgid "Can't be changed during a call."
+msgstr "通话中无法更改。"
+
 msgid "Modern"
 msgstr "现代"
 

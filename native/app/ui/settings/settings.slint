@@ -32,6 +32,9 @@ export component SettingsSheet inherits Rectangle {
     in property <int> screen-mbps;
     // "modern" or "opengl"; empty hides the choice
     in property <string> renderer;
+    // Android: "Graphics" switches at once, but not during a call, and there's no upscaling
+    in property <bool> renderer-now;
+    in property <bool> renderer-locked;
     in property <string> lang;
     in property <ModelState> model-state;
     in property <int> model-progress;
@@ -284,6 +287,8 @@ export component SettingsSheet inherits Rectangle {
                         screen-quality: root.screen-quality;
                         screen-mbps: root.screen-mbps;
                         renderer: root.renderer;
+                        renderer-now: root.renderer-now;
+                        renderer-locked: root.renderer-locked;
                         sharpen-video: root.sharpen-video;
                         set-video-codec(codec) => { root.set-video-codec(codec); }
                         set-screen-quality(quality) => { root.set-screen-quality(quality); }
@@ -337,7 +342,7 @@ export component SettingsSheet inherits Rectangle {
                         record-stats: root.record-stats;
                         can-show-files: root.can-show-files;
                         fec: root.fec;
-                        can-upscale: root.renderer == "modern";
+                        can-upscale: root.renderer == "modern" && !root.renderer-now;
                         compare-upscaling: root.compare-upscaling;
                         frame-saved: root.frame-saved;
                         set-show-stats(on) => { root.set-show-stats(on); }

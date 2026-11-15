@@ -1,4 +1,4 @@
-import { Activity, AudioLines, Captions, ChevronLeft, ChevronRight, Film, Languages, Mic, Subtitles, UserRound, Video } from "lucide-react";
+import { Activity, AudioLines, Captions, ChevronLeft, ChevronRight, Film, Languages, Mic, Sparkles, Subtitles, UserRound, Video } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { VideoCodec } from "../call/codec";
 import { LANGS, type Lang } from "../../../shared/protocol";
@@ -13,6 +13,7 @@ import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import "./settings.css";
 import { setVideoCodec, useVideoCodec } from "./codec";
 import { setNoiseSuppression, useNoiseSuppression } from "./noise";
+import { setSharpenVideo, useSharpenVideo } from "./sharpen";
 import { setShowStats, useShowStats } from "./stats";
 import { setSubtitles, useSubtitles } from "./subtitles";
 
@@ -154,9 +155,20 @@ function AudioPage() {
 function VideoPage() {
   const t = useT();
   const videoCodec = useVideoCodec();
+  const sharpenVideo = useSharpenVideo();
   const showStats = useShowStats();
   return (
     <>
+      <label className="settings-row">
+        <span className="row-icon" aria-hidden>
+          <Sparkles size={18} />
+        </span>
+        <span className="settings-label">
+          {t.sharpenVideo}
+          <span className="settings-detail">{t.sharpenVideoDetail}</span>
+        </span>
+        <input type="checkbox" role="switch" checked={sharpenVideo} onChange={(e) => setSharpenVideo(e.target.checked)} />
+      </label>
       <label className="settings-row">
         <span className="row-icon" aria-hidden>
           <Film size={18} />

@@ -125,6 +125,17 @@
   object-fit: cover;
 }
 
+/* "Sharpen video": the upscaled picture over the video, in the same box and fit; hidden while the video shows as it is */
+.feed-video.sharpened {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.feed-video.sharpened.unused {
+  visibility: hidden;
+}
+
 /* Rotated a quarter turn: the video's box takes the feed's sides swapped, centred, so contain/cover still fit */
 .feed {
   container-type: size;

@@ -498,6 +498,8 @@ export component AppWindow inherits Window {
             screen-quality: root.screen-quality;
             screen-mbps: root.screen-mbps;
             renderer: root.renderer;
+            renderer-now: root.touch;
+            renderer-locked: root.touch && root.phase != AppPhase.start;
             lang: root.lang;
             model-state: root.model-state;
             model-progress: root.model-progress;

@@ -31,7 +31,17 @@ For scale, the headless `join` peer used 14–21% for the same call with no UI. 
 
      CPU is unchanged. The memory drop in a call may partly be Metal's GPU memory being counted differently in `vmmap`'s physical footprint. Setup varies on both, depending on when the camera preview starts inside the sample.
 
-   - *Shipped (step 2):* with wgpu, each frame's Y, U and V planes go up as they are and a shader turns them into the texture Slint draws (`app/src/gpu.rs`); Vulkan, OpenGL and Android keep converting on the CPU. Measured on an M-series Mac with `sample` in a call receiving a 1280×800 test screen at up to 60 fps plus camera both ways, on VP8: conversion and Skia's RGBA upload were 7% of the app's busy CPU on the CPU path and disappear on the GPU one. Small, because libyuv converts a 1280×800 frame in ~0.2 ms with NEON. VP8's software encoder and decoder were 64–73%: hardware H.264 (the video codec setting) is the bigger win. `CALL_CPU_VIDEO=1` keeps the CPU path for comparing.
+   - *Shipped (step 2):* with wgpu, each frame's Y, U and V planes go up as they are and a shader turns them into the texture Slint draws (`app/src/gpu.rs`); OpenGL keeps converting on the CPU. Measured on an M-series Mac with `sample` in a call receiving a 1280×800 test screen at up to 60 fps plus camera both ways, on VP8: conversion and Skia's RGBA upload were 7% of the app's busy CPU on the CPU path and disappear on the GPU one. Small, because libyuv converts a 1280×800 frame in ~0.2 ms with NEON. VP8's software encoder and decoder were 64–73%: hardware H.264 (the video codec setting) is the bigger win. `CALL_CPU_VIDEO=1` keeps the CPU path for comparing.
+
+   - *Shipped (step 3):* Android draws with Skia over Vulkan, and video goes through the same shader. Measured on a Snapdragon 870 tablet (Android 14) in a release build, receiving the `join` example's test camera and a 1280×800 test screen over H.264 (hardware both ways), whole-app CPU from `/proc/<pid>/stat` over 60 s, 100% = one core:
+
+     | Run | OpenGL, CPU conversion | Vulkan, GPU conversion |
+     |---|---|---|
+     | Camera only | 90.2% | 89.1% |
+     | Camera + screen, 1 | 108.7% at ~6 fps | 108.0% at ~20 fps |
+     | Camera + screen, 2 | 118.4% at ~31 fps | 88.0% at 5–14 fps |
+
+     No regression, and no gain that stands out from the noise: the sender's bandwidth estimate set the screen's frame rate differently in every run, so the screen runs can't be compared with each other. As on the Mac, libyuv's NEON conversion is cheap, and Vulkan moves some work onto the UI thread instead (Skia's Vulkan backend, and every GPU submit, which Vulkan needs on one thread). A fair comparison needs a sender held at a fixed resolution and frame rate.
 
 2. **Frames were converted when nobody would see them.** *Shipped:* a feed isn't converted while the window is minimized or covered, or while picture-in-picture shows a different feed.
 

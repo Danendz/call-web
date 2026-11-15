@@ -19,25 +19,18 @@ type Buffer = SharedPixelBuffer<Rgba8Pixel>;
 /// still to submit until the UI thread has.
 pub enum Pixels {
     Cpu(Buffer),
-    #[cfg(not(target_os = "android"))]
-    Gpu(wgpu::Texture, wgpu::Device, Option<wgpu::CommandBuffer>),
+    Gpu(wgpu::Texture, DeviceKey, Option<wgpu::CommandBuffer>),
 }
 
-#[cfg(not(target_os = "android"))]
+use crate::gpu::DeviceKey;
 use slint::wgpu_30::wgpu;
-/// The device the GPU converts on; Android has none
-#[cfg(not(target_os = "android"))]
-type Device = wgpu::Device;
-#[cfg(target_os = "android")]
-type Device = std::convert::Infallible;
 
 impl Pixels {
     /// Whether this can be written again with a frame of this size: by the CPU, or by the GPU on `device`
-    fn fits(&self, width: u32, height: u32, device: Option<&Device>) -> bool {
+    fn fits(&self, width: u32, height: u32, device: Option<DeviceKey>) -> bool {
         match self {
             Self::Cpu(b) => device.is_none() && b.width() == width && b.height() == height,
-            #[cfg(not(target_os = "android"))]
-            Self::Gpu(t, d, _) => device == Some(d) && t.width() == width && t.height() == height,
+            Self::Gpu(t, d, _) => device == Some(*d) && t.width() == width && t.height() == height,
         }
     }
 
@@ -46,9 +39,8 @@ impl Pixels {
         if let Some(buffer) = image.to_rgba8() {
             return Some(Self::Cpu(buffer));
         }
-        #[cfg(not(target_os = "android"))]
         if let Some(texture) = image.to_wgpu_30_texture() {
-            return Some(Self::Gpu(texture, crate::gpu::converter()?.device().clone(), None));
+            return Some(Self::Gpu(texture, crate::gpu::converter()?.key(), None));
         }
         None
     }
@@ -57,26 +49,39 @@ impl Pixels {
     pub fn to_buffer(&self) -> Option<Buffer> {
         match self {
             Self::Cpu(b) => Some(b.clone()),
-            #[cfg(not(target_os = "android"))]
             // A texture from a renderer since torn down can't be read
-            Self::Gpu(t, d, _) => crate::gpu::converter().filter(|c| c.device() == d)?.read(t),
+            Self::Gpu(t, d, _) => crate::gpu::converter().filter(|c| c.key() == *d)?.read(t),
         }
     }
 
-    /// On the UI thread: runs a texture's conversion first, on the device it was recorded on.
+    /// On the UI thread: runs a texture's conversion first, on the device it was recorded on. A texture from a
+    /// renderer since torn down shows nothing: the one drawing now can't draw it.
     fn image(&mut self) -> Image {
         match self {
             Self::Cpu(b) => Image::from_rgba8(b.clone()),
-            #[cfg(not(target_os = "android"))]
             Self::Gpu(t, d, commands) => {
-                if let Some(commands) = commands.take()
-                    && let Some(gpu) = crate::gpu::converter().filter(|c| c.device() == d)
-                {
+                let Some(gpu) = crate::gpu::converter().filter(|c| c.key() == *d) else { return Image::default() };
+                if let Some(commands) = commands.take() {
                     gpu.submit(commands);
                 }
                 Image::try_from(t.clone()).unwrap_or_default()
             }
         }
+    }
+}
+
+/// When the window's renderer is torn down: video frames on screen that are its textures go blank until the next
+/// frame, so the next renderer never draws a texture from a device that's gone.
+pub fn drop_textures(ui: &AppWindow) {
+    let gone = |image: Image| image.to_wgpu_30_texture().is_some();
+    if gone(ui.get_self_video()) {
+        ui.set_self_video(Image::default());
+    }
+    if gone(ui.get_peer_video()) {
+        ui.set_peer_video(Image::default());
+    }
+    if gone(ui.get_screen_video()) {
+        ui.set_screen_video(Image::default());
     }
 }
 
@@ -90,13 +95,10 @@ struct Slot {
     shown: Mutex<Option<Pixels>>,
     spare: Mutex<Vec<Pixels>>,
     /// The plane textures the GPU converts from
-    #[cfg(not(target_os = "android"))]
     planes: Mutex<Option<crate::gpu::Planes>>,
     /// The textures between FSR's passes, while this feed is upscaled
-    #[cfg(not(target_os = "android"))]
     upscale: Mutex<Option<crate::fsr::Upscale>>,
     /// How the feed shows on screen, for the size to upscale to; the other person's feeds only
-    #[cfg(not(target_os = "android"))]
     fit: Mutex<Option<crate::fsr::Fit>>,
     scheduled: AtomicBool,
     /// Whether the screen on show draws this feed; see [`SlintSink::set_seen`]
@@ -109,11 +111,8 @@ impl Slot {
             latest: Mutex::new(None),
             shown: Mutex::new(None),
             spare: Mutex::new(Vec::new()),
-            #[cfg(not(target_os = "android"))]
             planes: Mutex::new(None),
-            #[cfg(not(target_os = "android"))]
             upscale: Mutex::new(None),
-            #[cfg(not(target_os = "android"))]
             fit: Mutex::new(None),
             scheduled: AtomicBool::new(false),
             seen: AtomicBool::new(true),
@@ -121,7 +120,7 @@ impl Slot {
     }
 
     /// A spare of this size and kind. Spares that don't fit (the camera switched, or the renderer) are dropped.
-    fn take(&self, width: u32, height: u32, device: Option<&Device>) -> Option<Pixels> {
+    fn take(&self, width: u32, height: u32, device: Option<DeviceKey>) -> Option<Pixels> {
         let mut spare = self.spare.lock().ok()?;
         spare.retain(|p| p.fits(width, height, device));
         spare.pop()
@@ -254,12 +253,11 @@ impl VideoSink for SlintSink {
             return;
         }
         let (width, height) = (frame.width(), frame.height());
-        #[cfg(not(target_os = "android"))]
         if let Some(gpu) = crate::gpu::converter() {
             let fit = slot.fit.lock().ok().and_then(|f| *f);
             let (out_width, out_height) =
                 fit.and_then(|fit| crate::fsr::target(width, height, fit)).unwrap_or((width, height));
-            let texture = match slot.take(out_width, out_height, Some(gpu.device())) {
+            let texture = match slot.take(out_width, out_height, Some(gpu.key())) {
                 Some(Pixels::Gpu(texture, _, _)) => texture,
                 _ => gpu.texture(out_width, out_height),
             };
@@ -267,7 +265,7 @@ impl VideoSink for SlintSink {
             if let Some(commands) =
                 frame.with_planes(|yuv| gpu.convert(&mut planes, &mut upscale, yuv, &texture)).flatten()
             {
-                self.show(feed, Pixels::Gpu(texture, gpu.device().clone(), Some(commands)), frame.rotation());
+                self.show(feed, Pixels::Gpu(texture, gpu.key(), Some(commands)), frame.rotation());
             }
             return;
         }

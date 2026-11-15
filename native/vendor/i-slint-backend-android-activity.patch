@@ -1,0 +1,116 @@
+diff -ruN a/androidwindowadapter.rs b/androidwindowadapter.rs
+--- a/androidwindowadapter.rs	2026-11-15 12:31:39
++++ b/androidwindowadapter.rs	2026-11-15 12:45:32
+@@ -179,12 +179,9 @@
+         Rc::<Self>::new_cyclic(|w| Self {
+             app,
+             window: Window::new(w.clone()),
+-            #[cfg(not(any(feature = "unstable-wgpu-29", feature = "unstable-wgpu-30")))]
++            // Picks the surface at runtime from `requested_graphics_api`, so an app built with wgpu can still
++            // ask for OpenGL; see `init_surface`.
+             renderer: SkiaRenderer::default(&SkiaSharedContext::default()),
+-            #[cfg(all(feature = "unstable-wgpu-29", not(feature = "unstable-wgpu-30")))]
+-            renderer: SkiaRenderer::default_wgpu_29(&SkiaSharedContext::default()),
+-            #[cfg(feature = "unstable-wgpu-30")]
+-            renderer: SkiaRenderer::default_wgpu_30(&SkiaSharedContext::default()),
+             requested_graphics_api: RefCell::new(None),
+             event_queue: Default::default(),
+             pending_redraw: Default::default(),
+@@ -209,9 +206,7 @@
+         match event {
+             PollEvent::Main(MainEvent::InputAvailable) => self.process_inputs()?,
+             PollEvent::Main(MainEvent::InitWindow { .. }) => {
+-                if let Some(w) = self.app.native_window() {
+-                    let size = PhysicalSize { width: w.width() as u32, height: w.height() as u32 };
+-
++                if self.app.native_window().is_some() {
+                     let scale_factor =
+                         self.app.config().density().map(|dpi| dpi as f32 / 160.0).unwrap_or(1.0);
+ 
+@@ -221,13 +216,7 @@
+                         )?;
+                     }
+ 
+-                    self.renderer.set_window_handle(
+-                        Arc::new(w),
+-                        Arc::new(DummyDisplayHandle),
+-                        size,
+-                        self.requested_graphics_api.borrow().clone(),
+-                        false,
+-                    )?;
++                    self.init_surface()?;
+                     self.resize()?;
+ 
+                     // Fixes a problem for old Android versions: the soft input always prompt out on startup.
+@@ -237,6 +226,9 @@
+                         .unwrap_or_else(|e| print_jni_error(&self.app, e));
+                 }
+             }
++            // The native window goes away (in the background): release the surface with it, as a Vulkan
++            // swapchain must not outlive its window. InitWindow makes a new one.
++            PollEvent::Main(MainEvent::TerminateWindow { .. }) => self.renderer.suspend()?,
+             PollEvent::Main(
+                 MainEvent::WindowResized { .. } | MainEvent::ContentRectChanged { .. },
+             ) => self.resize()?,
+@@ -526,11 +518,49 @@
+         Ok(())
+     }
+ 
++    /// Takes effect at once when the window already has a surface: the surface is made again with the API asked.
+     pub fn set_requested_graphics_api(
+         &self,
+         requested_graphics_api: Option<i_slint_core::graphics::RequestedGraphicsAPI>,
+-    ) {
++    ) -> Result<(), PlatformError> {
+         *self.requested_graphics_api.borrow_mut() = requested_graphics_api;
++        if self.app.native_window().is_some() {
++            self.init_surface()?;
++            self.request_redraw();
++        }
++        Ok(())
++    }
++
++    /// Makes the renderer's surface for the native window with the API asked for. When that API isn't OpenGL and
++    /// can't start (a broken or missing Vulkan driver), falls back to OpenGL ES and keeps it for later surfaces,
++    /// instead of failing the event loop.
++    fn init_surface(&self) -> Result<(), PlatformError> {
++        use i_slint_core::graphics::{RequestedGraphicsAPI, RequestedOpenGLVersion};
++        let Some(w) = self.app.native_window() else { return Ok(()) };
++        let size = PhysicalSize { width: w.width() as u32, height: w.height() as u32 };
++        let requested = self.requested_graphics_api.borrow().clone();
++        let set = |api| {
++            self.renderer.set_window_handle(
++                Arc::new(w.clone()),
++                Arc::new(DummyDisplayHandle),
++                size,
++                api,
++                false,
++            )
++        };
++        match set(requested.clone()) {
++            Err(err)
++                if requested
++                    .as_ref()
++                    .is_some_and(|api| !matches!(api, RequestedGraphicsAPI::OpenGL(_))) =>
++            {
++                i_slint_core::debug_log!("Failed to initialize the requested renderer: {err}. Falling back to OpenGL ES");
++                let opengl = Some(RequestedGraphicsAPI::OpenGL(RequestedOpenGLVersion::OpenGLES(Some((3, 0)))));
++                *self.requested_graphics_api.borrow_mut() = opengl.clone();
++                set(opengl)
++            }
++            result => result,
++        }
+     }
+ 
+     pub(super) fn update_window_insets(
+diff -ruN a/lib.rs b/lib.rs
+--- a/lib.rs	2026-11-15 12:31:39
++++ b/lib.rs	2026-11-15 12:32:08
+@@ -241,6 +241,5 @@
+     let Some(adapter) = CURRENT_WINDOW.with_borrow(|x| x.upgrade()) else {
+         return Err(format!("On Android a graphics API for Slint can only be requested after calling slint::android::init()").into());
+     };
+-    adapter.set_requested_graphics_api(requested_graphics_api);
+-    Ok(())
++    adapter.set_requested_graphics_api(requested_graphics_api)
+ }
