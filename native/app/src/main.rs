@@ -10,6 +10,8 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| default_log().into()))
         .init();
+    #[cfg(target_os = "ios")]
+    call_danya::ios::fonts();
     call_danya::window::select_backend().context("no usable graphics backend")?;
     let result = call_danya::run();
     if let Err(e) = &result

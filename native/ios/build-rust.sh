@@ -33,3 +33,21 @@ cp -R "$framework" "$frameworks/"
 if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
     codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$frameworks/SherpaOnnxC.framework"
 fi
+
+# Chinese for Slint: iOS draws it only with PingFang, which Slint's font library rejects (app/src/ios.rs). Noto Sans SC
+# from Google Fonts, pinned to a commit and checked, downloaded once into target/
+font_commit=a85815a42757630ce188fdad368c2dfc444d4773
+font_sha256=a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da
+font="$native/target/fonts/NotoSansSC-$font_commit.ttf"
+if [ ! -f "$font" ]; then
+    mkdir -p "$(dirname "$font")"
+    curl -fsSL -o "$font.part" \
+        "https://raw.githubusercontent.com/google/fonts/$font_commit/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf"
+    echo "$font_sha256  $font.part" | shasum -a 256 -c - >/dev/null || {
+        echo "error: NotoSansSC.ttf doesn't match its SHA-256" >&2
+        rm -f "$font.part"
+        exit 1
+    }
+    mv "$font.part" "$font"
+fi
+cp "$font" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/NotoSansSC.ttf"
