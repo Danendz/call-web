@@ -538,6 +538,8 @@ pub fn run() -> anyhow::Result<()> {
             engine.send(Command::SetScreenBitrate(settings.screen_bitrate()));
         }
     });
+    // iOS draws only on Metal, so there's nothing to pick
+    #[cfg(not(target_os = "ios"))]
     ui.set_renderer(renderer_code(settings.borrow().renderer).into());
     ui.on_set_renderer({
         let settings = settings.clone();

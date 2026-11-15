@@ -1,6 +1,7 @@
 // Cut, copy, paste and select all for a text box. A right-click opens it on a computer, as the system's own menu; on an
-// iPhone a long press does, which the app finds itself (`ios.rs`) and passes on through `TextMenus`, and the app shows
-// iOS's edit menu for it. Android shows its own menu on a long press in a focused box.
+// iPhone a long press does, which the app finds itself (`ios/`) and passes on through `TextMenus`, and the app shows
+// iOS's edit menu for it. Android shows its own menu on a long press in a focused box, so this one stays off there:
+// Slint would open it on a long press too, on the box's padding.
 
 export enum TextAction { cut, copy, paste, select-all }
 
@@ -29,6 +30,8 @@ export component TextMenu inherits ContextMenuArea {
     callback copy();
     callback paste();
     callback select-all();
+
+    enabled: Platform.os != OperatingSystemType.android;
 
     // The long press that opened the phone's menu here, so a pick goes to this box alone
     property <int> opened-by: -1;

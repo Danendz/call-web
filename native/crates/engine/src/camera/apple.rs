@@ -174,13 +174,12 @@ pub(super) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Running, St
             return Err("the camera's output can't be added".into());
         }
         session.addOutput(&video_output);
-        // iOS mirrors the front camera's frames on its own; they go out as the camera sees, like the back camera's,
-        // and only our own view of them is mirrored
+        // The front camera's frames go out as the camera sees, like the back camera's, and only our own view of them
+        // is mirrored; iOS leaves them so today, and turning its automatic mirroring off keeps it that way
         #[cfg(target_os = "ios")]
         if let Some(connection) = video_output.connectionWithMediaType(video)
             && connection.isVideoMirroringSupported()
         {
-            tracing::info!("camera frames mirrored by iOS: {}", connection.isVideoMirrored());
             connection.setAutomaticallyAdjustsVideoMirroring(false);
             connection.setVideoMirrored(false);
         }
