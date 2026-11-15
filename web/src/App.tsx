@@ -1,4 +1,4 @@
-import { House, Lock, MonitorSmartphone, PhoneOff, Plus, RotateCcw, Timer, Users } from "lucide-react";
+import { Hourglass, House, Lock, MonitorSmartphone, PhoneOff, Plus, RotateCcw, ServerOff, Timer, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { Lang } from "../../shared/protocol";
 import { SignIn } from "./account/SignIn";
@@ -126,6 +126,8 @@ function screen(controller: CallController, state: CallState, roomUrl: string, s
         state.fullReason === "time-limit" ? [<Timer size={30} />, t.timeUp, t.timeUpBody]
         : state.fullReason === "not-invited" ? [<Lock size={30} />, t.privateRoom, t.privateRoomBody]
         : state.fullReason === "elsewhere" ? [<MonitorSmartphone size={30} />, t.joinedElsewhere, t.joinedElsewhereBody]
+        : state.fullReason === "room-limit" ? [<Hourglass size={30} />, t.roomLimit, t.roomLimitBody]
+        : state.fullReason === "busy" ? [<ServerOff size={30} />, t.busy, t.busyBody]
         : [<Users size={30} />, t.roomFull, t.roomFullBody];
       return (
         <Centered icon={icon}>

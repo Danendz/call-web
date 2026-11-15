@@ -103,14 +103,15 @@ function otherMember(room: Room, clientId: string): Member | undefined {
   return undefined;
 }
 
-/** A new room in the creator's tier, or undefined when that tier (or the server) is out of rooms. */
-function createRoom(roomId: string, who: Joiner): Room | undefined {
-  if (rooms.size >= MAX_ROOMS) return undefined;
+/** A new room in the creator's tier, or why there's none: the creator's own limit, or the tier (or server) is full. */
+function createRoom(roomId: string, who: Joiner): Room | "room-limit" | "busy" {
+  if (rooms.size >= MAX_ROOMS) return "busy";
   const all = [...rooms.values()];
   if (who.userId) {
-    if (all.filter((r) => r.ownerId === who.userId).length >= MAX_LINK_ROOMS_PER_USER) return undefined;
-  } else if (all.filter((r) => r.tier === "anon").length >= MAX_ANON_ROOMS || !anonRoomsPerIp(who.ip)) {
-    return undefined;
+    if (all.filter((r) => r.ownerId === who.userId).length >= MAX_LINK_ROOMS_PER_USER) return "room-limit";
+  } else {
+    if (all.filter((r) => r.tier === "anon").length >= MAX_ANON_ROOMS) return "busy";
+    if (!anonRoomsPerIp(who.ip)) return "room-limit";
   }
   const room: Room = { id: roomId, tier: who.userId ? "user" : "anon", ownerId: who.userId, members: new Map(), chat: [] };
   if (room.tier === "anon") room.expireTimer = setTimeout(() => expire(room), ANON_ROOM_MS);
@@ -169,10 +170,10 @@ export function tierOf(roomId: string): Tier | undefined {
   return rooms.get(roomId)?.tier;
 }
 
-/** Returns the joined clientId, or null if the room (or the server) is full. */
+/** Returns the joined clientId, or null if the room is full or can't be made. */
 export function join(roomId: string, requestedId: string | null, token: string | null, ws: WebSocket, who: Joiner): string | null {
   const room = rooms.get(roomId) ?? createRoom(roomId, who);
-  if (!room) return refuse(ws);
+  if (typeof room === "string") return refuse(ws, room);
   if (room.invited && !room.invited.some((u) => u.id === who.userId)) return refuse(ws, "not-invited");
 
   const seat = requestedId ? room.members.get(requestedId) : undefined;

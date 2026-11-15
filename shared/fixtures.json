@@ -341,6 +341,14 @@
       "reason": "elsewhere"
     },
     {
+      "type": "full",
+      "reason": "room-limit"
+    },
+    {
+      "type": "full",
+      "reason": "busy"
+    },
+    {
       "type": "signal",
       "payload": {
         "kind": "description",

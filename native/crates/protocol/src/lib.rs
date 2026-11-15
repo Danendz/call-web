@@ -255,6 +255,10 @@ pub enum FullReason {
     NotInvited,
     /// The same account joined it from another device.
     Elsewhere,
+    /// The room doesn't exist, and this address or account has started as many as it may for now.
+    RoomLimit,
+    /// The server is out of rooms.
+    Busy,
     /// A reason this build doesn't know, from a newer server.
     #[serde(other)]
     Unknown,

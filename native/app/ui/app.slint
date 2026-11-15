@@ -206,7 +206,7 @@ export component AppWindow inherits Window {
     in property <bool> password-changed;
     in-out property <bool> sign-in-open;
     property <bool> sign-in-up;
-    // Why the room can't be joined: "", "time-limit", "not-invited" or "elsewhere"
+    // Why the room can't be joined: "", "time-limit", "not-invited", "elsewhere", "room-limit" or "busy"
     in property <string> full-reason;
     callback sign-in(string, string);
     callback register(string, string, string);
@@ -454,14 +454,20 @@ export component AppWindow inherits Window {
             icon: root.full-reason == "time-limit" ? Icons.timer
                 : root.full-reason == "not-invited" ? Icons.lock
                 : root.full-reason == "elsewhere" ? Icons.monitor-smartphone
+                : root.full-reason == "room-limit" ? Icons.hourglass
+                : root.full-reason == "busy" ? Icons.server-off
                 : Icons.users;
             title: root.full-reason == "time-limit" ? @tr("Time's up")
                 : root.full-reason == "not-invited" ? @tr("This is a private room")
                 : root.full-reason == "elsewhere" ? @tr("You joined from another device")
+                : root.full-reason == "room-limit" ? @tr("Too many new rooms")
+                : root.full-reason == "busy" ? @tr("No free rooms")
                 : @tr("Room is full");
             body: root.full-reason == "time-limit" ? @tr("Calls without an account end after 2 hours. Start a new room to keep talking.")
                 : root.full-reason == "not-invited" ? @tr("Only the two people in this call can join it.")
                 : root.full-reason == "elsewhere" ? @tr("The call goes on there.")
+                : root.full-reason == "room-limit" ? @tr("You've started as many rooms as you can for now. Try again later.")
+                : root.full-reason == "busy" ? @tr("The server can't open more rooms right now. Try again in a few minutes.")
                 : @tr("This room already has two people in it.");
             if root.account == "signed-in": Button {
                 text: @tr("Back to friends");

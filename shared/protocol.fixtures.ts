@@ -91,6 +91,8 @@ export const serverMessages = [
   { type: "full", reason: "time-limit" },
   { type: "full", reason: "not-invited" },
   { type: "full", reason: "elsewhere" },
+  { type: "full", reason: "room-limit" },
+  { type: "full", reason: "busy" },
   { type: "signal", payload: { kind: "description", description: { type: "answer", sdp: "v=0\r\n" } } },
   { type: "signal", payload: { kind: "candidate", candidate: null } },
   { type: "chat", message: chatMessage },
