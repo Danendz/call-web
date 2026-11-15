@@ -206,11 +206,15 @@ impl Peer {
 
 /// Puts RED before Opus on the mic (the first transceiver), so each packet also carries the previous one and a single
 /// lost packet leaves no gap. The answer keeps only what both sides have, so a peer without RED gets plain Opus.
+/// `CALL_NO_RED=1` leaves RED out instead, to measure calls without it.
 fn prefer_red(factory: &PeerConnectionFactory, pc: &PeerConnection) {
     let mut codecs = factory.get_rtp_receiver_capabilities(MediaType::Audio).codecs;
     let is_red = |mime: &str| mime.eq_ignore_ascii_case("audio/red");
     if !codecs.iter().any(|c| is_red(&c.mime_type)) {
         return;
+    }
+    if std::env::var_os("CALL_NO_RED").is_some() {
+        codecs.retain(|c| !is_red(&c.mime_type));
     }
     codecs.sort_by_key(|c| match c.mime_type.as_str() {
         m if is_red(m) => 0,
