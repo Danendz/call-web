@@ -105,6 +105,8 @@ pub fn run() -> anyhow::Result<()> {
 
     #[cfg(target_os = "android")]
     android::updates(&ui, &server);
+    #[cfg(target_os = "ios")]
+    ios::update::start(&ui, &server);
 
     let weak = ui.as_weak();
     let sink = video::SlintSink::new(ui.as_weak());

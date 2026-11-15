@@ -41,6 +41,8 @@ velopack = "=1.2.161"
 # The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks, the edit menu, the call's audio route and CallKit
 # (src/ios/)
 [target.'cfg(target_os = "ios")'.dependencies]
+# The update check (ios/update.rs); the engine's model downloads already bring it in
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-call-kit = { version = "0.3", default-features = false, features = [
@@ -76,6 +78,7 @@ objc2-ui-kit = { version = "0.3", default-features = false, features = [
     "block2",
     "objc2-core-foundation",
     "UIAction",
+    "UIApplication",
     "UIDevice",
     "UIEditMenuInteraction",
     "UIGeometry",

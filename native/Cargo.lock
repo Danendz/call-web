@@ -821,6 +821,7 @@ dependencies = [
  "sys-locale",
  "tracing",
  "tracing-subscriber",
+ "ureq 3.5.1",
  "url",
  "velopack",
  "webrtc-sys-build",
