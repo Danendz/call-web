@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { TextMenu } from "text-menu.slint";
 
 // A labeled one-line text box, like the web's inputs. `secret` hides what's typed (passwords).
 export component Field inherits VerticalLayout {
@@ -36,18 +37,26 @@ export component Field inherits VerticalLayout {
         background: Theme.surface-2;
         animate border-color { duration: Theme.fast; easing: Theme.ease; }
 
-        input := TextInput {
-            x: 14px;
-            width: parent.width - 28px;
-            text <=> root.text;
-            single-line: true;
-            input-type: root.secret ? InputType.password : InputType.text;
-            color: Theme.text;
-            font-size: Theme.font-size;
-            vertical-alignment: center;
-            accessible-label: root.label != "" ? root.label : root.placeholder;
-            accepted => { root.accepted(); }
-            edited => { root.edited(); }
+        TextMenu {
+            can-copy: !root.secret && input.text != "";
+            cut => { input.cut(); }
+            copy => { input.copy(); }
+            paste => { input.paste(); }
+            select-all => { input.select-all(); }
+
+            input := TextInput {
+                x: 14px;
+                width: parent.width - 28px;
+                text <=> root.text;
+                single-line: true;
+                input-type: root.secret ? InputType.password : InputType.text;
+                color: Theme.text;
+                font-size: Theme.font-size;
+                vertical-alignment: center;
+                accessible-label: root.label != "" ? root.label : root.placeholder;
+                accepted => { root.accepted(); }
+                edited => { root.edited(); }
+            }
         }
         Text {
             x: 14px;

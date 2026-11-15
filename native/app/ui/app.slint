@@ -13,8 +13,9 @@ import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark, VideoBox } from "call/call.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
+import { TextAction, TextMenus } from "components/text-menu.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow, TextAction, TextMenus }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -56,6 +57,9 @@ export component AppWindow inherits Window {
     in property <[DeviceItem]> cams;
     in property <string> cam-id;
     in property <string> cam-label;
+    // Your camera's picture shows like a mirror, but not the back camera's, which sees what you see; Rust reads it
+    // for screenshots
+    out property <bool> mirror-self: cam-label != "@back";
     in property <bool> portrait;
     in property <image> self-video;
     in property <image> peer-video;
@@ -360,6 +364,7 @@ export component AppWindow inherits Window {
             mic-status: root.has-mic ? "" : @tr("Microphone: Not found");
             video: root.self-video;
             video-rotation: root.self-frame-rotation;
+            mirror: root.mirror-self;
             cam-on: root.cam-on;
             cam-granted: root.cam-access == CamAccess.granted;
             cam-pending: root.cam-access == CamAccess.pending;
@@ -423,6 +428,11 @@ export component AppWindow inherits Window {
             peer-cam-on: root.peer-cam-on;
             self-video: root.self-video;
             self-frame-rotation: root.self-frame-rotation;
+            mirror-self: root.mirror-self;
+            bleed-left: root.safe-area-insets.left;
+            bleed-top: root.safe-area-insets.top;
+            bleed-right: root.safe-area-insets.right;
+            bleed-bottom: max(root.safe-area-insets.bottom, root.keyboard-height);
             stats: root.stats;
             force-relay: root.force-relay;
             show-stats: root.show-stats;

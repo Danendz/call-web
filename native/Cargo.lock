@@ -796,12 +796,15 @@ name = "call-danya"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "block2 0.6.2",
  "chrono",
  "engine",
  "i-slint-backend-android-activity",
  "i-slint-core",
  "jni 0.21.1",
  "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
  "objc2-ui-kit 0.3.2",
  "roxmltree",
  "serde",

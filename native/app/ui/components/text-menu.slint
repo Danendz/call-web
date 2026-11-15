@@ -1,0 +1,80 @@
+// Cut, copy, paste and select all for a text box. A right-click opens it on a computer, as the system's own menu; on an
+// iPhone a long press does, which the app finds itself (`ios.rs`) and passes on through `TextMenus`, and the app shows
+// iOS's edit menu for it. Android shows its own menu on a long press in a focused box.
+
+export enum TextAction { cut, copy, paste, select-all }
+
+export global TextMenus {
+    // Where the last long press on the phone was, in the window
+    in-out property <Point> at;
+    // Counts the long presses, so each one reaches the boxes even at the same spot
+    in-out property <int> presses;
+    // Asks the app for the phone's own menu at `at`, with the items `read-only` and `can-copy` allow
+    callback open(read-only: bool, can-copy: bool);
+    // What was picked in that menu, and a count so each pick reaches the box that opened it
+    in-out property <TextAction> picked;
+    in-out property <int> picks;
+    out property <string> cut-title: @tr("Cut");
+    out property <string> copy-title: @tr("Copy");
+    out property <string> paste-title: @tr("Paste");
+    out property <string> select-all-title: @tr("Select All");
+}
+
+// Goes around the text box, which it fills like its parent; the box's own functions do the work
+export component TextMenu inherits ContextMenuArea {
+    in property <bool> read-only;
+    // Copying a hidden password stays off
+    in property <bool> can-copy;
+    callback cut();
+    callback copy();
+    callback paste();
+    callback select-all();
+
+    // The long press that opened the phone's menu here, so a pick goes to this box alone
+    property <int> opened-by: -1;
+    property <int> presses: TextMenus.presses;
+    changed presses => {
+        let x = TextMenus.at.x - self.absolute-position.x;
+        let y = TextMenus.at.y - self.absolute-position.y;
+        if (x >= 0 && y >= 0 && x < self.width && y < self.height) {
+            self.opened-by = TextMenus.presses;
+            TextMenus.open(self.read-only, self.can-copy);
+        }
+    }
+    property <int> picks: TextMenus.picks;
+    changed picks => {
+        if (self.opened-by != TextMenus.presses) {
+            return;
+        }
+        if (TextMenus.picked == TextAction.cut) {
+            root.cut();
+        } else if (TextMenus.picked == TextAction.copy) {
+            root.copy();
+        } else if (TextMenus.picked == TextAction.paste) {
+            root.paste();
+        } else {
+            root.select-all();
+        }
+    }
+
+    Menu {
+        if !root.read-only: MenuItem {
+            title: TextMenus.cut-title;
+            enabled: root.can-copy;
+            activated => { root.cut(); }
+        }
+        MenuItem {
+            title: TextMenus.copy-title;
+            enabled: root.can-copy;
+            activated => { root.copy(); }
+        }
+        if !root.read-only: MenuItem {
+            title: TextMenus.paste-title;
+            activated => { root.paste(); }
+        }
+        MenuItem {
+            title: TextMenus.select-all-title;
+            activated => { root.select-all(); }
+        }
+    }
+}

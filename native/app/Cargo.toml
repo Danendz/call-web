@@ -38,11 +38,23 @@ slint = { version = "=1.18.1", default-features = false, features = [
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 velopack = "=1.2.161"
 
-# The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks (src/ios.rs)
+# The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks, and the edit menu (src/ios.rs)
 [target.'cfg(target_os = "ios")'.dependencies]
+block2 = "0.6"
 objc2 = "0.6"
+objc2-core-foundation = "0.3"
+objc2-foundation = "0.3"
 objc2-ui-kit = { version = "0.3", default-features = false, features = [
     "std",
+    "block2",
+    "objc2-core-foundation",
+    "UIAction",
+    "UIEditMenuInteraction",
+    "UIGeometry",
+    "UIImage",
+    "UIInteraction",
+    "UIMenu",
+    "UIMenuElement",
     "UIResponder",
     "UIScene",
     "UISceneOptions",

@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
+import { TextMenu } from "../components/text-menu.slint";
 
 // One line as the bridge words it (the web's useFeed): the other person's in your language with what they wrote
 // under it, your own as written, and what they're saying right now as the last one
@@ -209,15 +210,23 @@ export component ChatOverlay inherits Rectangle {
                         vertical-alignment: center;
                         height: parent.height;
                     }
-                    input := TextInput {
-                        x: 16px;
-                        width: parent.width - 32px;
-                        height: parent.height;
-                        color: Theme.text;
-                        vertical-alignment: center;
-                        single-line: true;
-                        accessible-label: @tr("Message");
-                        accepted => { send-button.clicked(); }
+                    TextMenu {
+                        can-copy: input.text != "";
+                        cut => { input.cut(); }
+                        copy => { input.copy(); }
+                        paste => { input.paste(); }
+                        select-all => { input.select-all(); }
+
+                        input := TextInput {
+                            x: 16px;
+                            width: parent.width - 32px;
+                            height: parent.height;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            single-line: true;
+                            accessible-label: @tr("Message");
+                            accepted => { send-button.clicked(); }
+                        }
                     }
                 }
                 send-button := Rectangle {

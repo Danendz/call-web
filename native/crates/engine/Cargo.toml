@@ -47,8 +47,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 [lints]
 workspace = true
 
-# AVFoundation camera capture; ScreenCaptureKit for the sound of a shared screen
-[target.'cfg(target_os = "macos")'.dependencies]
+# AVFoundation camera capture
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 block2 = "0.6"
 dispatch2 = "0.3"
 objc2 = "0.6"
@@ -57,7 +57,14 @@ objc2-core-foundation = "0.3"
 objc2-core-media = "0.3"
 objc2-core-video = "0.3"
 objc2-foundation = "0.3"
+
+# ScreenCaptureKit for the sound of a shared screen
+[target.'cfg(target_os = "macos")'.dependencies]
 objc2-screen-capture-kit = "0.3"
+
+# Which way up the phone is held, for the camera's frames
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2-av-foundation = { version = "0.3", features = ["objc2-core-media", "objc2-quartz-core"] }
 
 # Media Foundation camera capture, raw formats only: its MJPEG decoding would add another libjpeg
 [target.'cfg(target_os = "windows")'.dependencies]

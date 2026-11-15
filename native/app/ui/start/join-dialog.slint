@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Button, ButtonKind } from "../components/button.slint";
 import { Dialog } from "../components/dialog.slint";
+import { TextMenu } from "../components/text-menu.slint";
 
 // Asks for a call link (or room id) over a dimmed backdrop. `submit` returns false when it isn't a room.
 export component JoinDialog inherits Dialog {
@@ -27,23 +28,31 @@ export component JoinDialog inherits Dialog {
         background: Theme.surface-2;
         animate border-color { duration: Theme.fast; easing: Theme.ease; }
 
-        input := TextInput {
-            x: 14px;
-            width: parent.width - 28px;
-            single-line: true;
-            color: Theme.text;
-            font-size: Theme.font-size;
-            vertical-alignment: center;
-            accessible-label: @tr("Call link");
-            edited => { invalid = false; }
-            accepted => { go(); }
-            key-pressed(event) => {
-                // Back on a phone, once the on-screen keyboard is away
-                if (event.text == Key.Escape || event.text == Key.Back) {
-                    root.dismiss();
-                    return accept;
+        TextMenu {
+            can-copy: input.text != "";
+            cut => { input.cut(); }
+            copy => { input.copy(); }
+            paste => { input.paste(); }
+            select-all => { input.select-all(); }
+
+            input := TextInput {
+                x: 14px;
+                width: parent.width - 28px;
+                single-line: true;
+                color: Theme.text;
+                font-size: Theme.font-size;
+                vertical-alignment: center;
+                accessible-label: @tr("Call link");
+                edited => { invalid = false; }
+                accepted => { go(); }
+                key-pressed(event) => {
+                    // Back on a phone, once the on-screen keyboard is away
+                    if (event.text == Key.Escape || event.text == Key.Back) {
+                        root.dismiss();
+                        return accept;
+                    }
+                    reject
                 }
-                reject
             }
         }
         Text {

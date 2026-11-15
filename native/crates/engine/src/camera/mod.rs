@@ -1,16 +1,16 @@
-//! Our camera: captured on a platform thread, sent into WebRTC's video source and shown in our own preview. macOS
-//! uses AVFoundation directly (frames go to WebRTC without a copy), Windows uses Media Foundation through `nokhwa`,
+//! Our camera: captured on a platform thread, sent into WebRTC's video source and shown in our own preview. macOS and
+//! iOS use AVFoundation directly (frames go to WebRTC without a copy), Windows uses Media Foundation through `nokhwa`,
 //! Android uses Camera2 through the app's Java side.
 //! `CALL_FAKE_CAMERA=1` replaces the cameras with a moving test pattern, for testing video where no camera can be
 //! used (a locked screen, CI, a terminal without camera permission).
 
 #[cfg(target_os = "android")]
 pub mod android;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod apple;
 mod convert;
 mod fake;
 pub(crate) mod local;
-#[cfg(target_os = "macos")]
-mod mac;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -85,7 +85,6 @@ impl Output {
 
     /// A frame that shows upright once turned clockwise by `rotation`. WebRTC sends the turn along and the other side
     /// draws it turned; it turns the pixels itself only for a receiver that can't.
-    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     fn deliver_turned<T: AsRef<dyn VideoBuffer>>(&self, buffer: T, rotation: VideoRotation) {
         let frame = VideoFrame {
             rotation,
@@ -113,11 +112,11 @@ pub(crate) fn request_access(done: impl FnOnce(CameraAccess) + Send + 'static) {
     if fake() {
         return done(CameraAccess::Granted);
     }
-    #[cfg(target_os = "macos")]
-    return mac::request_access(done);
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    return apple::request_access(done);
     #[cfg(target_os = "android")]
     return android::request_access(done);
-    #[cfg(not(any(target_os = "macos", target_os = "android")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
     done(CameraAccess::Granted)
 }
 
@@ -125,13 +124,13 @@ pub(crate) fn list() -> Vec<Device> {
     if fake() {
         return vec![fake::device()];
     }
-    #[cfg(target_os = "macos")]
-    return mac::list();
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    return apple::list();
     #[cfg(target_os = "windows")]
     return windows::list();
     #[cfg(target_os = "android")]
     return android::list();
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows", target_os = "android")))]
     Vec::new()
 }
 
@@ -144,13 +143,13 @@ pub(crate) fn start(id: Option<&str>, output: Arc<Output>) -> Result<Capture, St
         set_fps(15);
         return Ok(Capture { _inner: Box::new(fake::start(output)) });
     }
-    #[cfg(target_os = "macos")]
-    return mac::start(id, output).map(|c| Capture { _inner: Box::new(c) });
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    return apple::start(id, output).map(|c| Capture { _inner: Box::new(c) });
     #[cfg(target_os = "windows")]
     return windows::start(id, output).map(|c| Capture { _inner: Box::new(c) });
     #[cfg(target_os = "android")]
     return android::start(id, output).map(|c| Capture { _inner: Box::new(c) });
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows", target_os = "android")))]
     {
         let _ = (id, output);
         Err("no camera support on this platform".into())

@@ -67,13 +67,8 @@ pub fn run() -> anyhow::Result<()> {
     #[cfg(target_os = "ios")]
     {
         ios::register();
-        let weak = ui.as_weak();
-        // The window exists once the event loop runs
-        slint::Timer::single_shot(Duration::ZERO, move || {
-            if let Some(ui) = weak.upgrade() {
-                ios::attach_window(&ui);
-            }
-        });
+        ios::text_menus(&ui);
+        ios::attach_window_when_made(&ui);
     }
 
     let bridge = Bridge::new(&ui, lang, settings::data_dir());
@@ -288,11 +283,11 @@ pub fn run() -> anyhow::Result<()> {
             // Your own camera rides along as a tile, unless it's what's on the stage
             let tile = (feed != "self" && ui.get_cam_on()).then(|| video::Pixels::of(&ui.get_self_video())).flatten();
             let picture = screenshot::Picture {
-                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" },
+                main: screenshot::Shot { frame: main, rotation, mirrored: feed == "self" && ui.get_mirror_self() },
                 tile: tile.map(|frame| screenshot::Shot {
                     frame,
                     rotation: ui.get_self_frame_rotation(),
-                    mirrored: true,
+                    mirrored: ui.get_mirror_self(),
                 }),
                 elapsed: ui.get_elapsed().to_string(),
                 lang: parse_lang(&ui.get_lang()),
