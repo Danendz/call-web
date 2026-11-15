@@ -28,6 +28,10 @@ indexing_slicing = "warn"
 dbg_macro = "warn"
 todo = "warn"
 
+# Dependencies keep line tables only, enough for backtraces: their full debug info was most of a debug build's size
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
