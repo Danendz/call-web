@@ -5,7 +5,7 @@ import { IconButton } from "../components/icon-button.slint";
 import { LangSwitch } from "../setup/lang-switch.slint";
 import { Segmented } from "../components/segmented.slint";
 import { AccountSection } from "../account/account-section.slint";
-import { Switch, SettingRow, Group, Heading } from "rows.slint";
+import { Switch, SettingRow, Group, Shown, Heading } from "rows.slint";
 import { DebugSection } from "debug-section.slint";
 
 // Where the on-device speech model stands, as the engine's ModelStatus
@@ -276,37 +276,41 @@ export component SettingsSheet inherits Rectangle {
                                 }
                             }
                         }
-                        if root.renderer != "": Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        if root.renderer != "": SettingRow {
-                            title: @tr("Graphics");
-                            detail: @tr("Applies after restart.");
-                            VerticalLayout {
-                                alignment: center;
-                                Segmented {
-                                    value: root.renderer;
-                                    options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
-                                    picked(renderer) => { root.set-renderer(renderer); }
+                        // Desktop only: a phone always draws with OpenGL
+                        Shown {
+                            shown: root.renderer != "";
+                            Rectangle {
+                                height: 1px;
+                                background: Theme.border;
+                            }
+                            SettingRow {
+                                title: @tr("Graphics");
+                                detail: @tr("Applies after restart.");
+                                VerticalLayout {
+                                    alignment: center;
+                                    Segmented {
+                                        value: root.renderer;
+                                        options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
+                                        picked(renderer) => { root.set-renderer(renderer); }
+                                    }
                                 }
                             }
-                        }
-                        // Upscaling runs on the GPU path, which a phone doesn't have
-                        if root.renderer != "": Rectangle {
-                            height: 1px;
-                            background: Theme.border;
-                        }
-                        if root.renderer != "": SettingRow {
-                            title: @tr("Sharpen video");
-                            detail: root.renderer == "opengl" ? @tr("Only with Modern graphics.")
-                                : @tr("Sharper when their video comes in smaller than it shows here.");
-                            VerticalLayout {
-                                alignment: center;
-                                Switch {
-                                    label: @tr("Sharpen video");
-                                    checked: root.sharpen-video;
-                                    toggled => { root.set-sharpen-video(!root.sharpen-video); }
+                            // Upscaling runs on the GPU path, which a phone doesn't have
+                            Rectangle {
+                                height: 1px;
+                                background: Theme.border;
+                            }
+                            SettingRow {
+                                title: @tr("Sharpen video");
+                                detail: root.renderer == "opengl" ? @tr("Only with Modern graphics.")
+                                    : @tr("Sharper when their video comes in smaller than it shows here.");
+                                VerticalLayout {
+                                    alignment: center;
+                                    Switch {
+                                        label: @tr("Sharpen video");
+                                        checked: root.sharpen-video;
+                                        toggled => { root.set-sharpen-video(!root.sharpen-video); }
+                                    }
                                 }
                             }
                         }

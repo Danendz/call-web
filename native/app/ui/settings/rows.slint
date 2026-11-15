@@ -72,6 +72,16 @@ export component Group inherits Rectangle {
     }
 }
 
+// Rows shown only while `shown`. Use it instead of `if` for rows with wrapping text: Slint measures wrapped text in
+// an `if` as if it had room for one line, so the group came out too short and its last row spilled over the edge.
+export component Shown inherits VerticalLayout {
+    in property <bool> shown;
+    visible: shown;
+    min-height: 0;
+    max-height: shown ? 100000px : 0;
+    @children
+}
+
 // A section's heading over its group
 export component Heading inherits Text {
     color: Theme.muted;
