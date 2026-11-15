@@ -70,6 +70,9 @@ export component AppWindow inherits Window {
     in property <bool> can-show-files;
     callback set-record-stats(bool);
     callback show-stats-files();
+    // "Video error correction" in Settings' Debug group, remembered
+    in property <bool> fec;
+    callback set-fec(bool);
     // "Sharpen video" in Settings, remembered; the Debug group's comparison and saved frames (1 saved, 2 nothing
     // upscaled, 3 failed)
     in property <bool> sharpen-video;
@@ -484,6 +487,7 @@ export component AppWindow inherits Window {
             show-stats: root.show-stats;
             record-stats: root.record-stats;
             can-show-files: root.can-show-files;
+            fec: root.fec;
             sharpen-video: root.sharpen-video;
             compare-upscaling: root.compare-upscaling;
             frame-saved: root.frame-saved;
@@ -506,6 +510,7 @@ export component AppWindow inherits Window {
             set-show-stats(on) => { root.set-show-stats(on); }
             set-record-stats(on) => { root.set-record-stats(on); }
             show-stats-files => { root.show-stats-files(); }
+            set-fec(on) => { root.set-fec(on); }
             set-sharpen-video(on) => { root.set-sharpen-video(on); }
             set-compare-upscaling(on) => { root.set-compare-upscaling(on); }
             save-frame => { root.save-frame(); }

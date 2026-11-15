@@ -38,6 +38,7 @@
 #include "livekit/adm_proxy.h"
 #include "livekit/audio_track.h"
 #include "livekit/capture_processor.h"
+#include "livekit/flexfec.h"
 #include "livekit/peer_connection.h"
 #include "livekit/rtc_error.h"
 #include "livekit/rtp_parameters.h"
@@ -125,6 +126,8 @@ class CompositeFieldTrials final : public webrtc::FieldTrialsView {
 webrtc::Environment CreateEnvironment(bool zero_playout_delay,
                                       bool enable_warp) {
   std::vector<std::unique_ptr<webrtc::FieldTrialsView>> views;
+  // Always present, so the FlexFEC switch can turn on without a new factory
+  views.push_back(create_flexfec_field_trials());
   if (zero_playout_delay) {
     views.push_back(std::make_unique<ZeroPlayoutDelayFieldTrials>());
   }
@@ -132,9 +135,6 @@ webrtc::Environment CreateEnvironment(bool zero_playout_delay,
     views.push_back(std::make_unique<EnableWarpFieldTrials>());
   }
 
-  if (views.empty()) {
-    return webrtc::CreateEnvironment();
-  }
   return webrtc::CreateEnvironment(
       std::make_unique<CompositeFieldTrials>(std::move(views)));
 }

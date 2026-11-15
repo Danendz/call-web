@@ -19,6 +19,7 @@ export component SettingsSheet inherits Rectangle {
     in property <bool> show-stats;
     in property <bool> record-stats;
     in property <bool> can-show-files;
+    in property <bool> fec;
     in property <bool> sharpen-video;
     in property <bool> compare-upscaling;
     in property <int> frame-saved;
@@ -57,6 +58,7 @@ export component SettingsSheet inherits Rectangle {
     callback set-show-stats(bool);
     callback set-record-stats(bool);
     callback show-stats-files();
+    callback set-fec(bool);
     callback set-sharpen-video(bool);
     callback set-compare-upscaling(bool);
     callback save-frame();
@@ -515,11 +517,13 @@ export component SettingsSheet inherits Rectangle {
                     DebugSection {
                         record-stats: root.record-stats;
                         can-show-files: root.can-show-files;
+                        fec: root.fec;
                         can-upscale: root.renderer == "modern";
                         compare-upscaling: root.compare-upscaling;
                         frame-saved: root.frame-saved;
                         set-record-stats(on) => { root.set-record-stats(on); }
                         show-stats-files => { root.show-stats-files(); }
+                        set-fec(on) => { root.set-fec(on); }
                         set-compare-upscaling(on) => { root.set-compare-upscaling(on); }
                         save-frame => { root.save-frame(); }
                     }

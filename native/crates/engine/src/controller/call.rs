@@ -121,6 +121,7 @@ impl Controller {
         match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {
             Ok(peer) => {
                 self.peer = Some(peer);
+                self.peer_fec = self.fec;
                 if self.stats_log {
                     self.start_recorder();
                 }
@@ -225,6 +226,7 @@ impl Controller {
                         force_relay: self.state.force_relay,
                         sharing: self.screen.sharing(),
                         camera_on: self.camera.on,
+                        fec: self.peer_fec,
                     };
                     if !recorder.write(&stats, &conditions) {
                         self.recorder = None;

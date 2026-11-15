@@ -10,6 +10,8 @@ export component DebugSection inherits VerticalLayout {
     in property <bool> can-show-files;
     callback set-record-stats(bool);
     callback show-stats-files();
+    in property <bool> fec;
+    callback set-fec(bool);
     // Video is upscaled here ("Sharpen video" on the GPU path)
     in property <bool> can-upscale;
     in property <bool> compare-upscaling;
@@ -80,6 +82,22 @@ export component DebugSection inherits VerticalLayout {
                 text: @tr("Show files");
                 height-hint: 38px;
                 clicked => { root.show-stats-files(); }
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+        SettingRow {
+            title: @tr("Video error correction");
+            detail: @tr("Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call, and only with the other person on this app with it on too.");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: @tr("Video error correction");
+                    checked: root.fec;
+                    toggled => { root.set-fec(!root.fec); }
+                }
             }
         }
         if root.can-upscale: Rectangle {

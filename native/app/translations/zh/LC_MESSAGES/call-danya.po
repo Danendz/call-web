@@ -581,6 +581,12 @@ msgstr "调试"
 msgid "Record call stats"
 msgstr "记录通话统计"
 
+msgid "Video error correction"
+msgstr "视频纠错"
+
+msgid "Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call, and only with the other person on this app with it on too."
+msgstr "额外发送视频数据包，丢包时直接恢复，无需等待重发。从下一次通话开始生效，且对方也需使用本应用并打开此项。"
+
 msgid "Saves each call's connection stats, one file per call, to compare calls and settings."
 msgstr "保存每次通话的连接统计，每次通话一个文件，用于比较不同通话和设置。"
 

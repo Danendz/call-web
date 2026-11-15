@@ -26,6 +26,8 @@ pub(crate) struct Conditions {
     pub force_relay: bool,
     pub sharing: bool,
     pub camera_on: bool,
+    /// FlexFEC was on on this side when the connection was made
+    pub fec: bool,
 }
 
 #[derive(Serialize)]

@@ -73,6 +73,9 @@ struct Controller {
     /// "Record call stats" is on; the file is open only while there's a connection
     stats_log: bool,
     recorder: Option<crate::stats::log::Recorder>,
+    /// What the FlexFEC switch was when this connection was made, which is what it negotiated
+    peer_fec: bool,
+    fec: bool,
     on_chat: Box<dyn Fn(ChatEvent) + Send>,
     media: Media,
     level: Level,
@@ -181,6 +184,8 @@ impl Controller {
             stats_shown: false,
             stats_log: false,
             recorder: None,
+            peer_fec: false,
+            fec: false,
             on_chat,
             media,
             level,
@@ -401,6 +406,10 @@ impl Controller {
                     self.start_recorder();
                 }
                 self.sample_every_second();
+            }
+            Command::SetFec(on) => {
+                self.fec = on;
+                webrtc_sys::flexfec::set_flexfec(on);
             }
         }
     }

@@ -24,6 +24,7 @@ pub mod capture_processor;
 pub mod data_channel;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub mod desktop_capturer;
+pub mod flexfec;
 pub mod frame_cryptor;
 pub mod helper;
 pub mod jsep;

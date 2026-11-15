@@ -38,6 +38,24 @@ pub fn wire(ui: &AppWindow, engine: &Rc<Engine>, settings: &Rc<RefCell<Settings>
         }
     });
 
+    let fec = settings.borrow().fec;
+    ui.set_fec(fec);
+    engine.send(Command::SetFec(fec));
+    ui.on_set_fec({
+        let engine = engine.clone();
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |on| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_fec(on);
+            }
+            engine.send(Command::SetFec(on));
+            let mut settings = settings.borrow_mut();
+            settings.fec = on;
+            settings.save();
+        }
+    });
+
     ui.set_can_show_files(cfg!(not(target_os = "android")) && settings::data_dir().is_some());
     ui.on_show_stats_files(|| {
         if let Some(data) = settings::data_dir() {
