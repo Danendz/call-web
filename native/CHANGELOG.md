@@ -3,6 +3,31 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.5.0 — 2026-11-15
+
+The app comes to iPhone, gets its own icon, and video holds up better on weak connections.
+
+### New
+
+- iPhone: the app installs through AltStore or SideStore, with calls on the lock screen through CallKit, live subtitles translated on the phone, and updates offered in the app
+- An app icon on every platform
+- The other person's video is sharpened when it's drawn bigger than it arrives (Settings → Video, "Sharpen video")
+- Video error correction is on by default, so a lossy connection freezes the video far less
+- Missed calls show on the caller's row in Friends, friends sort by missed calls and who's online, and ⋯ removes or blocks a friend
+- Settings is split into Audio, Video, Speech, Account and Debug pages
+- Settings' Debug page can record each call's stats to a file
+- Dialogs, lists and screens animate in and out
+
+### Fixed
+
+- A room that can't be made now says why (your room limit, or the server being busy) instead of "Room is full"
+- Android: a call refused right at the start no longer closes the app
+- Settings rows no longer spill over their edges, and names sit in the middle of their options
+
+### Changed
+
+- Android draws with Vulkan and converts video on the graphics card, using less battery; OpenGL stays as the fallback
+
 ## 0.4.0 — 2026-11-14
 
 Sharper, smoother video with hardware H.264 on Windows, and better live subtitles.
