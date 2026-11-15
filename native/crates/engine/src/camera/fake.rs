@@ -1,4 +1,5 @@
-//! A moving test pattern in place of a camera (`CALL_FAKE_CAMERA=1`), like Chrome's fake capture device.
+//! A moving test pattern in place of a camera (`CALL_FAKE_CAMERA=1`), like Chrome's fake capture device. A size
+//! in its place (`CALL_FAKE_CAMERA=640x360`) sends that instead of the real cameras' 720p, as a low bitrate would.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,8 +31,9 @@ pub(super) fn start(output: Arc<Output>) -> Running {
     let stopped = stop.clone();
     let spawned = thread::Builder::new().name("fake-camera".into()).spawn(move || {
         let mut tick = 0u32;
+        let (width, height) = size().unwrap_or((WIDTH, HEIGHT));
         while !stopped.load(Ordering::Relaxed) {
-            let crop = Crop::new(WIDTH, HEIGHT, output.portrait());
+            let crop = Crop::new(width, height, output.portrait());
             output.deliver(pattern(crop.width, crop.height, tick));
             tick = tick.wrapping_add(1);
             thread::sleep(Duration::from_millis(66));
@@ -41,6 +43,12 @@ pub(super) fn start(output: Arc<Output>) -> Running {
         tracing::warn!("couldn't start the fake camera: {e}");
     }
     Running { stop }
+}
+
+fn size() -> Option<(u32, u32)> {
+    let value = std::env::var("CALL_FAKE_CAMERA").ok()?;
+    let (width, height) = value.split_once('x')?;
+    Some((width.parse().ok()?, height.parse().ok()?)).filter(|(w, h)| *w >= 16 && *h >= 16)
 }
 
 /// A slowly changing color with a white bar sweeping across, so a frozen picture is easy to spot.

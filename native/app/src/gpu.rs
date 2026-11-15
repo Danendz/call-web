@@ -11,6 +11,8 @@
 use std::sync::{Arc, Mutex, mpsc};
 
 use engine::{Chroma, Planes as Frame};
+
+use crate::fsr::{Fsr, Mode, Upscale};
 use slint::wgpu_30::wgpu;
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
@@ -45,6 +47,7 @@ pub struct Converter {
     i420: Pipeline,
     nv12: Pipeline,
     sampler: wgpu::Sampler,
+    fsr: Fsr,
 }
 
 struct Pipeline {
@@ -161,7 +164,8 @@ impl Converter {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Self { device, queue, i420, nv12, sampler }
+        let fsr = Fsr::new(&device);
+        Self { device, queue, i420, nv12, sampler, fsr }
     }
 
     pub fn device(&self) -> &wgpu::Device {
@@ -184,12 +188,13 @@ impl Converter {
         })
     }
 
-    /// Uploads `frame` and records its conversion into `out`, a [`Self::texture`] of the frame's size, for
-    /// [`Self::submit`]. A frame whose planes are shorter than its size says is skipped (None): wgpu treats a short
-    /// write as a bug and panics.
+    /// Uploads `frame` and records its conversion into `out`, a [`Self::texture`] of the frame's size or of a bigger
+    /// one to upscale it to (`fsr.rs`, through `upscale`), for [`Self::submit`]. A frame whose planes are shorter
+    /// than its size says is skipped (None): wgpu treats a short write as a bug and panics.
     pub fn convert(
         &self,
         planes: &mut Option<Planes>,
+        upscale: &mut Option<Upscale>,
         frame: &Frame<'_>,
         out: &wgpu::Texture,
     ) -> Option<wgpu::CommandBuffer> {
@@ -204,10 +209,11 @@ impl Converter {
             }
             Chroma::Nv12 { uv, stride } => fits(uv, stride, chroma_width * 2, chroma_height),
         };
+        let target = (out.width(), out.height());
+        let upscaled = target != (width, height);
         if width == 0
             || height == 0
-            || out.width() != width
-            || out.height() != height
+            || (upscaled && (target.0 < width || target.1 < height))
             || !fits(frame.y, frame.y_stride, width, height)
             || !chroma_fits
         {
@@ -228,7 +234,16 @@ impl Converter {
             self.write(texture, data, stride);
         }
 
-        let view = out.create_view(&wgpu::TextureViewDescriptor::default());
+        let upscale = if upscaled {
+            if !upscale.as_ref().is_some_and(|u| u.fits(&self.device, (width, height), target)) {
+                *upscale = Some(self.fsr.upscale(&self.device, (width, height), target, |w, h| self.texture(w, h)));
+            }
+            upscale.as_ref()
+        } else {
+            *upscale = None;
+            None
+        };
+        let view = upscale.map_or(out, |u| &u.source).create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -250,6 +265,9 @@ impl Converter {
             pass.set_pipeline(&if nv12 { &self.nv12 } else { &self.i420 }.pipeline);
             pass.set_bind_group(0, &planes.bind_group, &[]);
             pass.draw(0..3, 0..1);
+        }
+        if let Some(upscale) = upscale {
+            self.fsr.record(&self.queue, &mut encoder, upscale, out, Mode::current());
         }
         Some(encoder.finish())
     }
@@ -308,6 +326,22 @@ impl Converter {
         );
     }
 
+    /// The Debug group's "Save frame": a feed's last frame as it came, stretched to the upscaled size without FSR, and
+    /// with it. Waits for the GPU, so keep it off the UI thread.
+    pub fn snapshot(&self, upscale: &Upscale) -> Option<[SharedPixelBuffer<Rgba8Pixel>; 3]> {
+        if !upscale.fits(&self.device, (upscale.source.width(), upscale.source.height()), upscale.target()) {
+            return None;
+        }
+        let (width, height) = upscale.target();
+        let (before, after) = (self.texture(width, height), self.texture(width, height));
+        for (out, mode) in [(&before, Mode::Bilinear), (&after, Mode::Fsr)] {
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            self.fsr.record(&self.queue, &mut encoder, upscale, out, mode);
+            self.queue.submit(Some(encoder.finish()));
+        }
+        Some([self.read(&upscale.source)?, self.read(&before)?, self.read(&after)?])
+    }
+
     /// A converted frame's pixels, for a screenshot. Waits for the GPU, so keep it off the UI thread.
     pub fn read(&self, texture: &wgpu::Texture) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
         let (width, height) = (texture.width(), texture.height());
@@ -342,5 +376,83 @@ impl Converter {
             dst.copy_from_slice(src.get(..row as usize)?);
         }
         Some(pixels)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// wgpu's native futures are ready when made, so one poll does.
+    fn now<T>(future: impl Future<Output = T>) -> T {
+        let mut future = std::pin::pin!(future);
+        match future.as_mut().poll(&mut std::task::Context::from_waker(std::task::Waker::noop())) {
+            std::task::Poll::Ready(value) => value,
+            std::task::Poll::Pending => panic!("wgpu's future wasn't ready"),
+        }
+    }
+
+    fn converter() -> Option<Converter> {
+        let adapter = now(wgpu::Instance::default().request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
+        let (device, queue) = now(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
+        Some(Converter::new(device, queue))
+    }
+
+    fn green(pixels: &SharedPixelBuffer<Rgba8Pixel>, x: u32, y: u32) -> u8 {
+        pixels.as_slice()[(y * pixels.width() + x) as usize].g
+    }
+
+    /// The biggest step between neighbouring pixels along a row: how sharp the edge in it is.
+    fn steepest(pixels: &SharedPixelBuffer<Rgba8Pixel>, y: u32) -> u8 {
+        (1..pixels.width()).map(|x| green(pixels, x, y).abs_diff(green(pixels, x - 1, y))).max().unwrap()
+    }
+
+    #[test]
+    fn fsr_upscales_with_a_sharper_edge_than_a_stretch() {
+        let Some(gpu) = converter() else {
+            eprintln!("no GPU here, skipped");
+            return;
+        };
+        // Dark on the left, bright on the right, the edge between pixels 30 and 31
+        let (width, height) = (64u32, 36u32);
+        let y: Vec<u8> = (0..height).flat_map(|_| (0..width).map(|x| if x < 31 { 40 } else { 200 })).collect();
+        let chroma = vec![128u8; (width / 2 * height / 2) as usize];
+        let frame = Frame {
+            width,
+            height,
+            y: &y,
+            y_stride: width,
+            chroma: Chroma::I420 { u: &chroma, v: &chroma, u_stride: width / 2, v_stride: width / 2 },
+        };
+        let out = gpu.texture(width * 2, height * 2);
+        let (mut planes, mut upscale) = (None, None);
+        let commands = gpu.convert(&mut planes, &mut upscale, &frame, &out).unwrap();
+        gpu.submit(commands);
+        let upscale = upscale.expect("a bigger texture upscales");
+        let [source, stretched, sharpened] = gpu.snapshot(&upscale).unwrap();
+        assert_eq!((source.width(), source.height()), (64, 36));
+        assert_eq!((sharpened.width(), sharpened.height()), (128, 72));
+
+        let row = 36;
+        assert!(
+            steepest(&sharpened, row) > steepest(&stretched, row) + 20,
+            "FSR's edge {} vs a stretch's {}",
+            steepest(&sharpened, row),
+            steepest(&stretched, row)
+        );
+        // Flat parts stay as they came; RCAS leaves only a faint halo by the edge (about 5 of 255), no ringing
+        let (dark, bright) = (green(&source, 5, 18), green(&source, 60, 18));
+        assert!(green(&sharpened, 10, row).abs_diff(dark) <= 2 && green(&sharpened, 120, row).abs_diff(bright) <= 2);
+        assert!((0..128).all(|x| (dark - 8..=bright + 8).contains(&green(&sharpened, x, row))));
+
+        // Half and half: a stretch on the left, FSR on the right, a white line between
+        let split = gpu.texture(128, 72);
+        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        gpu.fsr.record(&gpu.queue, &mut encoder, &upscale, &split, Mode::Split);
+        gpu.submit(encoder.finish());
+        let split = gpu.read(&split).unwrap();
+        assert_eq!(green(&split, 61, row), green(&stretched, 61, row));
+        assert_eq!(green(&split, 63, row), 255);
+        assert_eq!(green(&split, 66, row), green(&sharpened, 66, row));
     }
 }

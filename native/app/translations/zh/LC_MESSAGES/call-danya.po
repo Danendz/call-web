@@ -574,3 +574,54 @@ msgstr "重启后生效。"
 
 msgid "Modern"
 msgstr "现代"
+
+msgid "Debug"
+msgstr "调试"
+
+msgid "Record call stats"
+msgstr "记录通话统计"
+
+msgid "Video error correction"
+msgstr "视频纠错"
+
+msgid "Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call. Works only when both of you use this app and have it on."
+msgstr "额外发送视频数据包，丢包时直接恢复，无需等待重发。从下一次通话开始生效。仅在双方都使用本应用并打开此项时有效。"
+
+msgid "Saves each call's connection stats, one file per call, to compare calls and settings."
+msgstr "保存每次通话的连接统计，每次通话一个文件，用于比较不同通话和设置。"
+
+msgid "Show files"
+msgstr "显示文件"
+
+msgid "Sharpen video"
+msgstr "锐化视频"
+
+msgid "Only with Modern graphics."
+msgstr "仅在“现代”图形下可用。"
+
+msgid "Sharper when their video comes in smaller than it shows here."
+msgstr "对方视频的分辨率低于这里的显示尺寸时，让画面更清晰。"
+
+msgid "Compare upscaling"
+msgstr "对比放大效果"
+
+msgid "Their video without sharpening on the left half, with it on the right."
+msgstr "对方视频左半边不锐化，右半边锐化。"
+
+msgid "Save frame"
+msgstr "保存画面"
+
+msgid "Saved as it came, stretched, and sharpened."
+msgstr "已保存原始、拉伸和锐化三个版本。"
+
+msgid "Their video isn't upscaled now: it shows at the size it comes in or smaller."
+msgstr "对方视频目前没有放大：显示尺寸不大于收到的尺寸。"
+
+msgid "Couldn't save the frame."
+msgstr "无法保存画面。"
+
+msgid "Their video's current frame as PNGs, without and with sharpening."
+msgstr "将对方视频的当前画面保存为 PNG，包括不锐化和锐化版本。"
+
+msgid "Save"
+msgstr "保存"

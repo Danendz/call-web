@@ -32,7 +32,8 @@ pub use protocol::{
     MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, MissedCall, OpenRoom, Presence, Reaction, TranslatedText, Translation,
 };
 pub use speech::{Model, ModelStatus, SpeechNotice};
-pub use stats::{CallStats, Path, VideoStats};
+pub use stats::log::dir as stats_log_dir;
+pub use stats::{CallStats, Detail, Path, VideoStats};
 pub use translate::{Pair, Translator, TranslatorEvent};
 pub use video::{Chroma, Feed, Frame, Planes, VideoSink};
 

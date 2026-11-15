@@ -5,7 +5,10 @@
 mod android;
 mod bridge;
 mod chat;
+mod debug;
 mod friends;
+#[cfg(not(target_os = "android"))]
+mod fsr;
 #[cfg(not(target_os = "android"))]
 mod gpu;
 mod reactions;
@@ -103,6 +106,13 @@ pub fn run() -> anyhow::Result<()> {
         move |camera, peer, screen| sink.set_seen(camera, peer, screen)
     });
     #[cfg(not(target_os = "android"))]
+    ui.on_video_box({
+        let sink = sink.clone();
+        move |feed, shown| {
+            sink.set_fit(&feed, fsr::Fit { width: shown.width, height: shown.height, cover: shown.cover })
+        }
+    });
+    #[cfg(not(target_os = "android"))]
     window::watch_shown(&ui);
     #[cfg(not(target_os = "android"))]
     window::watch_renderer(&ui, &settings);
@@ -115,7 +125,7 @@ pub fn run() -> anyhow::Result<()> {
         lang,
         data_dir.clone(),
         on_device,
-        sink,
+        sink.clone(),
         move |state| {
             let _ = weak.upgrade_in_event_loop(move |ui| with_bridge(|bridge| bridge.render(&ui, &state)));
         },
@@ -435,6 +445,7 @@ pub fn run() -> anyhow::Result<()> {
             settings.save();
         }
     });
+    debug::wire(&ui, &engine, &settings, &sink);
     ui.set_subtitles_on(settings.borrow().subtitles);
     engine.send(Command::SetLiveSubtitles(settings.borrow().subtitles));
     ui.on_set_subtitles_on({

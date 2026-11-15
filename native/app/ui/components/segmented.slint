@@ -31,7 +31,9 @@ export component Segmented inherits Rectangle {
 
     HorizontalLayout {
         padding: 3px;
+        // Each as wide as the highlight, so a name sits in its middle however long the others are
         for option in root.options: TouchArea {
+            width: root.segment;
             mouse-cursor: pointer;
             clicked => { root.picked(option.id); }
             accessible-role: button;

@@ -1,0 +1,146 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button } from "../components/button.slint";
+import { Switch, SettingRow, Group, Shown } from "rows.slint";
+
+// Tools for checking how calls go, folded away at the end of Settings.
+export component DebugSection inherits VerticalLayout {
+    in property <bool> record-stats;
+    // A folder can be opened in Finder or Explorer; not on a phone
+    in property <bool> can-show-files;
+    callback set-record-stats(bool);
+    callback show-stats-files();
+    in property <bool> fec;
+    callback set-fec(bool);
+    // Video is upscaled here ("Sharpen video" on the GPU path)
+    in property <bool> can-upscale;
+    in property <bool> compare-upscaling;
+    // What the last "Save frame" did: 1 saved, 2 nothing upscaled, 3 failed
+    in property <int> frame-saved;
+    callback set-compare-upscaling(bool);
+    callback save-frame();
+
+    in-out property <bool> open;
+
+    spacing: 8px;
+
+    Rectangle {
+        height: 36px;
+        accessible-role: button;
+        accessible-label: @tr("Debug");
+        accessible-expanded: root.open;
+        accessible-action-default => { root.open = !root.open; }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Text {
+                text: @tr("Debug");
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Image {
+                y: (parent.height - self.height) / 2;
+                width: 16px;
+                height: 16px;
+                source: Icons.chevron-down;
+                colorize: Theme.muted;
+                transform-rotation: root.open ? 0deg : -90deg;
+                animate transform-rotation { duration: Theme.fast; easing: Theme.ease; }
+            }
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.open = !root.open; }
+        }
+    }
+
+    Shown {
+        shown: root.open;
+        Group {
+            SettingRow {
+                title: @tr("Record call stats");
+                detail: @tr("Saves each call's connection stats, one file per call, to compare calls and settings.");
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        label: @tr("Record call stats");
+                        checked: root.record-stats;
+                        toggled => { root.set-record-stats(!root.record-stats); }
+                    }
+                }
+            }
+            if root.can-show-files: Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            if root.can-show-files: HorizontalLayout {
+                padding: 16px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                alignment: start;
+                Button {
+                    text: @tr("Show files");
+                    height-hint: 38px;
+                    clicked => { root.show-stats-files(); }
+                }
+            }
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            SettingRow {
+                title: @tr("Video error correction");
+                detail: @tr("Extra video packets that rebuild lost ones without waiting for them to be sent again. From the next call. Works only when both of you use this app and have it on.");
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        label: @tr("Video error correction");
+                        checked: root.fec;
+                        toggled => { root.set-fec(!root.fec); }
+                    }
+                }
+            }
+            Shown {
+                shown: root.can-upscale;
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border;
+                }
+                SettingRow {
+                    title: @tr("Compare upscaling");
+                    detail: @tr("Their video without sharpening on the left half, with it on the right.");
+                    VerticalLayout {
+                        alignment: center;
+                        Switch {
+                            label: @tr("Compare upscaling");
+                            checked: root.compare-upscaling;
+                            toggled => { root.set-compare-upscaling(!root.compare-upscaling); }
+                        }
+                    }
+                }
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border;
+                }
+                SettingRow {
+                    title: @tr("Save frame");
+                    detail: root.frame-saved == 1 ? @tr("Saved as it came, stretched, and sharpened.")
+                        : root.frame-saved == 2 ? @tr("Their video isn't upscaled now: it shows at the size it comes in or smaller.")
+                        : root.frame-saved == 3 ? @tr("Couldn't save the frame.")
+                        : @tr("Their video's current frame as PNGs, without and with sharpening.");
+                    detail-color: root.frame-saved == 3 ? Theme.danger-text : Theme.muted;
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: @tr("Save");
+                            height-hint: 38px;
+                            clicked => { root.save-frame(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

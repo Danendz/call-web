@@ -8,6 +8,7 @@ use protocol::{ClientMessage, ServerMessage};
 
 use super::{ChatEvent, Controller, Internal, Link, Phase};
 use crate::peer::{Peer, PeerConfig, PeerEvent};
+use crate::stats::log::{Conditions, Recorder};
 use crate::stats::{CallStats, Path};
 
 // While a call is relayed, retry direct after these delays (the last one repeats). Direct is ~2x faster than going
@@ -115,11 +116,15 @@ impl Controller {
             screen_stream_id: self.screen.stream_id.clone(),
             video_codec: self.video_codec,
             screen_bitrate: self.screen_bitrate,
-            stats_shown: self.stats_shown,
+            stats_shown: self.stats_shown || self.stats_log,
         };
         match Peer::start(self.media.factory(), config, self.mic.clone(), self.camera.track(), self.peer_tx.clone()) {
             Ok(peer) => {
                 self.peer = Some(peer);
+                self.peer_fec = self.fec;
+                if self.stats_log {
+                    self.start_recorder();
+                }
                 self.direct_retries = 0;
                 self.next_direct_retry = None;
                 self.state.phase = Phase::InCall;
@@ -141,6 +146,7 @@ impl Controller {
 
     pub(super) fn drop_peer(&mut self) {
         self.peer = None;
+        self.recorder = None;
         self.remote_audio.clear();
         self.remote.drop_tracks();
         (self.on_stats)(None);
@@ -213,6 +219,19 @@ impl Controller {
             }
             PeerEvent::Stats(stats) => {
                 self.maybe_retry_direct(&stats);
+                if let Some(recorder) = &mut self.recorder {
+                    let conditions = Conditions {
+                        video_codec: self.video_codec,
+                        screen_kbps: self.screen_bitrate / 1000,
+                        force_relay: self.state.force_relay,
+                        sharing: self.screen.sharing(),
+                        camera_on: self.camera.on,
+                        fec: self.peer_fec,
+                    };
+                    if !recorder.write(&stats, &conditions) {
+                        self.recorder = None;
+                    }
+                }
                 if self.stats_shown {
                     let trying_direct = self.last_direct_retry.is_some_and(|at| at.elapsed() < TRYING_DIRECT_SHOWN);
                     (self.on_stats)(Some((*stats, trying_direct)));
@@ -231,6 +250,18 @@ impl Controller {
 
     /// Upgrades a relayed call to direct P2P with an ICE restart, backing off between tries. Only the impolite side
     /// drives it, so the two sides don't restart over each other.
+    /// A file for this connection's stats, while "Record call stats" is on.
+    pub(super) fn start_recorder(&mut self) {
+        self.recorder = self.data_dir.as_deref().and_then(Recorder::start);
+    }
+
+    /// Stats are sampled every second while the overlay is up or they're recorded, every few otherwise.
+    pub(super) fn sample_every_second(&self) {
+        if let Some(peer) = &self.peer {
+            peer.set_stats_shown(self.stats_shown || self.stats_log);
+        }
+    }
+
     pub(super) fn maybe_retry_direct(&mut self, stats: &CallStats) {
         if stats.path == Path::Direct || self.state.force_relay || self.seat.polite {
             self.direct_retries = 0;

@@ -92,6 +92,12 @@ struct Slot {
     /// The plane textures the GPU converts from
     #[cfg(not(target_os = "android"))]
     planes: Mutex<Option<crate::gpu::Planes>>,
+    /// The textures between FSR's passes, while this feed is upscaled
+    #[cfg(not(target_os = "android"))]
+    upscale: Mutex<Option<crate::fsr::Upscale>>,
+    /// How the feed shows on screen, for the size to upscale to; the other person's feeds only
+    #[cfg(not(target_os = "android"))]
+    fit: Mutex<Option<crate::fsr::Fit>>,
     scheduled: AtomicBool,
     /// Whether the screen on show draws this feed; see [`SlintSink::set_seen`]
     seen: AtomicBool,
@@ -105,6 +111,10 @@ impl Slot {
             spare: Mutex::new(Vec::new()),
             #[cfg(not(target_os = "android"))]
             planes: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
+            upscale: Mutex::new(None),
+            #[cfg(not(target_os = "android"))]
+            fit: Mutex::new(None),
             scheduled: AtomicBool::new(false),
             seen: AtomicBool::new(true),
         })
@@ -159,6 +169,33 @@ pub struct SlintSink {
 impl SlintSink {
     pub fn new(window: slint::Weak<AppWindow>) -> Arc<Self> {
         Arc::new(Self { window, camera: Slot::new(), peer: Slot::new(), screen: Slot::new() })
+    }
+
+    /// How the other person's camera ("peer") or screen shows, from the UI as it changes: what it's upscaled to.
+    #[cfg(not(target_os = "android"))]
+    pub fn set_fit(&self, feed: &str, fit: crate::fsr::Fit) {
+        let slot = match feed {
+            "peer" => &self.peer,
+            "screen" => &self.screen,
+            _ => return,
+        };
+        if let Ok(mut current) = slot.fit.lock() {
+            *current = Some(fit);
+        }
+    }
+
+    /// The Debug group's "Save frame": each of the other person's feeds that's upscaled now, by name, as it came,
+    /// stretched without FSR and with it. Waits for the GPU, so keep it off the UI thread.
+    #[cfg(not(target_os = "android"))]
+    pub fn upscaled_frames(&self) -> Vec<(&'static str, [Buffer; 3])> {
+        let Some(gpu) = crate::gpu::converter() else { return Vec::new() };
+        [("camera", &self.peer), ("screen", &self.screen)]
+            .into_iter()
+            .filter_map(|(name, slot)| {
+                let upscale = slot.upscale.lock().ok()?;
+                Some((name, gpu.snapshot(upscale.as_ref()?)?))
+            })
+            .collect()
     }
 
     /// Which feeds the screen on show draws. One left out keeps its last frame, which shows for a moment when it's
@@ -219,12 +256,17 @@ impl VideoSink for SlintSink {
         let (width, height) = (frame.width(), frame.height());
         #[cfg(not(target_os = "android"))]
         if let Some(gpu) = crate::gpu::converter() {
-            let texture = match slot.take(width, height, Some(gpu.device())) {
+            let fit = slot.fit.lock().ok().and_then(|f| *f);
+            let (out_width, out_height) =
+                fit.and_then(|fit| crate::fsr::target(width, height, fit)).unwrap_or((width, height));
+            let texture = match slot.take(out_width, out_height, Some(gpu.device())) {
                 Some(Pixels::Gpu(texture, _, _)) => texture,
-                _ => gpu.texture(width, height),
+                _ => gpu.texture(out_width, out_height),
             };
-            let Ok(mut planes) = slot.planes.lock() else { return };
-            if let Some(commands) = frame.with_planes(|yuv| gpu.convert(&mut planes, yuv, &texture)).flatten() {
+            let (Ok(mut planes), Ok(mut upscale)) = (slot.planes.lock(), slot.upscale.lock()) else { return };
+            if let Some(commands) =
+                frame.with_planes(|yuv| gpu.convert(&mut planes, &mut upscale, yuv, &texture)).flatten()
+            {
                 self.show(feed, Pixels::Gpu(texture, gpu.device().clone(), Some(commands)), frame.rotation());
             }
             return;

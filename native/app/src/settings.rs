@@ -35,6 +35,15 @@ pub struct Settings {
     /// "Connection stats" in Settings: the overlay shows in every call
     #[serde(default)]
     pub show_stats: bool,
+    /// "Record call stats" in Settings' Debug group: each call's stats go into a file
+    #[serde(default)]
+    pub record_stats: bool,
+    /// "Video error correction" in Settings' Debug group: FlexFEC, from the next call
+    #[serde(default = "yes")]
+    pub fec: bool,
+    /// "Sharpen video" in Settings: the other person's video upscaled with FSR where it's drawn bigger than it came
+    #[serde(default = "yes")]
+    pub sharpen_video: bool,
     /// "Live subtitles" in Settings: the last spoken lines over the video
     #[serde(default = "yes")]
     pub subtitles: bool,
@@ -195,6 +204,9 @@ impl Default for Settings {
             on_device_speech: true,
             live_prompt_seen: false,
             show_stats: false,
+            record_stats: false,
+            fec: true,
+            sharpen_video: true,
             subtitles: true,
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,

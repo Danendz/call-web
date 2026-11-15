@@ -1,23 +1,25 @@
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/build.rs b/build.rs
 --- a/build.rs	2006-07-24 06:21:28
-+++ b/build.rs	2026-11-14 21:42:04
-@@ -31,6 +31,7 @@
++++ b/build.rs	2026-11-15 09:31:45
+@@ -31,6 +31,8 @@
      let mut rust_files = vec![
          "src/peer_connection.rs",
          "src/peer_connection_factory.rs",
 +        "src/capture_processor.rs",
++        "src/flexfec.rs",
          "src/audio_device_controller.rs",
          "src/media_stream.rs",
          "src/media_stream_track.rs",
-@@ -67,6 +68,7 @@
+@@ -67,6 +69,8 @@
      builder.files(&[
          "src/peer_connection.cpp",
          "src/peer_connection_factory.cpp",
 +        "src/capture_processor.cpp",
++        "src/flexfec.cpp",
          "src/audio_device_controller.cpp",
          "src/media_stream.cpp",
          "src/media_stream_track.cpp",
-@@ -151,6 +153,8 @@
+@@ -151,6 +155,8 @@
              println!("cargo:rustc-link-lib=dylib=dxgi");
              println!("cargo:rustc-link-lib=dylib=dwmapi");
              println!("cargo:rustc-link-lib=dylib=shcore");
@@ -26,7 +28,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
  
              //let path = env::current_dir().unwrap();
              //println!("cargo:rustc-link-search=native={}/vaapi-windows/x64/lib", path.display());
-@@ -158,6 +162,8 @@
+@@ -158,6 +164,8 @@
              //println!("cargo:rustc-link-lib=dylib=va_win32");
  
              builder
@@ -37,7 +39,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
                  //.file("vaapi-windows/DirectX-Headers-1.0/src/dxguids.cpp")
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/include/livekit/capture_processor.h b/include/livekit/capture_processor.h
 --- a/include/livekit/capture_processor.h	1970-01-01 06:00:00
-+++ b/include/livekit/capture_processor.h	2026-11-14 21:38:42
++++ b/include/livekit/capture_processor.h	2026-11-09 14:18:23
 @@ -0,0 +1,46 @@
 +/*
 + * Copyright 2025 LiveKit, Inc.
@@ -85,9 +87,46 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +void set_builtin_noise_suppression(bool enabled);
 +
 +}  // namespace livekit_ffi
+diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/include/livekit/flexfec.h b/include/livekit/flexfec.h
+--- a/include/livekit/flexfec.h	1970-01-01 06:00:00
++++ b/include/livekit/flexfec.h	2026-11-15 09:31:45
+@@ -0,0 +1,33 @@
++/*
++ * Copyright 2025 LiveKit, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#pragma once
++
++#include <memory>
++
++#include "api/field_trials_view.h"
++
++namespace livekit_ffi {
++
++// Field trials that turn FlexFEC on for video while set_flexfec(true): the
++// factory always carries this view, and it reads the switch on each lookup, so
++// a peer connection made after a switch gets it.
++std::unique_ptr<webrtc::FieldTrialsView> create_flexfec_field_trials();
++
++// Whether video peer connections made from now on offer and send FlexFEC.
++void set_flexfec(bool enabled);
++
++}  // namespace livekit_ffi
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/include/livekit/media_foundation_decoder.h b/include/livekit/media_foundation_decoder.h
 --- a/include/livekit/media_foundation_decoder.h	1970-01-01 06:00:00
-+++ b/include/livekit/media_foundation_decoder.h	2026-11-14 21:41:55
++++ b/include/livekit/media_foundation_decoder.h	2026-11-14 22:05:09
 @@ -0,0 +1,20 @@
 +#pragma once
 +
@@ -111,7 +150,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +#endif
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/include/livekit/media_foundation_encoder.h b/include/livekit/media_foundation_encoder.h
 --- a/include/livekit/media_foundation_encoder.h	1970-01-01 06:00:00
-+++ b/include/livekit/media_foundation_encoder.h	2026-11-14 21:38:42
++++ b/include/livekit/media_foundation_encoder.h	2026-11-14 22:05:09
 @@ -0,0 +1,22 @@
 +#pragma once
 +
@@ -137,7 +176,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +#endif
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/capture_processor.cpp b/src/capture_processor.cpp
 --- a/src/capture_processor.cpp	1970-01-01 06:00:00
-+++ b/src/capture_processor.cpp	2026-11-14 21:38:42
++++ b/src/capture_processor.cpp	2026-11-09 14:18:23
 @@ -0,0 +1,111 @@
 +/*
 + * Copyright 2025 LiveKit, Inc.
@@ -252,7 +291,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +}  // namespace livekit_ffi
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/capture_processor.rs b/src/capture_processor.rs
 --- a/src/capture_processor.rs	1970-01-01 06:00:00
-+++ b/src/capture_processor.rs	2026-11-14 21:38:42
++++ b/src/capture_processor.rs	2026-11-09 14:18:23
 @@ -0,0 +1,59 @@
 +// Copyright 2025 LiveKit, Inc.
 +//
@@ -313,10 +352,104 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +        processor(samples, rate);
 +    }
 +}
+diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/flexfec.cpp b/src/flexfec.cpp
+--- a/src/flexfec.cpp	1970-01-01 06:00:00
++++ b/src/flexfec.cpp	2026-11-15 09:31:45
+@@ -0,0 +1,55 @@
++/*
++ * Copyright 2025 LiveKit, Inc.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "livekit/flexfec.h"
++
++#include <atomic>
++#include <string>
++
++#include "webrtc-sys/src/flexfec.rs.h"
++
++namespace livekit_ffi {
++
++namespace {
++
++std::atomic<bool> g_flexfec{false};
++
++class FlexFecFieldTrials final : public webrtc::FieldTrialsView {
++ public:
++  std::string Lookup(absl::string_view key) const override {
++    if (g_flexfec.load() && (key == "WebRTC-FlexFEC-03" ||
++                             key == "WebRTC-FlexFEC-03-Advertised")) {
++      return "Enabled";
++    }
++    return "";
++  }
++
++  std::unique_ptr<webrtc::FieldTrialsView> CreateCopy() const override {
++    return std::make_unique<FlexFecFieldTrials>();
++  }
++};
++
++}  // namespace
++
++std::unique_ptr<webrtc::FieldTrialsView> create_flexfec_field_trials() {
++  return std::make_unique<FlexFecFieldTrials>();
++}
++
++void set_flexfec(bool enabled) {
++  g_flexfec.store(enabled);
++}
++
++}  // namespace livekit_ffi
+diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/flexfec.rs b/src/flexfec.rs
+--- a/src/flexfec.rs	1970-01-01 06:00:00
++++ b/src/flexfec.rs	2026-11-15 09:31:45
+@@ -0,0 +1,31 @@
++// Copyright 2025 LiveKit, Inc.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++//! A switch for FlexFEC on video: forward error correction that lets the
++//! receiver rebuild lost packets without waiting a round trip for them.
++
++#[cxx::bridge(namespace = "livekit_ffi")]
++mod ffi {
++    unsafe extern "C++" {
++        include!("livekit/flexfec.h");
++
++        fn set_flexfec(enabled: bool);
++    }
++}
++
++/// Turns FlexFEC on or off for peer connections made from now on; one already
++/// connected keeps what it negotiated. Both sides need it on for it to be used.
++pub fn set_flexfec(enabled: bool) {
++    ffi::set_flexfec(enabled);
++}
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs	2006-07-24 06:21:28
-+++ b/src/lib.rs	2026-11-14 21:38:42
-@@ -20,6 +20,7 @@
++++ b/src/lib.rs	2026-11-15 09:31:45
+@@ -20,9 +20,11 @@
  pub mod audio_resampler;
  pub mod audio_track;
  pub mod candidate;
@@ -324,9 +457,13 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
  pub mod data_channel;
  #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
  pub mod desktop_capturer;
++pub mod flexfec;
+ pub mod frame_cryptor;
+ pub mod helper;
+ pub mod jsep;
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/media_foundation_decoder.cpp b/src/media_foundation_decoder.cpp
 --- a/src/media_foundation_decoder.cpp	1970-01-01 06:00:00
-+++ b/src/media_foundation_decoder.cpp	2026-11-14 21:45:17
++++ b/src/media_foundation_decoder.cpp	2026-11-14 22:05:09
 @@ -0,0 +1,500 @@
 +// Hardware H.264 decoding through Media Foundation. WebRTC on Windows decodes
 +// H.264 with FFmpeg on the CPU, which for a 60 fps shared screen costs more
@@ -830,7 +967,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +#endif  // defined(_WIN32)
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/media_foundation_encoder.cpp b/src/media_foundation_encoder.cpp
 --- a/src/media_foundation_encoder.cpp	1970-01-01 06:00:00
-+++ b/src/media_foundation_encoder.cpp	2026-11-14 21:38:42
++++ b/src/media_foundation_encoder.cpp	2026-11-14 22:05:09
 @@ -0,0 +1,786 @@
 +// Hardware H.264 through Media Foundation. Windows has no WebRTC encoder that
 +// reaches the GPU's video engine (NVENC here is Linux only), so without this a
@@ -1620,15 +1757,35 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
 +#endif  // defined(_WIN32)
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/peer_connection_factory.cpp b/src/peer_connection_factory.cpp
 --- a/src/peer_connection_factory.cpp	2006-07-24 06:21:28
-+++ b/src/peer_connection_factory.cpp	2026-11-14 21:38:42
-@@ -37,6 +37,7 @@
++++ b/src/peer_connection_factory.cpp	2026-11-15 09:31:45
+@@ -37,6 +37,8 @@
  #include "api/audio_options.h"
  #include "livekit/adm_proxy.h"
  #include "livekit/audio_track.h"
 +#include "livekit/capture_processor.h"
++#include "livekit/flexfec.h"
  #include "livekit/peer_connection.h"
  #include "livekit/rtc_error.h"
  #include "livekit/rtp_parameters.h"
+@@ -124,6 +126,8 @@
+ webrtc::Environment CreateEnvironment(bool zero_playout_delay,
+                                       bool enable_warp) {
+   std::vector<std::unique_ptr<webrtc::FieldTrialsView>> views;
++  // Always present, so the FlexFEC switch can turn on without a new factory
++  views.push_back(create_flexfec_field_trials());
+   if (zero_playout_delay) {
+     views.push_back(std::make_unique<ZeroPlayoutDelayFieldTrials>());
+   }
+@@ -131,9 +135,6 @@
+     views.push_back(std::make_unique<EnableWarpFieldTrials>());
+   }
+ 
+-  if (views.empty()) {
+-    return webrtc::CreateEnvironment();
+-  }
+   return webrtc::CreateEnvironment(
+       std::make_unique<CompositeFieldTrials>(std::move(views)));
+ }
 @@ -194,7 +195,7 @@
        std::move(std::make_unique<livekit_ffi::VideoDecoderFactory>());
    dependencies.audio_encoder_factory = webrtc::CreateBuiltinAudioEncoderFactory();
@@ -1657,7 +1814,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
        rtc_runtime_->get_or_create_media_stream_track(
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/video_decoder_factory.cpp b/src/video_decoder_factory.cpp
 --- a/src/video_decoder_factory.cpp	2006-07-24 06:21:28
-+++ b/src/video_decoder_factory.cpp	2026-11-14 21:42:04
++++ b/src/video_decoder_factory.cpp	2026-11-14 22:05:09
 @@ -39,6 +39,11 @@
  #include "nvidia/nvidia_decoder_factory.h"
  #endif
@@ -1691,7 +1848,7 @@ diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock 
  #if defined(RTC_DAV1D_IN_INTERNAL_DECODER_FACTORY)
 diff -ruN -x Cargo.toml.orig -x .cargo_vcs_info.json -x .cargo-ok -x Cargo.lock -x *.orig -x *.rej a/src/video_encoder_factory.cpp b/src/video_encoder_factory.cpp
 --- a/src/video_encoder_factory.cpp	2006-07-24 06:21:28
-+++ b/src/video_encoder_factory.cpp	2026-11-14 21:38:42
++++ b/src/video_encoder_factory.cpp	2026-11-14 22:05:09
 @@ -66,6 +66,10 @@
  #include "jetson/jetson_encoder_factory.h"
  #endif

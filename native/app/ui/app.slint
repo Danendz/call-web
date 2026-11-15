@@ -11,7 +11,7 @@ import { CallOverlay } from "friends/call-overlay.slint";
 import { SettingsSheet } from "settings/settings.slint";
 import { SetupScreen } from "setup/setup.slint";
 import { DeviceItem } from "setup/device-row.slint";
-import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark } from "call/call.slint";
+import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark, VideoBox } from "call/call.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
 
 export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, MissedRow, RoomRow }
@@ -65,6 +65,22 @@ export component AppWindow inherits Window {
     // "Connection stats" in Settings, remembered between launches
     in property <bool> show-stats;
     callback set-show-stats(bool);
+    // "Record call stats" in Settings' Debug group, remembered between launches
+    in property <bool> record-stats;
+    in property <bool> can-show-files;
+    callback set-record-stats(bool);
+    callback show-stats-files();
+    // "Video error correction" in Settings' Debug group, remembered
+    in property <bool> fec;
+    callback set-fec(bool);
+    // "Sharpen video" in Settings, remembered; the Debug group's comparison and saved frames (1 saved, 2 nothing
+    // upscaled, 3 failed)
+    in property <bool> sharpen-video;
+    in property <bool> compare-upscaling;
+    in property <int> frame-saved;
+    callback set-sharpen-video(bool);
+    callback set-compare-upscaling(bool);
+    callback save-frame();
     // "Noise suppression" in Settings, remembered between launches
     in property <bool> noise-suppression;
     callback set-noise-suppression(bool);
@@ -225,6 +241,8 @@ export component AppWindow inherits Window {
     callback corner-moved(string, string);
     // Which videos the screen on show draws (yours, theirs, their screen); the others aren't converted
     callback feeds-seen(bool, bool, bool);
+    // How the other person's camera ("peer") or screen shows, for upscaling it to that
+    callback video-box(string, VideoBox);
     callback stats-shown(bool);
     callback show-shot();
     callback update-now();
@@ -376,6 +394,7 @@ export component AppWindow inherits Window {
             close-screen-picker => { root.close-screen-picker(); }
             corner-moved(feed, corner) => { root.corner-moved(feed, corner); }
             feeds-seen(you, peer, screen) => { root.feeds-seen(you, peer, screen); }
+            video-box(feed, box) => { root.video-box(feed, box); }
             stats-shown(on) => { root.stats-shown(on); }
             peer-frame-rotation: root.peer-frame-rotation;
             peer-cam-on: root.peer-cam-on;
@@ -466,6 +485,12 @@ export component AppWindow inherits Window {
         if root.settings-open: SettingsSheet {
             sheet: root.touch || root.width < 900px;
             show-stats: root.show-stats;
+            record-stats: root.record-stats;
+            can-show-files: root.can-show-files;
+            fec: root.fec;
+            sharpen-video: root.sharpen-video;
+            compare-upscaling: root.compare-upscaling;
+            frame-saved: root.frame-saved;
             subtitles-on: root.subtitles-on;
             noise-suppression: root.noise-suppression;
             video-codec: root.video-codec;
@@ -483,6 +508,12 @@ export component AppWindow inherits Window {
             download-translation => { root.download-translation(); }
             delete-translation => { root.delete-translation(); }
             set-show-stats(on) => { root.set-show-stats(on); }
+            set-record-stats(on) => { root.set-record-stats(on); }
+            show-stats-files => { root.show-stats-files(); }
+            set-fec(on) => { root.set-fec(on); }
+            set-sharpen-video(on) => { root.set-sharpen-video(on); }
+            set-compare-upscaling(on) => { root.set-compare-upscaling(on); }
+            save-frame => { root.save-frame(); }
             set-subtitles-on(on) => { root.set-subtitles-on(on); }
             set-noise-suppression(on) => { root.set-noise-suppression(on); }
             set-video-codec(id) => { root.set-video-codec(id); }

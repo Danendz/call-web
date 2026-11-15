@@ -1,0 +1,90 @@
+import { Theme } from "../theme.slint";
+
+// An on/off switch, like the OS's own
+export component Switch inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled();
+
+    width: 44px;
+    height: 26px;
+    border-radius: self.height / 2;
+    background: checked ? Theme.accent : Theme.surface-3;
+    opacity: enabled ? 1 : 0.38;
+    animate background { duration: Theme.fast; easing: Theme.ease; }
+    accessible-role: switch;
+    accessible-label: label;
+    accessible-checked: checked;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (enabled) { root.toggled(); } }
+
+    Rectangle {
+        width: parent.height - 6px;
+        height: self.width;
+        x: checked ? parent.width - self.width - 3px : 3px;
+        border-radius: self.width / 2;
+        background: #fff;
+        animate x { duration: Theme.fast; easing: Theme.ease; }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { if (root.enabled) { root.toggled(); } }
+    }
+}
+
+// One row of a settings group: a title, a line under it, and a control at the end.
+export component SettingRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> detail;
+    in property <color> detail-color: Theme.muted;
+
+    padding: 16px;
+    spacing: 14px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 3px;
+        horizontal-stretch: 1;
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.font-size;
+            wrap: word-wrap;
+        }
+        if root.detail != "": Text {
+            text: root.detail;
+            color: root.detail-color;
+            font-size: Theme.font-size-small;
+            wrap: word-wrap;
+        }
+    }
+    @children
+}
+
+// A group of rows, like the OS's settings
+export component Group inherits Rectangle {
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface-2;
+    VerticalLayout {
+        @children
+    }
+}
+
+// Rows shown only while `shown`. Use it instead of `if` for rows with wrapping text: Slint measures wrapped text in
+// an `if` as if it had room for one line, so the group came out too short and its last row spilled over the edge.
+export component Shown inherits VerticalLayout {
+    in property <bool> shown;
+    visible: shown;
+    min-height: 0;
+    max-height: shown ? 100000px : 0;
+    @children
+}
+
+// A section's heading over its group
+export component Heading inherits Text {
+    color: Theme.muted;
+    font-size: Theme.font-size-small;
+    font-weight: 600;
+}
