@@ -1,5 +1,6 @@
 import { VideoOff, VolumeOff } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { useSharpenVideo } from "../settings/sharpen";
 import { useT } from "../ui/i18n";
 import { Video } from "../ui/Video";
 import { isRearCamera } from "./media";
@@ -77,6 +78,8 @@ export function Feeds({
 }) {
   const t = useT();
   const sinkId = speakerId ?? "";
+  // Only the stage: a tile is rarely drawn bigger than it came
+  const sharpen = useSharpenVideo();
   const [aspects, setAspects] = useState<Record<FeedKey, number>>({ self: 16 / 9, peer: 16 / 9, screen: 16 / 9 });
   const onAspect = (key: FeedKey) => (aspect: number) => setAspects((prev) => ({ ...prev, [key]: aspect }));
   const sizes = {
@@ -114,6 +117,7 @@ export function Feeds({
               muted={speakerOff}
               sinkId={sinkId}
               rotation={remoteRotation}
+              sharpen={sharpen && layout.main === "peer"}
               onAspect={onAspect("peer")}
             />
             <CamOff shown={!remoteCamOn} large={layout.main === "peer"} />
@@ -127,7 +131,14 @@ export function Feeds({
       {remoteScreen &&
         feed(
           "screen",
-          <Video stream={remoteScreen} className="feed-video" muted={speakerOff} sinkId={sinkId} onAspect={onAspect("screen")} />,
+          <Video
+            stream={remoteScreen}
+            className="feed-video"
+            muted={speakerOff}
+            sinkId={sinkId}
+            sharpen={sharpen && layout.main === "screen"}
+            onAspect={onAspect("screen")}
+          />,
         )}
       {localStream &&
         feed(

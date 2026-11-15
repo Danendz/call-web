@@ -1,4 +1,4 @@
-import { Activity, AudioLines, Captions, Film, Languages, Subtitles } from "lucide-react";
+import { Activity, AudioLines, Captions, Film, Languages, Sparkles, Subtitles } from "lucide-react";
 import type { VideoCodec } from "../call/codec";
 import { LANGS, type Lang } from "../../../shared/protocol";
 import { LANG_NAMES } from "../call/speech/lang";
@@ -9,6 +9,7 @@ import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
 import "./settings.css";
 import { setVideoCodec, useVideoCodec } from "./codec";
 import { setNoiseSuppression, useNoiseSuppression } from "./noise";
+import { setSharpenVideo, useSharpenVideo } from "./sharpen";
 import { setShowStats, useShowStats } from "./stats";
 import { setSubtitles, useSubtitles } from "./subtitles";
 
@@ -30,6 +31,7 @@ export function SettingsSheet({
   const noiseSuppression = useNoiseSuppression();
   const subtitles = useSubtitles();
   const videoCodec = useVideoCodec();
+  const sharpenVideo = useSharpenVideo();
 
   return (
     <Sheet label={t.settings} open={open} onClose={onClose} side={narrow ? "bottom" : "right"} showTitle>
@@ -70,6 +72,16 @@ export function SettingsSheet({
             checked={noiseSuppression}
             onChange={(e) => setNoiseSuppression(e.target.checked)}
           />
+        </label>
+        <label className="settings-row">
+          <span className="row-icon" aria-hidden>
+            <Sparkles size={18} />
+          </span>
+          <span className="settings-label">
+            {t.sharpenVideo}
+            <span className="settings-detail">{t.sharpenVideoDetail}</span>
+          </span>
+          <input type="checkbox" role="switch" checked={sharpenVideo} onChange={(e) => setSharpenVideo(e.target.checked)} />
         </label>
         <label className="settings-row">
           <span className="row-icon" aria-hidden>

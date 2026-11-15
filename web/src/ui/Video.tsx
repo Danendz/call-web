@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useFsr } from "./fsr";
 
 // iOS refuses sound that doesn't start right after a tap, and the call's media arrives seconds after one.
 // Such a video plays muted so its picture shows, until the next tap turns its sound on.
@@ -47,6 +48,7 @@ export function useSoundBlocked(): boolean {
  * Plays a stream. onAspect reports width/height of the frames, again whenever the source changes shape.
  * rotation turns the picture clockwise in 90° steps; at 90/270 the `turned` class lets CSS swap the box's sides.
  * sinkId is the speaker its sound plays on, "" for the system's default; left out, the browser picks.
+ * sharpen upscales it with FSR on a canvas over it while it's drawn bigger than it came (see fsr.ts).
  */
 export function Video({
   stream,
@@ -55,6 +57,7 @@ export function Video({
   mirror,
   rotation = 0,
   sinkId,
+  sharpen,
   onAspect,
 }: {
   stream: MediaStream;
@@ -63,9 +66,12 @@ export function Video({
   mirror?: boolean;
   rotation?: number;
   sinkId?: string;
+  sharpen?: boolean;
   onAspect?: (aspect: number) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const sharpened = useFsr(ref, canvas, !!sharpen);
   // React doesn't keep the muted property in sync after the first render
   useEffect(() => {
     const v = ref.current;
@@ -103,16 +109,24 @@ export function Video({
   };
 
   const turned = rotation % 180 !== 0;
+  const classes = `${className} ${mirror ? "mirror" : ""} ${turned ? "turned" : ""}`;
+  const style = rotation ? { transform: `${turned ? "translate(-50%, -50%) " : ""}rotate(${rotation}deg)` } : undefined;
   return (
-    <video
-      ref={ref}
-      className={`${className} ${mirror ? "mirror" : ""} ${turned ? "turned" : ""}`}
-      style={rotation ? { transform: `${turned ? "translate(-50%, -50%) " : ""}rotate(${rotation}deg)` } : undefined}
-      autoPlay
-      playsInline
-      muted={muted}
-      onLoadedMetadata={report}
-      onResize={report}
-    />
+    <>
+      <video
+        ref={ref}
+        className={classes}
+        style={style}
+        autoPlay
+        playsInline
+        muted={muted}
+        onLoadedMetadata={report}
+        onResize={report}
+      />
+      {/* A fresh canvas each time it's turned on, so a lost WebGL context doesn't stay with it */}
+      {sharpen && (
+        <canvas ref={canvas} className={`${classes} sharpened ${sharpened ? "" : "unused"}`} style={style} aria-hidden />
+      )}
+    </>
   );
 }
