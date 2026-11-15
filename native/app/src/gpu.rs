@@ -5,9 +5,11 @@
 //! from the UI thread, though: before resizing the window's surface wgpu waits for the queue to empty, and a submit
 //! from another thread during that wait is an error that panics (maximizing the window crashed the app).
 //!
-//! Only on Metal and D3D12, whose queues take submits from any thread. Skia submits to Vulkan's raw queue from the UI
-//! thread, and Vulkan needs every submit to one queue synchronized, which the video threads' wouldn't be.
+//! On Vulkan (Android) every submit goes through the UI thread, not only the conversion's: Skia submits to Vulkan's raw
+//! queue from there without wgpu's lock, and Vulkan needs every submit to one queue synchronized. Uploads and
+//! recording stay on the video threads; wgpu only reaches the queue when it submits.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use engine::{Chroma, Planes as Frame};
@@ -18,11 +20,19 @@ use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 static CONVERTER: Mutex<Option<Arc<Converter>>> = Mutex::new(None);
 
-/// Called once the window draws with wgpu; until then, on Vulkan and with OpenGL, video is converted on the CPU.
+/// Which converter, and so which of Slint's devices, a texture was made on. Not `wgpu::Device`'s `==`, which compares
+/// ids that each wgpu instance numbers from the start: on Android Slint makes a new instance for each new surface, so
+/// a device since torn down can equal the one drawing now, and its textures crash it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DeviceKey(u64);
+
+static NEXT_KEY: AtomicU64 = AtomicU64::new(0);
+
+/// Called once the window draws with wgpu; until then, and with OpenGL, video is converted on the CPU.
 /// `CALL_CPU_VIDEO=1` keeps it there, to compare the two.
 pub fn start(device: &wgpu::Device, queue: &wgpu::Queue) {
     let backend = device.adapter_info().backend;
-    let converter = (matches!(backend, wgpu::Backend::Metal | wgpu::Backend::Dx12)
+    let converter = (matches!(backend, wgpu::Backend::Metal | wgpu::Backend::Dx12 | wgpu::Backend::Vulkan)
         && std::env::var_os("CALL_CPU_VIDEO").is_none())
     .then(|| Arc::new(Converter::new(device.clone(), queue.clone())));
     if let Ok(mut current) = CONVERTER.lock() {
@@ -42,12 +52,15 @@ pub fn converter() -> Option<Arc<Converter>> {
 }
 
 pub struct Converter {
+    key: DeviceKey,
     device: wgpu::Device,
     queue: wgpu::Queue,
     i420: Pipeline,
     nv12: Pipeline,
     sampler: wgpu::Sampler,
     fsr: Fsr,
+    /// Vulkan: submits only from the UI thread, see the top of this file
+    ui_submits: bool,
 }
 
 struct Pipeline {
@@ -57,7 +70,7 @@ struct Pipeline {
 
 /// One feed's plane textures, written again by every frame of the same size and format on the same device.
 pub struct Planes {
-    device: wgpu::Device,
+    key: DeviceKey,
     size: (u32, u32),
     nv12: bool,
     /// Y, then U and V or, for NV12, UV
@@ -165,11 +178,13 @@ impl Converter {
             ..Default::default()
         });
         let fsr = Fsr::new(&device);
-        Self { device, queue, i420, nv12, sampler, fsr }
+        let ui_submits = device.adapter_info().backend == wgpu::Backend::Vulkan;
+        let key = DeviceKey(NEXT_KEY.fetch_add(1, Ordering::Relaxed));
+        Self { key, device, queue, i420, nv12, sampler, fsr, ui_submits }
     }
 
-    pub fn device(&self) -> &wgpu::Device {
-        &self.device
+    pub fn key(&self) -> DeviceKey {
+        self.key
     }
 
     /// A texture for converted frames, in the format and with the uses Slint takes as an image.
@@ -221,9 +236,7 @@ impl Converter {
         }
         let nv12 = matches!(frame.chroma, Chroma::Nv12 { .. });
         let planes = match planes {
-            Some(planes) if planes.size == (width, height) && planes.nv12 == nv12 && planes.device == self.device => {
-                planes
-            }
+            Some(planes) if planes.size == (width, height) && planes.nv12 == nv12 && planes.key == self.key => planes,
             _ => planes.insert(self.planes(width, height, nv12)),
         };
         let data = match frame.chroma {
@@ -235,8 +248,9 @@ impl Converter {
         }
 
         let upscale = if upscaled {
-            if !upscale.as_ref().is_some_and(|u| u.fits(&self.device, (width, height), target)) {
-                *upscale = Some(self.fsr.upscale(&self.device, (width, height), target, |w, h| self.texture(w, h)));
+            if !upscale.as_ref().is_some_and(|u| u.fits(self.key, (width, height), target)) {
+                *upscale =
+                    Some(self.fsr.upscale(&self.device, self.key, (width, height), target, |w, h| self.texture(w, h)));
             }
             upscale.as_ref()
         } else {
@@ -277,6 +291,21 @@ impl Converter {
         self.queue.submit(Some(commands));
     }
 
+    /// Submits from a thread that isn't the UI's, for work it then waits for. On Vulkan the UI thread submits it and
+    /// this waits for that; None if the app is closing and the UI thread no longer runs anything.
+    fn submit_off_ui(&self, commands: wgpu::CommandBuffer) -> Option<wgpu::SubmissionIndex> {
+        if !self.ui_submits {
+            return Some(self.queue.submit(Some(commands)));
+        }
+        let (tx, rx) = mpsc::channel();
+        let queue = self.queue.clone();
+        slint::invoke_from_event_loop(move || {
+            let _ = tx.send(queue.submit(Some(commands)));
+        })
+        .ok()?;
+        rx.recv().ok()
+    }
+
     fn planes(&self, width: u32, height: u32, nv12: bool) -> Planes {
         let plane = |w, h, format| {
             self.device.create_texture(&wgpu::TextureDescriptor {
@@ -309,7 +338,7 @@ impl Converter {
             layout: &if nv12 { &self.nv12 } else { &self.i420 }.layout,
             entries: &entries,
         });
-        Planes { device: self.device.clone(), size: (width, height), nv12, textures, bind_group }
+        Planes { key: self.key, size: (width, height), nv12, textures, bind_group }
     }
 
     fn write(&self, texture: &wgpu::Texture, data: &[u8], stride: u32) {
@@ -328,8 +357,9 @@ impl Converter {
 
     /// The Debug group's "Save frame": a feed's last frame as it came, stretched to the upscaled size without FSR, and
     /// with it. Waits for the GPU, so keep it off the UI thread.
+    #[cfg(not(target_os = "android"))]
     pub fn snapshot(&self, upscale: &Upscale) -> Option<[SharedPixelBuffer<Rgba8Pixel>; 3]> {
-        if !upscale.fits(&self.device, (upscale.source.width(), upscale.source.height()), upscale.target()) {
+        if !upscale.fits(self.key, (upscale.source.width(), upscale.source.height()), upscale.target()) {
             return None;
         }
         let (width, height) = upscale.target();
@@ -337,7 +367,7 @@ impl Converter {
         for (out, mode) in [(&before, Mode::Bilinear), (&after, Mode::Fsr)] {
             let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
             self.fsr.record(&self.queue, &mut encoder, upscale, out, mode);
-            self.queue.submit(Some(encoder.finish()));
+            self.submit_off_ui(encoder.finish())?;
         }
         Some([self.read(&upscale.source)?, self.read(&before)?, self.read(&after)?])
     }
@@ -363,7 +393,7 @@ impl Converter {
             },
             texture.size(),
         );
-        let submitted = self.queue.submit(Some(encoder.finish()));
+        let submitted = self.submit_off_ui(encoder.finish())?;
         let (tx, rx) = mpsc::channel();
         buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);

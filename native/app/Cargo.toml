@@ -22,23 +22,26 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 url = "2"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 skia-safe = { version = "=0.153.3", default-features = false }
+# Slint's own wgpu, only to turn on WGSL for the video shader in gpu.rs; keep the version Slint takes
+wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 slint = { version = "=1.18.1", default-features = false, features = [
     "backend-winit",
     # Only for the window attributes hook in window.rs; it's why slint is pinned exactly
     "unstable-winit-030",
-    # Skia over wgpu (Metal, D3D12, Vulkan), OpenGL kept as the fallback; see window.rs. Android stays on OpenGL
-    # until it's tested on a phone, since its backend can't pick at runtime
+    # Skia over wgpu (Metal, D3D12, Vulkan), OpenGL kept as the fallback; see window.rs
     "renderer-skia",
     "unstable-wgpu-30",
 ] }
 velopack = "=1.2.161"
-# Slint's own wgpu, only to turn on WGSL for the video shader in gpu.rs; keep the version Slint takes
-wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06"] }
+# Skia over Vulkan through wgpu, or over OpenGL, picked at runtime by our patched backend (vendor/README.md)
+slint = { version = "=1.18.1", default-features = false, features = ["backend-android-activity-06", "unstable-wgpu-30"] }
+# For the backend's `set_requested_graphics_api`, which `slint` doesn't re-export, and the API it takes
+i-slint-backend-android-activity = "=1.18.1"
+i-slint-core = "=1.18.1"
 # The version LiveKit's libwebrtc takes its JavaVM in
 jni = "0.21"
 # To read the system's fonts.xml; Slint's font library already brings it in

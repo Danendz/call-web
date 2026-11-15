@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 use jni::objects::{GlobalRef, JByteBuffer, JClass, JObject, JObjectArray, JString, JValue};
 use jni::sys::{jboolean, jint};
 use jni::{JNIEnv, JavaVM};
+use slint::android::android_activity::{MainEvent, PollEvent};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::{AppPhase, AppWindow};
@@ -82,12 +83,40 @@ fn android_main(app: slint::android::AndroidApp) {
     if let Some(dir) = app.internal_data_path() {
         let _ = crate::settings::ANDROID_DIR.set(dir);
     }
-    if let Err(e) = slint::android::init(app) {
+    debug_props();
+    let started = |event: &PollEvent<'_>| {
+        if let PollEvent::Main(MainEvent::Start) = event {
+            crate::window::started();
+        }
+    };
+    if let Err(e) = slint::android::init_with_event_listener(app, started) {
+        tracing::error!("no Slint backend: {e}");
+        return;
+    }
+    if let Err(e) = crate::window::select_backend() {
         tracing::error!("no usable graphics backend: {e}");
         return;
     }
     if let Err(e) = crate::run() {
         tracing::error!("{e:#}");
+    }
+}
+
+/// A debug build takes the desktop's `CALL_*` test switches from system properties, which `adb shell setprop` sets
+/// (`debug.call_danya.fake_no_wgpu 1`, `debug.call_danya.cpu_video 1`): an app started by Android gets no environment.
+fn debug_props() {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    for (prop, var) in
+        [("debug.call_danya.fake_no_wgpu", "CALL_FAKE_NO_WGPU"), ("debug.call_danya.cpu_video", "CALL_CPU_VIDEO")]
+    {
+        let set = std::process::Command::new("getprop").arg(prop).output().is_ok_and(|o| o.stdout.trim_ascii() == b"1");
+        if set {
+            tracing::info!("{var} from {prop}");
+            // SAFETY: at startup, before the app starts any thread that reads the environment
+            unsafe { std::env::set_var(var, "1") };
+        }
     }
 }
 
