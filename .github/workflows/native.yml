@@ -154,7 +154,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup target add aarch64-apple-ios && brew install xcodegen
+      # From native/, so the target goes to the toolchain rust-toolchain.toml pins there, not the runner's default
+      - run: cd native && rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
       # Bergamot's C++ build (crates/bergamot) sits in target/ beside cargo's, where rust-cache would clear it
@@ -272,7 +273,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup target add aarch64-apple-ios && brew install xcodegen
+      # From native/, so the target goes to the toolchain rust-toolchain.toml pins there, not the runner's default
+      - run: cd native && rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
       # Bergamot's C++ build (crates/bergamot) sits in target/ beside cargo's, where rust-cache would clear it
