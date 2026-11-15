@@ -155,6 +155,20 @@ export async function addMissedCall(callee: string, caller: string): Promise<voi
       SELECT id FROM missed_calls WHERE callee = ${callee} ORDER BY at DESC OFFSET ${MAX_MISSED_CALLS})`;
 }
 
-export async function missedSeen(me: string): Promise<void> {
-  await db()`UPDATE missed_calls SET seen_at = now() WHERE callee = ${me} AND seen_at IS NULL`;
+/** Marks your missed calls seen: all of them, or only those from the user `from` (a username). */
+export async function missedSeen(me: string, from?: string): Promise<void> {
+  if (from === undefined) {
+    await db()`UPDATE missed_calls SET seen_at = now() WHERE callee = ${me} AND seen_at IS NULL`;
+    return;
+  }
+  await db()`
+    UPDATE missed_calls SET seen_at = now()
+    WHERE callee = ${me} AND seen_at IS NULL AND caller = (SELECT id FROM users WHERE username = ${from})`;
+}
+
+/** A call between the two connected: the missed calls either left the other are answered. */
+export async function missedAnswered(a: string, b: string): Promise<void> {
+  await db()`
+    UPDATE missed_calls SET seen_at = now()
+    WHERE seen_at IS NULL AND ((callee = ${a} AND caller = ${b}) OR (callee = ${b} AND caller = ${a}))`;
 }

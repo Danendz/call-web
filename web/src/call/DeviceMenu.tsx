@@ -1,6 +1,6 @@
 import { ChevronUp } from "lucide-react";
 import { useRef, type ReactNode } from "react";
-import { MenuPanel } from "./MenuPanel";
+import { MenuPanel } from "../ui/MenuPanel";
 import { MenuButton, type MenuItem } from "./MoreMenu";
 
 export interface MenuSection {

@@ -64,8 +64,11 @@ pub enum UserClientMessage {
         call_id: String,
         accept: bool,
     },
-    /// Clears the missed calls in the next state
-    MissedSeen,
+    /// Clears the missed calls in the next state: all of them, or only those from one friend
+    MissedSeen {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
+    },
     Ping,
 }
 

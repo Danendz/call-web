@@ -3,7 +3,7 @@ import { useRef, type ReactNode } from "react";
 import { useT } from "../ui/i18n";
 import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
-import { MenuPanel } from "./MenuPanel";
+import { MenuPanel } from "../ui/MenuPanel";
 
 export interface MenuItem {
   /** For lists of devices, whose names can repeat. */

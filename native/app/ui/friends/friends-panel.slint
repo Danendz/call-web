@@ -4,14 +4,30 @@ import { Button, ButtonKind } from "../components/button.slint";
 import { IconButton, IconButtonKind } from "../components/icon-button.slint";
 import { Field } from "../components/field.slint";
 import { AccountText } from "../account/errors.slint";
+import { FriendMenu } from "friend-menu.slint";
 
-// presence: "online", "in-call" or "offline"
-export struct FriendRow { name: string, presence: string }
-export struct MissedRow { from: string, at: string }
+// presence: "online", "in-call" or "offline"; missed: how many calls from them you missed, the latest at missed-at
+export struct FriendRow { name: string, presence: string, missed: int, missed-at: string }
 export struct RoomRow { room-id: string, with: string }
+
+// Turns while it's shown; stands still under reduced motion
+component Spinner inherits Rectangle {
+    width: 14px;
+    height: 14px;
+    Image {
+        width: 100%;
+        height: 100%;
+        source: Icons.loader-circle;
+        colorize: Theme.muted;
+        transform-rotation: Theme.reduced-motion ? 0deg : Math.mod(animation-tick() / 1ms, 900) / 900 * 360deg;
+    }
+}
 
 component Card inherits Rectangle {
     in property <string> title;
+    // A spinner beside the title
+    in property <bool> busy;
+    in property <string> busy-label;
     border-radius: Theme.radius;
     border-width: 1px;
     border-color: Theme.border;
@@ -21,11 +37,22 @@ component Card inherits Rectangle {
         padding-left: 16px;
         padding-right: 16px;
         spacing: 2px;
-        if root.title != "": Text {
-            text: root.title;
-            color: Theme.muted;
-            font-size: Theme.font-size-small;
-            font-weight: 650;
+        if root.title != "": HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Text {
+                text: root.title;
+                color: Theme.muted;
+                font-size: Theme.font-size-small;
+                font-weight: 650;
+            }
+            if root.busy: VerticalLayout {
+                alignment: center;
+                Spinner {
+                    accessible-role: progress-indicator;
+                    accessible-label: root.busy-label;
+                }
+            }
         }
         @children
     }
@@ -69,51 +96,74 @@ component Row inherits HorizontalLayout {
     @children
 }
 
-// The signed-in start screen's friends: missed calls, rooms to rejoin, requests, friends with presence, and adding one.
+// A friend row's shape, pulsing until the first list comes in
+component SkeletonRow inherits HorizontalLayout {
+    in property <length> name-width;
+    min-height: 52px;
+    spacing: 10px;
+    opacity: Theme.reduced-motion ? 1 : 0.7 + 0.3 * Math.cos(animation-tick() / 1s * 4.5rad);
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background: Theme.surface-3;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        HorizontalLayout {
+            alignment: start;
+            Rectangle {
+                width: root.name-width;
+                height: 14px;
+                border-radius: 7px;
+                background: Theme.surface-3;
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            background: Theme.surface-3;
+        }
+    }
+}
+
+// The signed-in start screen's friends: rooms to rejoin, requests, friends with presence and missed calls (sorted by
+// the bridge), and adding one.
 export component FriendsPanel inherits VerticalLayout {
     in property <[FriendRow]> friends;
     in property <[string]> incoming;
     in property <[string]> outgoing;
-    in property <[MissedRow]> missed;
     in property <[RoomRow]> rooms;
     in property <bool> connected;
+    // The first list came in; until then the friends are skeletons
+    in property <bool> loaded;
     // Your ring is going out: no second one meanwhile
     in property <bool> calling;
     in property <string> error;
     callback ring(string);
     callback friend-action(string, string);
-    callback missed-seen();
+    // Clears the missed calls from this friend
+    callback missed-seen(string);
+    // A bottom sheet for ⋯ instead of a popover, and the screen its popup covers
+    in property <bool> sheet;
+    in property <length> area-x;
+    in property <length> area-y;
+    in property <length> area-width;
+    in property <length> area-height;
     callback rejoin(string);
     callback clear-error();
 
-    property <string> more-for;
     property <bool> sent;
 
     spacing: 14px;
-
-    if !root.connected: Text {
-        text: @tr("Reconnecting…");
-        color: Theme.muted;
-        font-size: Theme.font-size-small;
-        horizontal-alignment: center;
-    }
-
-    if root.missed.length > 0: Card {
-        title: @tr("Missed calls");
-        for call in root.missed: Row {
-            name: call.from;
-            detail: call.at;
-        }
-        HorizontalLayout {
-            alignment: end;
-            Button {
-                text: @tr("Clear");
-                height-hint: 36px;
-                font-size: Theme.font-size-small;
-                clicked => { root.missed-seen(); }
-            }
-        }
-    }
 
     if root.rooms.length > 0: Card {
         title: @tr("Rooms");
@@ -148,7 +198,16 @@ export component FriendsPanel inherits VerticalLayout {
 
     Card {
         title: @tr("Friends");
-        if root.friends.length == 0: Text {
+        // The list stays as it was meanwhile
+        busy: root.loaded && !root.connected;
+        busy-label: @tr("Reconnecting…");
+        if !root.loaded: VerticalLayout {
+            accessible-role: none;
+            SkeletonRow { name-width: 140px; }
+            SkeletonRow { name-width: 96px; }
+            SkeletonRow { name-width: 120px; }
+        }
+        if root.loaded && root.friends.length == 0: Text {
             text: @tr("No friends yet. Add someone by their exact username.");
             color: Theme.muted;
             font-size: Theme.font-size-small;
@@ -161,12 +220,14 @@ export component FriendsPanel inherits VerticalLayout {
                 dot: friend.presence == "online" ? Theme.good : friend.presence == "in-call" ? Theme.ok : Theme.surface-3;
                 VerticalLayout {
                     alignment: center;
-                    IconButton {
-                        icon: Icons.ellipsis;
-                        label: @tr("More for {}", friend.name);
-                        size: 36px;
-                        transparent: true;
-                        clicked => { root.more-for = root.more-for == friend.name ? "" : friend.name; }
+                    FriendMenu {
+                        name: friend.name;
+                        sheet: root.sheet;
+                        area-x: root.area-x;
+                        area-y: root.area-y;
+                        area-width: root.area-width;
+                        area-height: root.area-height;
+                        act(action) => { root.friend-action(action, friend.name); }
                     }
                 }
                 VerticalLayout {
@@ -176,33 +237,32 @@ export component FriendsPanel inherits VerticalLayout {
                         label: @tr("Call {}", friend.name);
                         kind: IconButtonKind.active;
                         size: 40px;
-                        enabled: !root.calling && root.connected;
+                        enabled: !root.calling && root.connected && friend.presence != "offline";
                         clicked => { root.ring(friend.name); }
                     }
                 }
             }
-            if root.more-for == friend.name: HorizontalLayout {
-                alignment: end;
-                spacing: 8px;
-                padding-bottom: 8px;
-                Button {
-                    text: @tr("Remove");
-                    height-hint: 36px;
+            // Under the name, past the presence dot
+            if friend.missed > 0: HorizontalLayout {
+                padding-left: 20px;
+                padding-bottom: 6px;
+                spacing: 2px;
+                alignment: start;
+                Text {
+                    text: friend.missed > 1 ? @tr("{} missed calls · {}", friend.missed, friend.missed-at)
+                        : @tr("Missed call · {}", friend.missed-at);
+                    color: Theme.bad;
                     font-size: Theme.font-size-small;
-                    clicked => {
-                        root.friend-action("remove", friend.name);
-                        root.more-for = "";
-                    }
+                    font-weight: 500;
+                    vertical-alignment: center;
+                    overflow: elide;
                 }
-                Button {
-                    text: @tr("Block");
-                    kind: ButtonKind.danger;
-                    height-hint: 36px;
-                    font-size: Theme.font-size-small;
-                    clicked => {
-                        root.friend-action("block", friend.name);
-                        root.more-for = "";
-                    }
+                IconButton {
+                    icon: Icons.x;
+                    label: @tr("Clear missed calls from {}", friend.name);
+                    size: 24px;
+                    transparent: true;
+                    clicked => { root.missed-seen(friend.name); }
                 }
             }
         }

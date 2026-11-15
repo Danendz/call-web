@@ -5,9 +5,9 @@ import { IconButton } from "../components/icon-button.slint";
 import { JoinDialog } from "join-dialog.slint";
 import { ModelState } from "../settings/settings.slint";
 import { ModelPrompt } from "../components/model-prompt.slint";
-import { FriendsPanel, FriendRow, MissedRow, RoomRow } from "../friends/friends-panel.slint";
+import { FriendsPanel, FriendRow, RoomRow } from "../friends/friends-panel.slint";
 
-export { ModelState, FriendRow, MissedRow, RoomRow }
+export { ModelState, FriendRow, RoomRow }
 
 // First screen: a desktop app has no address bar, so the room comes from here.
 export component StartScreen inherits Rectangle {
@@ -29,6 +29,8 @@ export component StartScreen inherits Rectangle {
     in property <string> pack-size;
     // Settings are open over this screen
     in property <bool> settings-open;
+    // A bottom sheet for menus instead of a popover, on a phone or a narrow window
+    in property <bool> sheet;
     callback open-settings();
     // The first launch's question about downloading the speech model
     in property <bool> live-prompt;
@@ -40,14 +42,14 @@ export component StartScreen inherits Rectangle {
     in property <[FriendRow]> friends;
     in property <[string]> friend-requests;
     in property <[string]> pending-requests;
-    in property <[MissedRow]> missed;
     in property <[RoomRow]> open-rooms;
     in property <bool> friends-connected;
+    in property <bool> friends-loaded;
     in property <bool> calling;
     in property <string> account-error;
     callback ring(string);
     callback friend-action(string, string);
-    callback missed-seen();
+    callback missed-seen(string);
     callback rejoin(string);
     callback clear-account-error();
     property <bool> asking: false;
@@ -120,14 +122,19 @@ export component StartScreen inherits Rectangle {
                     friends: root.friends;
                     incoming: root.friend-requests;
                     outgoing: root.pending-requests;
-                    missed: root.missed;
+                    sheet: root.sheet;
+                    area-x: root.absolute-position.x;
+                    area-y: root.absolute-position.y;
+                    area-width: root.width;
+                    area-height: root.height;
                     rooms: root.open-rooms;
                     connected: root.friends-connected;
+                    loaded: root.friends-loaded;
                     calling: root.calling;
                     error: root.account-error;
                     ring(name) => { root.ring(name); }
                     friend-action(action, name) => { root.friend-action(action, name); }
-                    missed-seen => { root.missed-seen(); }
+                    missed-seen(name) => { root.missed-seen(name); }
                     rejoin(id) => { root.rejoin(id); }
                     clear-error => { root.clear-account-error(); }
                 }

@@ -1,10 +1,11 @@
 import type { ReactNode, RefObject } from "react";
-import { Sheet } from "../ui/Sheet";
-import { SHEET_QUERY, useMediaQuery } from "../ui/useMediaQuery";
+import { Sheet } from "./Sheet";
+import { SHEET_QUERY, useMediaQuery } from "./useMediaQuery";
 import { useDismiss } from "./useDismiss";
+import "./menu.css";
 
 /**
- * A pill menu's panel: a popover above its button, or a bottom sheet on narrow screens. The list scrolls and
+ * A menu panel: a popover by its button, or a bottom sheet on narrow screens. The list scrolls and
  * the footer stays in view under it.
  */
 export function MenuPanel({

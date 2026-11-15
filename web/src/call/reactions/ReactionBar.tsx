@@ -4,7 +4,7 @@ import { EMOJI_GROUPS } from "../../../../shared/emoji";
 import { REACTIONS, type Reaction } from "../../../../shared/protocol";
 import { useT } from "../../ui/i18n";
 import { IconButton } from "../../ui/IconButton";
-import { useDismiss } from "../useDismiss";
+import { useDismiss } from "../../ui/useDismiss";
 
 /**
  * The pill's emoji button and its panel: the quick reactions, then the grid of the rest. Each tap sends one, which

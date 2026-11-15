@@ -4,7 +4,7 @@ import { Theme } from "theme.slint";
 import { Icons } from "components/icons.slint";
 import { Button, ButtonKind } from "components/button.slint";
 import { Centered } from "components/centered.slint";
-import { StartScreen, ModelState, FriendRow, MissedRow, RoomRow } from "start/start.slint";
+import { StartScreen, ModelState, FriendRow, RoomRow } from "start/start.slint";
 import { SignInDialog } from "account/sign-in-dialog.slint";
 import { RecoveryDialog } from "account/recovery-dialog.slint";
 import { CallOverlay } from "friends/call-overlay.slint";
@@ -14,7 +14,7 @@ import { DeviceItem } from "setup/device-row.slint";
 import { CallScreen, CallLink, StatsView, ChatRow, Floater, Spark, VideoBox } from "call/call.slint";
 import { ModelPrompt } from "components/model-prompt.slint";
 
-export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, MissedRow, RoomRow }
+export { DeviceItem, CallLink, StatsView, ChatRow, Floater, Spark, ModelState, FriendRow, RoomRow }
 
 export enum AppPhase { start, setup, starting, waiting, in-call, full, ended }
 export enum CamAccess { pending, granted, denied, missing }
@@ -175,9 +175,9 @@ export component AppWindow inherits Window {
     in property <[string]> friend-requests;
     in property <[string]> pending-requests;
     in property <[string]> blocked;
-    in property <[MissedRow]> missed;
     in property <[RoomRow]> open-rooms;
     in property <bool> friends-connected;
+    in property <bool> friends-loaded;
     // Whom your ring is going to, who's calling you, and how your last ring ended (CallOverlay)
     in property <string> calling;
     in property <string> incoming-from;
@@ -205,7 +205,7 @@ export component AppWindow inherits Window {
     callback ring(string);
     callback cancel-ring();
     callback answer(bool);
-    callback missed-seen();
+    callback missed-seen(string);
     callback dismiss-call-notice();
     callback rejoin(string);
     callback load-invites();
@@ -311,14 +311,15 @@ export component AppWindow inherits Window {
             friends: root.friends;
             friend-requests: root.friend-requests;
             pending-requests: root.pending-requests;
-            missed: root.missed;
+            sheet: root.touch || root.width < 900px;
             open-rooms: root.open-rooms;
             friends-connected: root.friends-connected;
+            friends-loaded: root.friends-loaded;
             calling: root.calling != "";
             account-error: root.account-error;
             ring(name) => { root.ring(name); }
             friend-action(action, name) => { root.friend-action(action, name); }
-            missed-seen => { root.missed-seen(); }
+            missed-seen(name) => { root.missed-seen(name); }
             rejoin(id) => { root.rejoin(id); }
             clear-account-error => { root.clear-account-error(); }
         }

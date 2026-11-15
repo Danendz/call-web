@@ -1,0 +1,93 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { Button, ButtonKind } from "../components/button.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { MenuPanel, MenuItem } from "../components/menu-panel.slint";
+
+// ⋯ on a friend and its menu, like the web's FriendMenu: Remove and Block, each asked again before it's done.
+export component FriendMenu inherits IconButton {
+    in property <string> name;
+    // A bottom sheet instead of a popover, on a phone or a narrow window
+    in property <bool> sheet;
+    // The screen's place in the window, which the menu's popup covers
+    in property <length> area-x;
+    in property <length> area-y;
+    in property <length> area-width;
+    in property <length> area-height;
+    // "remove" or "block"
+    callback act(string);
+
+    // The action being asked about, or empty for the list
+    property <string> confirm;
+
+    icon: Icons.ellipsis;
+    label: @tr("More for {}", root.name);
+    size: 36px;
+    transparent: true;
+    clicked => {
+        confirm = "";
+        menu.show();
+    }
+
+    menu := PopupWindow {
+        x: root.area-x - root.absolute-position.x;
+        y: root.area-y - root.absolute-position.y;
+        width: root.area-width;
+        height: root.area-height;
+        close-policy: no-auto-close;
+
+        panel := MenuPanel {
+            sheet: root.sheet;
+            label: root.label;
+            popover-width: 248px;
+            below: true;
+            anchor-right: root.absolute-position.x - root.area-x + root.width;
+            anchor-top: root.absolute-position.y - root.area-y;
+            anchor-bottom: root.absolute-position.y - root.area-y + root.height;
+            closed => { menu.close(); }
+
+            if root.confirm == "": MenuItem {
+                icon: Icons.user-minus;
+                text: @tr("Remove");
+                activated => { root.confirm = "remove"; }
+            }
+            if root.confirm == "": MenuItem {
+                icon: Icons.shield;
+                text: @tr("Block");
+                danger: true;
+                activated => { root.confirm = "block"; }
+            }
+            if root.confirm != "": VerticalLayout {
+                padding: 8px;
+                padding-bottom: 6px;
+                spacing: 10px;
+                Text {
+                    text: root.confirm == "remove" ? @tr("Remove {} from friends?", root.name)
+                        : @tr("Block {}? They can't call you or send requests.", root.name);
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Button {
+                        text: @tr("Cancel");
+                        height-hint: 36px;
+                        font-size: Theme.font-size-small;
+                        clicked => { root.confirm = ""; }
+                    }
+                    Button {
+                        text: root.confirm == "remove" ? @tr("Remove") : @tr("Block");
+                        kind: root.confirm == "remove" ? ButtonKind.primary : ButtonKind.danger;
+                        height-hint: 36px;
+                        font-size: Theme.font-size-small;
+                        clicked => {
+                            root.act(root.confirm);
+                            panel.dismiss();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

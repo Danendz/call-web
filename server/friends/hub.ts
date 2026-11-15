@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
+import { USERNAME_RE } from "../../shared/api.js";
 import type { Presence, UserClientMessage, UserServerMessage } from "../../shared/protocol.js";
 import type { SessionUser } from "../auth/sessions.js";
 import { rateLimit } from "../limits.js";
@@ -124,8 +125,9 @@ export function onUserConnection(ws: WebSocket, user: SessionUser): void {
         if (typeof msg.callId === "string" && typeof msg.accept === "boolean") rings.answer(sock, msg.callId, msg.accept);
         break;
       case "missed-seen":
+        if (msg.from !== undefined && (typeof msg.from !== "string" || !USERNAME_RE.test(msg.from))) break;
         store
-          .missedSeen(sock.userId)
+          .missedSeen(sock.userId, msg.from)
           .then(() => refresh([sock.userId]))
           .catch((err: Error) => console.warn("missed calls:", err.message));
         break;
