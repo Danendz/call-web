@@ -65,6 +65,10 @@ For scale, the headless `join` peer used 14–21% for the same call with no UI. 
 - Screen capture polls at a fixed 60 Hz (`FRAME_EVERY` in `engine/src/screen/mod.rs`), even when the screen doesn't change. ScreenCaptureKit and Windows Graphics Capture deliver only changed frames, so letting the capturer set the pace would stop those wakeups.
 - The room socket (every 10 s) and the friends socket (every 20 s) ping on separate timers. Aligning them on Android would cut radio wakeups.
 
+## Translation on iOS
+
+iOS won't let a sideloaded app map memory executable, so wasmtime can't run Bergamot's ahead-of-time machine code there. Measured on 2026-11-15 on an M-series Mac, zh→en, the 41 lines of `tests/bergamot_reference.json`: wasmtime's Pulley interpreter (after rewriting the module's atomics as plain loads, stores and helper calls, since Pulley has no threads) gave identical output, but took **~390 ms a line (max 670 ms)** against **~9 ms** for the machine code, about 45× slower, and loaded in ~460 ms against ~70 ms. The app translates the other person's live line every time it grows, so that would keep a core busy for as long as they talk. Pulley was dropped. A native C++ build of bergamot-translator replaces it, first on iOS, then on every platform if it's at least as fast as wasmtime there (Phase 5, I0).
+
 ## Server
 
 The server is already lean. These are notes rather than findings:

@@ -3,7 +3,7 @@
 
 /// Returns the heap's free pages to the system. Call it after dropping something large.
 pub(crate) fn give_back() {
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     {
         unsafe extern "C" {
             fn malloc_zone_pressure_relief(zone: *mut std::ffi::c_void, goal: usize) -> usize;

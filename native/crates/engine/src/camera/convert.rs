@@ -7,6 +7,7 @@ use libwebrtc::prelude::I420Buffer;
 use crate::video::CAMERA_US;
 
 /// Runs a conversion and records how long it took, for the stats overlay.
+#[cfg_attr(target_os = "ios", expect(dead_code, reason = "the iOS camera comes in I1"))]
 pub(crate) fn timed<T>(convert: impl FnOnce() -> T) -> T {
     let started = Instant::now();
     let out = convert();
@@ -39,6 +40,7 @@ impl Crop {
 /// libyuv, whose wrapper wants `stride * height` bytes after the crop's first pixel and panics on a portrait slice of
 /// a plane that holds exactly the picture.
 #[cfg_attr(target_os = "android", expect(dead_code, reason = "Android's cameras deliver YUV_420_888"))]
+#[cfg_attr(target_os = "ios", expect(dead_code, reason = "the iOS camera comes in I1"))]
 pub(crate) fn nv12_to_i420(y: &[u8], y_stride: u32, uv: &[u8], uv_stride: u32, crop: Crop) -> Option<I420Buffer> {
     if crop.width == 0 || crop.height == 0 {
         return None;

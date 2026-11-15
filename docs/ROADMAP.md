@@ -128,6 +128,20 @@ Same `native/` workspace and the same Slint screens, with phone layouts: the `ap
 
 Phase 3's on-device speech recognition (`sherpa-onnx`) is built for Android too; FEC / encoder tuning carry over to Android; super-resolution doesn't (no system API, small screen).
 
+## Phase 5 — iOS (Native only)
+
+The same app on an iPhone, sideloaded rather than from the App Store: an unsigned `.ipa` that AltStore or SideStore signs with a free Apple ID and signs again every 7 days. A free Apple ID gives no push notifications and no extra entitlements (no increased memory limit, no JIT). iOS 17 and later.
+
+Same `native/` workspace and Slint screens with the phone layouts from Phase 4, on Slint's winit backend with Skia over wgpu on Metal, as on macOS (the YUV shader and FSR carry over). Platform code goes in `cfg(target_os = "ios")` Rust modules through `objc2`, next to the macOS ones (AVFoundation, AVAudioSession, CallKit); `native/ios/` is a thin Xcode project (Info.plist, entitlements, icons) that links the Rust library. `cfg(desktop)` and `cfg(mobile)` (from the engine's `build.rs`) say which kind of platform code means.
+
+- [ ] **I0 — Spike.** The workspace builds for `aarch64-apple-ios`, the app opens on an iPhone and holds an audio call with a browser peer through WebRTC's iOS audio unit. Done: the engine builds. Translation: wasmtime can't run machine code there, and its Pulley interpreter was ~45× slower (`docs/perf-issues.md`), so live subtitles get a native C++ build of bergamot-translator behind the same `Translator`; until then iOS falls back to the server's translation.
+- [ ] **I1 — Call parity.** Camera through AVFoundation, video and FSR on Metal, chat, settings, safe-area insets and the keyboard, speaker / earpiece / Bluetooth routing.
+- [ ] **I2 — Friends and CallKit.** Sign-in and friends; calls go through CallKit, so the call keeps going in the background (audio and VoIP background modes) with the system's call screen, mute and hang up on the lock screen, and a phone call pausing ours. Without push, a friend's call only rings while the app is still running.
+- [ ] **I3 — Speech and subtitles.** SenseVoice through `sherpa-onnx`, downloaded like on desktop, live subtitles, and translation on the C++ engine. Then build that engine for macOS, Windows and Android, compare its speed and output with wasmtime, and if it holds up, replace wasmtime and the embind host everywhere.
+- [ ] **I4 — Distribution.** On `release/<version>` (and `build/**`), CI on macOS builds the unsigned `.ipa` and uploads it to the `releases` bucket with an AltStore source (`/updates/altstore.json`). The app checks it like the other platforms and its "Update to …" button opens AltStore or SideStore, which installs it; the app can't update itself on iOS. iOS clippy on PRs.
+- [ ] **I5 — Screen share.** A ReplayKit broadcast upload extension (its own process, ~50 MB memory limit) handing frames to the app.
+- [ ] **Picture-in-picture** of the other person's video when the app goes to the background.
+
 ## Not planned
 
 - **Moving to [videocall.rs](https://github.com/security-union/videocall-rs)** (WebTransport/QUIC through its own relay instead of WebRTC). It relays every call through a server with no direct path, encrypts only to the server, encodes VP9 in software only, has no native echo cancellation or Windows client, its web client needs WebTransport (no Firefox), and cross-border QUIC from mainland China is often throttled, which drops it to WebSocket over TCP. Hardware H.264 and the wgpu renderer above are the bigger speed wins. Keep it as a reference for the FEC and jitter buffer work.

@@ -18,7 +18,7 @@ use libwebrtc::audio_source::native::NativeAudioSource;
 pub(crate) const SAMPLE_RATE: u32 = 48_000;
 pub(crate) const CHANNELS: u32 = 2;
 /// WebRTC takes audio in 10 ms frames
-#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android screen sound comes in A4"))]
+#[cfg_attr(mobile, expect(dead_code, reason = "phones share no screen sound yet (A4, I5)"))]
 const FRAME_SAMPLES: usize = (SAMPLE_RATE / 100 * CHANNELS) as usize;
 
 /// A source for the screen's sound: no echo cancelling or noise suppression, which are for voices and would eat music
@@ -29,13 +29,13 @@ pub(crate) fn source() -> NativeAudioSource {
 }
 
 /// Cuts captured audio into the 10 ms frames WebRTC takes.
-#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android screen sound comes in A4"))]
+#[cfg_attr(mobile, expect(dead_code, reason = "phones share no screen sound yet (A4, I5)"))]
 pub(crate) struct Chunker {
     source: NativeAudioSource,
     pending: Vec<i16>,
 }
 
-#[cfg_attr(target_os = "android", expect(dead_code, reason = "the Android screen sound comes in A4"))]
+#[cfg_attr(mobile, expect(dead_code, reason = "phones share no screen sound yet (A4, I5)"))]
 impl Chunker {
     pub(crate) fn new(source: NativeAudioSource) -> Self {
         Self { source, pending: Vec::with_capacity(FRAME_SAMPLES) }
