@@ -32,6 +32,9 @@ export component SettingsSheet inherits Rectangle {
     in property <int> screen-mbps;
     // "modern" or "opengl"; empty hides the choice
     in property <string> renderer;
+    // Android: "Graphics" switches at once, but not during a call, and there's no upscaling
+    in property <bool> renderer-now;
+    in property <bool> renderer-locked;
     in property <string> lang;
     in property <ModelState> model-state;
     in property <int> model-progress;
@@ -276,26 +279,30 @@ export component SettingsSheet inherits Rectangle {
                                 }
                             }
                         }
-                        // Desktop only: a phone always draws with OpenGL
-                        Shown {
-                            shown: root.renderer != "";
-                            Rectangle {
-                                height: 1px;
-                                background: Theme.border;
-                            }
-                            SettingRow {
-                                title: @tr("Graphics");
-                                detail: @tr("Applies after restart.");
-                                VerticalLayout {
-                                    alignment: center;
-                                    Segmented {
-                                        value: root.renderer;
-                                        options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
-                                        picked(renderer) => { root.set-renderer(renderer); }
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        SettingRow {
+                            title: @tr("Graphics");
+                            detail: !root.renderer-now ? @tr("Applies after restart.")
+                                : root.renderer-locked ? @tr("Can't be changed during a call.") : "";
+                            VerticalLayout {
+                                alignment: center;
+                                Segmented {
+                                    value: root.renderer;
+                                    options: [{ id: "modern", name: @tr("Modern") }, { id: "opengl", name: "OpenGL" }];
+                                    picked(renderer) => {
+                                        if !root.renderer-locked {
+                                            root.set-renderer(renderer);
+                                        }
                                     }
                                 }
                             }
-                            // Upscaling runs on the GPU path, which a phone doesn't have
+                        }
+                        // Upscaling makes no difference on a phone's small screen
+                        Shown {
+                            shown: !root.renderer-now;
                             Rectangle {
                                 height: 1px;
                                 background: Theme.border;
@@ -522,7 +529,7 @@ export component SettingsSheet inherits Rectangle {
                         record-stats: root.record-stats;
                         can-show-files: root.can-show-files;
                         fec: root.fec;
-                        can-upscale: root.renderer == "modern";
+                        can-upscale: root.renderer == "modern" && !root.renderer-now;
                         compare-upscaling: root.compare-upscaling;
                         frame-saved: root.frame-saved;
                         set-record-stats(on) => { root.set-record-stats(on); }

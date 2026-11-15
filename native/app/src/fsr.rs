@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use slint::wgpu_30::wgpu;
 
+use crate::gpu::DeviceKey;
+
 /// Settings' "Sharpen video"
 pub static SHARPEN: AtomicBool = AtomicBool::new(true);
 /// The Debug group's "Compare upscaling": the left half drawn without FSR, as it would be with it off
@@ -226,7 +228,7 @@ pub struct Fsr {
 
 /// One feed's textures between the passes, made again when its sizes change.
 pub struct Upscale {
-    device: wgpu::Device,
+    key: DeviceKey,
     /// The frame as it came, in RGBA, which `gpu.rs` converts into
     pub source: wgpu::Texture,
     easu: wgpu::Texture,
@@ -236,12 +238,14 @@ pub struct Upscale {
 }
 
 impl Upscale {
+    /// For the Debug group's "Save frame", which a phone doesn't have
+    #[cfg(not(target_os = "android"))]
     pub fn target(&self) -> (u32, u32) {
         (self.easu.width(), self.easu.height())
     }
 
-    pub fn fits(&self, device: &wgpu::Device, source: (u32, u32), target: (u32, u32)) -> bool {
-        self.device == *device
+    pub fn fits(&self, key: DeviceKey, source: (u32, u32), target: (u32, u32)) -> bool {
+        self.key == key
             && (self.source.width(), self.source.height()) == source
             && (self.easu.width(), self.easu.height()) == target
     }
@@ -327,6 +331,7 @@ impl Fsr {
     pub fn upscale(
         &self,
         device: &wgpu::Device,
+        key: DeviceKey,
         source: (u32, u32),
         target: (u32, u32),
         texture: impl Fn(u32, u32) -> wgpu::Texture,
@@ -341,7 +346,7 @@ impl Fsr {
         });
         let (easu_bind, sharpen_bind) =
             (self.bind(device, &source, &source, &params), self.bind(device, &easu, &source, &params));
-        Upscale { device: device.clone(), source, easu, params, easu_bind, sharpen_bind }
+        Upscale { key, source, easu, params, easu_bind, sharpen_bind }
     }
 
     fn bind(

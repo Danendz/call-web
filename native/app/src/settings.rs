@@ -60,7 +60,8 @@ pub struct Settings {
     /// Languages whose translation model was offered and put off; picking the language again offers it again
     #[serde(default)]
     pub translation_prompt_dismissed: Vec<Lang>,
-    /// "Graphics" in Settings, applied at the next launch; the app falls back to OpenGL itself if wgpu fails
+    /// "Graphics" in Settings, applied at the next launch (at once on Android); the app falls back to OpenGL itself if
+    /// wgpu fails
     #[serde(default)]
     pub renderer: Renderer,
     /// How far wgpu got on this machine, so a launch that never drew a frame isn't tried again
@@ -68,7 +69,7 @@ pub struct Settings {
     pub wgpu: WgpuCheck,
 }
 
-/// What Slint draws with: Skia over wgpu (Metal, D3D12 or Vulkan), or Skia over OpenGL. Android always uses OpenGL.
+/// What Slint draws with: Skia over wgpu (Metal, D3D12 or Vulkan), or Skia over OpenGL.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Renderer {
@@ -82,8 +83,11 @@ pub enum Renderer {
 pub enum WgpuCheck {
     #[default]
     Untested,
-    /// Launched on wgpu and hasn't drawn a frame yet. Still set at the next launch, it means that one failed
+    /// Launched on wgpu and hasn't drawn a frame yet. Still set at the next launch, it means that one failed. On
+    /// Android also set again while a surface is made again after the app was in the background
     Trying,
+    /// Android: drew a frame, but not yet on a surface made again; see `window.rs`
+    Drew,
     /// Drew a frame here once, so it isn't checked again
     Works,
 }
