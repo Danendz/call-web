@@ -211,6 +211,8 @@ fn build() -> Result<(), String> {
         "-DCOMPILE_TESTS=OFF",
         "-DCOMPILE_UNIT_TESTS=OFF",
         "-DCOMPILE_LIBRARY_ONLY=ON",
+        // Wherever Doxygen is installed (GitHub's Windows runners) Marian would read a Doxyfile.in it no longer has
+        "-DUSE_DOXYGEN=OFF",
         "-DUSE_STATIC_LIBS=ON",
         "-DSSPLIT_USE_INTERNAL_PCRE2=ON",
     ]);
