@@ -303,7 +303,7 @@ fn fetch(dir: &Path) -> Result<PathBuf, String> {
         run(Command::new("git")
             .args(["-c", "core.autocrlf=false", "clone", "--quiet", "--filter=blob:none", "--no-checkout", REPO])
             .arg(dir))?;
-        run(Command::new("git").arg("-C").arg(dir).args(["checkout", "--quiet", COMMIT]))?;
+        run(Command::new("git").arg("-C").arg(dir).args(["-c", "core.autocrlf=false", "checkout", "--quiet", COMMIT]))?;
         run(Command::new("git")
             .arg("-C")
             .arg(dir)
