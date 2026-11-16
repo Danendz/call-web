@@ -84,10 +84,8 @@ During screen sharing the other person may be in a full-screen game and can't se
 | Feature | Notes |
 |---|---|
 | [ ] Game overlay window | Transparent, always on top, click-through. Shows chat messages and subtitles over windowed and borderless games. |
-| [ ] Sound on new message | Also covers exclusive-fullscreen games, where the overlay can't show. |
-| [ ] Read new messages aloud | Optional toggle, offline OS voices. |
 | [ ] System notification on new message | Local OS notification, no push service (push goes through Google). Focus modes may hide it in fullscreen games. |
-| [ ] Tray icon | Unread count, quick mute, start with the system. The icon itself comes with "Desktop keeps running in the tray" (Phase 2b). |
+| [ ] Tray icon | Unread count, quick mute. The icon itself comes with "Desktop keeps running in the tray" (Phase 2b). |
 | [ ] Global hotkeys | Push-to-talk, mute, show/hide overlay, reply to chat without leaving the game. |
 
 ### Media and network
@@ -130,7 +128,7 @@ Same `native/` workspace and the same Slint screens, with phone layouts: the `ap
 - [x] **A2 — Camera and phone layouts.** Camera through Camera2 (in Kotlin, frames handed to Rust, which crops and turns them upright) into WebRTC, front camera first, portrait video by default; hardware encoding through WebRTC's MediaCodec factory. Portrait layouts for every screen, touch-sized controls, chat above the on-screen keyboard, picture-in-picture while in another app (on Home, or on Back during a call).
 - [ ] **A4 — Screen share.** MediaProjection with its own foreground service type, and only the game's sound through audio playback capture (Android 10+; a game can opt out of it).
 - [x] **A5 — Distribution.** Released with the desktop app, same version and the same `release/<version>` push: CI builds and signs the APK on Linux and uploads `call-danya-<version>.apk` with an `android.json` (version, SHA-256) to the `releases` bucket, and attaches the APK to the GitHub release. The app checks `/updates/android.json`, downloads the APK, checks its SHA-256 and hands it to the system installer. The signing keystore lives in GitHub secrets with an offline backup: an APK signed with another key can't update the installed one. No Google Play, no Chinese app stores (they need ICP filing and software copyright registration), no Google Play services in the APK. On Huawei, installing needs Pure mode off. CI also builds a signed APK on `build/**` and runs Android clippy on PRs; the in-app updater is `Updater.kt`.
-- [ ] **A3 — Don't miss messages.** After A5. Local notification and sound on new messages (no push: FCM is blocked in China and missing on many Chinese phones), read aloud with the system's text-to-speech, chat and subtitles in a bubble over other apps ("display over other apps" permission) for mobile games.
+- [ ] **A3 — Don't miss messages.** After A5. Local notification on new messages (no push: FCM is blocked in China and missing on many Chinese phones), chat and subtitles in a bubble over other apps ("display over other apps" permission) for mobile games.
 
 Phase 3's on-device speech recognition (`sherpa-onnx`) is built for Android too; FEC / encoder tuning carry over to Android; super-resolution doesn't (no system API, small screen).
 
