@@ -251,6 +251,8 @@ pub fn watch_shown(ui: &crate::ui::AppWindow) {
     ui.window().on_winit_window_event(move |_window, event| {
         match event {
             WindowEvent::Occluded(occluded) => crate::video::set_window_shown(!occluded),
+            #[cfg(desktop)]
+            WindowEvent::Focused(focused) => crate::desktop::focused(*focused),
             #[cfg(target_os = "ios")]
             WindowEvent::Touch(touch) => crate::ios::touch(&weak, _window.scale_factor(), touch),
             #[cfg(target_os = "windows")]

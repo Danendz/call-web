@@ -209,6 +209,21 @@ export component AppWindow inherits Window {
     in property <int> invites-unused;
     in property <int> invites-max;
     in property <bool> password-changed;
+    // Getting friends' calls with the app closed (Settings' Account page): which switch this platform has, if any
+    in property <string> background-calls-kind;
+    in property <bool> background-calls;
+    callback set-background-calls(bool);
+    // The window's icon, also the desktop tray's
+    out property <image> app-icon: @image-url("app-icon.png");
+    // The tray menu's and friends' call notifications' text, in the app's language: quit, "calling you", missed
+    // call, accept, decline
+    out property <[string]> tray-text: [
+        @tr("Quit"),
+        @tr("Calling you"),
+        @tr("Missed call"),
+        @tr("Accept"),
+        @tr("Decline"),
+    ];
     in-out property <bool> sign-in-open;
     property <bool> sign-in-up;
     // Why the room can't be joined: "", "time-limit", "not-invited", "elsewhere", "room-limit" or "busy"
@@ -273,7 +288,7 @@ export component AppWindow inherits Window {
 
     title: "Call Danya";
     // The title bar and taskbar on Windows; macOS and the phones take the bundle's (packaging/icon/make.sh)
-    icon: @image-url("app-icon.png");
+    icon: root.app-icon;
     // A phone's screen is the window, whatever its size; winit on iOS would clip a window held wider than it
     min-width: root.touch ? 0px : 420px;
     min-height: root.touch ? 0px : 560px;
@@ -595,6 +610,9 @@ export component AppWindow inherits Window {
             invites-max: root.invites-max;
             password-changed: root.password-changed;
             blocked: root.blocked;
+            background-calls-kind: root.background-calls-kind;
+            background-calls: root.background-calls;
+            set-background-calls(on) => { root.set-background-calls(on); }
             new-invite => { root.new-invite(); }
             change-password(current, next) => { root.change-password(current, next); }
             unblock(name) => { root.friend-action("unblock", name); }

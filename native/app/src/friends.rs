@@ -196,6 +196,8 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_invites_unused(i32::try_from(unused).unwrap_or(i32::MAX));
     ui.set_invites_max(i32::try_from(max).unwrap_or(i32::MAX));
     ui.set_password_changed(state.password_changed);
+    #[cfg(desktop)]
+    crate::desktop::friends_state(state);
     ui.set_friends_connected(state.connected);
     ui.set_friends_loaded(state.lists.is_some());
     ui.set_calling(state.outgoing.as_ref().map(|o| o.to.as_str()).unwrap_or_default().into());

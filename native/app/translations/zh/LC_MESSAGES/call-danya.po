@@ -694,3 +694,27 @@ msgstr "实时字幕：{}"
 
 msgid "Connection stats: {}"
 msgstr "连接统计：{}"
+
+msgid "Quit"
+msgstr "退出"
+
+msgid "Calling you"
+msgstr "正在呼叫你"
+
+msgid "Missed call"
+msgstr "未接来电"
+
+msgid "Calls"
+msgstr "通话"
+
+msgid "Get calls when the app is closed"
+msgstr "关闭应用后仍可接听来电"
+
+msgid "Keep running when the window is closed"
+msgstr "关闭窗口后继续运行"
+
+msgid "Keeps a quiet notification so the phone can ring."
+msgstr "会保留一条静默通知，以便手机能响铃。"
+
+msgid "Friends can still call you. Quit from the tray or menu bar icon to go offline."
+msgstr "好友仍可呼叫你。从托盘或菜单栏图标退出即可离线。"

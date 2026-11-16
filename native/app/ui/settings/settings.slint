@@ -52,6 +52,9 @@ export component SettingsSheet inherits Rectangle {
     in property <int> invites-max;
     in property <bool> password-changed;
     in property <[string]> blocked;
+    in property <string> background-calls-kind;
+    in property <bool> background-calls;
+    callback set-background-calls(bool);
     callback new-invite();
     callback change-password(string, string);
     callback unblock(string);
@@ -327,6 +330,9 @@ export component SettingsSheet inherits Rectangle {
                         invites-max: root.invites-max;
                         password-changed: root.password-changed;
                         blocked: root.blocked;
+                        background-calls-kind: root.background-calls-kind;
+                        background-calls: root.background-calls;
+                        set-background-calls(on) => { root.set-background-calls(on); }
                         new-invite => { root.new-invite(); }
                         change-password(current, next) => { root.change-password(current, next); }
                         unblock(name) => { root.unblock(name); }

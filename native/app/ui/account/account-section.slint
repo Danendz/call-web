@@ -4,6 +4,7 @@ import { Button, ButtonKind } from "../components/button.slint";
 import { CopyLink } from "../components/copy-link.slint";
 import { Field } from "../components/field.slint";
 import { AccountText } from "errors.slint";
+import { Switch, SettingRow, Group } from "../settings/rows.slint";
 
 component Heading inherits Text {
     color: Theme.muted;
@@ -22,6 +23,11 @@ export component AccountSection inherits VerticalLayout {
     in property <int> invites-max;
     in property <bool> password-changed;
     in property <[string]> blocked;
+    // Which switch gets friends' calls with the app closed: "desktop" (keep running in the tray), "android" (a
+    // listening service) or "" where there's none
+    in property <string> background-calls-kind;
+    in property <bool> background-calls;
+    callback set-background-calls(bool);
     callback new-invite();
     callback change-password(string, string);
     callback unblock(string);
@@ -55,6 +61,26 @@ export component AccountSection inherits VerticalLayout {
             icon: Icons.log-out;
             height-hint: 38px;
             clicked => { root.sign-out(); }
+        }
+    }
+
+    if root.background-calls-kind != "": Rectangle { height: 6px; }
+    if root.background-calls-kind != "": Heading { text: @tr("Calls"); }
+    if root.background-calls-kind != "": Group {
+        SettingRow {
+            title: root.background-calls-kind == "android" ? @tr("Get calls when the app is closed")
+                : @tr("Keep running when the window is closed");
+            detail: root.background-calls-kind == "android" ? @tr("Keeps a quiet notification so the phone can ring.")
+                : @tr("Friends can still call you. Quit from the tray or menu bar icon to go offline.");
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    label: root.background-calls-kind == "android" ? @tr("Get calls when the app is closed")
+                        : @tr("Keep running when the window is closed");
+                    checked: root.background-calls;
+                    toggled => { root.set-background-calls(!root.background-calls); }
+                }
+            }
         }
     }
 

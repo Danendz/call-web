@@ -6,6 +6,8 @@ mod android;
 mod bridge;
 mod chat;
 mod debug;
+#[cfg(desktop)]
+mod desktop;
 mod friends;
 mod fsr;
 mod gpu;
@@ -89,7 +91,10 @@ pub fn run() -> anyhow::Result<()> {
         {
             let weak = ui.as_weak();
             move |version| {
-                let _ = weak.upgrade_in_event_loop(move |ui| ui.set_update_version(version.into()));
+                let _ = weak.upgrade_in_event_loop(move |ui| {
+                    ui.set_update_version(version.into());
+                    desktop::update_ready();
+                });
             }
         },
     );
@@ -147,6 +152,8 @@ pub fn run() -> anyhow::Result<()> {
 
     // Started after the engine, which it tells the session and answered calls
     let friends = friends::start(&ui, &engine, server_for_friends)?;
+    #[cfg(desktop)]
+    desktop::attach(&ui, &engine, &friends, &settings, updater.clone());
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
     // mic level while the setup screen shows it. The clock runs only on the screens that need it
@@ -577,6 +584,12 @@ pub fn run() -> anyhow::Result<()> {
         }
     });
 
+    #[cfg(desktop)]
+    {
+        desktop::run(&ui)?;
+        desktop::detach();
+    }
+    #[cfg(not(desktop))]
     ui.run()?;
     // Dropping the engine leaves the room before the process ends
     drop(ui);

@@ -37,6 +37,42 @@ slint = { version = "=1.18.1", default-features = false, features = [
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 velopack = "=1.2.161"
+# The tray or menu-bar icon the app keeps running in once its window is closed
+tray-icon = { version = "0.24", default-features = false }
+
+# A friend's call as a notification while the window is hidden
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+] }
+objc2-foundation = "0.3"
+objc2-user-notifications = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "UNNotification",
+    "UNNotificationAction",
+    "UNNotificationCategory",
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationResponse",
+    "UNNotificationSound",
+    "UNNotificationTrigger",
+    "UNUserNotificationCenter",
+] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Data_Xml_Dom",
+    "Foundation",
+    "UI_Notifications",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+] }
 
 # The UIScene lifecycle iOS 27 requires, which winit 0.30 lacks, the edit menu, the call's audio route and CallKit
 # (src/ios/)
