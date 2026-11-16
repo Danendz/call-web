@@ -199,6 +199,7 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_friends_connected(state.connected);
     ui.set_friends_loaded(state.lists.is_some());
     ui.set_calling(state.outgoing.as_ref().map(|o| o.to.as_str()).unwrap_or_default().into());
+    ui.set_calling_offline(state.outgoing.as_ref().is_some_and(|o| o.presence == Some(Presence::Offline)));
     let incoming = state.incoming.first();
     ui.set_incoming_from(incoming.map(|c| c.from.as_str()).unwrap_or_default().into());
     ui.set_incoming_call_id(incoming.map(|c| c.call_id.as_str()).unwrap_or_default().into());
@@ -228,7 +229,7 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     );
 }
 
-/// Friends with a missed call first (the latest on top), then online, in a call and offline, each by name, like the
+/// Friends with a missed call first (the latest on top), then online, away, in a call and offline, each by name, like the
 /// web's `sortFriends`. Missed calls from someone who isn't a friend aren't shown.
 fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<FriendRow> {
     let mut rows: Vec<(u64, u8, FriendRow)> = friends
@@ -238,8 +239,9 @@ fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<Friend
             let (count, last) = from_them.fold((0, 0), |(n, last), m| (n + 1, last.max(m.at)));
             let (presence, order) = match f.presence {
                 Presence::Online => ("online", 0),
-                Presence::InCall => ("in-call", 1),
-                Presence::Offline | Presence::Unknown => ("offline", 2),
+                Presence::Away => ("away", 1),
+                Presence::InCall => ("in-call", 2),
+                Presence::Offline | Presence::Unknown => ("offline", 3),
             };
             let row = FriendRow {
                 name: f.username.as_str().into(),

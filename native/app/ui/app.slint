@@ -196,6 +196,7 @@ export component AppWindow inherits Window {
     in property <bool> friends-loaded;
     // Whom your ring is going to, who's calling you, and how your last ring ended (CallOverlay)
     in property <string> calling;
+    in property <bool> calling-offline;
     in property <string> incoming-from;
     // The call that incoming-from is about, for answering it
     in property <string> incoming-call-id;
@@ -651,6 +652,7 @@ export component AppWindow inherits Window {
             parent-width: parent.width;
             incoming-from: root.incoming-from;
             calling: root.calling;
+            calling-offline: root.calling-offline;
             notice: root.call-notice-reason;
             notice-with: root.call-notice-with;
             answer(accept) => { root.answer(accept); }

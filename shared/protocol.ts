@@ -127,7 +127,9 @@ export type ServerMessage =
 // /ws/user: one per signed-in client, open while the app is. Carries the friends list with presence, and call
 // requests. A call that's answered gets a private room, which only the two accounts can join.
 
-export type Presence = "online" | "in-call" | "offline";
+// "away": every open client is in the background (a native app hidden to the tray, or a phone's listening
+// service), so a ring reaches a notification rather than someone at the screen.
+export type Presence = "online" | "away" | "in-call" | "offline";
 
 export interface FriendState {
   username: string;
@@ -145,7 +147,8 @@ export interface OpenRoom {
   with: string;
 }
 
-// "answered-elsewhere": to the callee's other devices once one of them took the call.
+// "answered-elsewhere": to the callee's other devices once one of them took the call. "offline" comes only from
+// older servers: a ring to an account with no open client now waits for one to open.
 export type CallEndReason = "declined" | "busy" | "offline" | "timeout" | "cancelled" | "unavailable" | "answered-elsewhere";
 
 export type UserClientMessage =
@@ -155,6 +158,8 @@ export type UserClientMessage =
   | { type: "answer"; callId: string; accept: boolean }
   // Clears the missed calls in the next state: all of them, or only those from one friend
   | { type: "missed-seen"; from?: string }
+  // The app went to the background (hidden, closed to the tray) or came back. A client starts in the foreground.
+  | { type: "visibility"; foreground: boolean }
   | { type: "ping" };
 
 export type UserServerMessage =
@@ -170,8 +175,9 @@ export type UserServerMessage =
       missed: MissedCall[];
       rooms: OpenRoom[];
     }
-  // Your ring reached at least one of their devices
-  | { type: "ringing"; callId: string; to: string }
+  // Your ring is going. `presence` is theirs when you rang: "offline" means it rings only if they open the app
+  // before it times out.
+  | { type: "ringing"; callId: string; to: string; presence: Presence }
   | { type: "incoming"; callId: string; from: string }
   // To the caller and to the device that answered: join this room
   | { type: "answered"; callId: string; roomId: string }

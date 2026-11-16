@@ -1,6 +1,6 @@
 //! What the friends thread shows and takes: its state, commands and events.
 
-use protocol::{ApiErrorCode, CallEndReason, FriendsLists};
+use protocol::{ApiErrorCode, CallEndReason, FriendsLists, Presence};
 
 /// The account's session token. Its `Debug` doesn't show it, so it can't end up in a log.
 #[derive(Clone, PartialEq, Eq)]
@@ -30,6 +30,8 @@ pub struct Outgoing {
     pub to: String,
     /// None until the server says it's ringing
     pub call_id: Option<String>,
+    /// Theirs when the ring started, once the server says it's ringing
+    pub presence: Option<Presence>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,6 +113,8 @@ pub enum FriendsCommand {
     },
     /// Clears the missed calls from this friend
     MissedSeen(String),
+    /// The app went to the background (false) or came back: friends see away while it's in the background
+    Foreground(bool),
     DismissNotice,
     /// Counts the unused invite codes, for the account screen
     LoadInvites,

@@ -8,7 +8,14 @@ use super::{Controller, FriendsEvent, IncomingCall};
 impl Controller {
     pub(super) fn socket_event(&mut self, event: SocketEvent) {
         match event {
-            SocketEvent::Open => self.state.connected = true,
+            SocketEvent::Open => {
+                self.state.connected = true;
+                if !self.foreground
+                    && let Some(socket) = &self.socket
+                {
+                    socket.send(protocol::UserClientMessage::Visibility { foreground: false });
+                }
+            }
             SocketEvent::Lost => {
                 self.state.connected = false;
                 self.state.outgoing = None;
@@ -22,11 +29,12 @@ impl Controller {
     fn message(&mut self, msg: UserServerMessage) {
         match msg {
             UserServerMessage::State(lists) => self.state.lists = Some(lists),
-            UserServerMessage::Ringing { call_id, to } => {
+            UserServerMessage::Ringing { call_id, to, presence } => {
                 if let Some(out) = &mut self.state.outgoing
                     && out.to == to
                 {
                     out.call_id = Some(call_id);
+                    out.presence = presence;
                 }
             }
             UserServerMessage::Incoming { call_id, from } => {

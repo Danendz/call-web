@@ -137,6 +137,12 @@ button.menu-item.bad {
   background: var(--good);
 }
 
+/* Their app is open in the background: a ring reaches them as a notification */
+.presence.away {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--good);
+}
+
 .presence.in-call {
   background: var(--ok);
 }
@@ -226,6 +232,12 @@ button.menu-item.bad {
 
 .add-friend p {
   flex-basis: 100%;
+}
+
+.call-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .call-overlay {

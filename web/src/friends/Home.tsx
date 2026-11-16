@@ -18,7 +18,7 @@ interface Missed {
   at: number;
 }
 
-const PRESENCE_ORDER: Record<Presence, number> = { online: 0, "in-call": 1, offline: 2 };
+const PRESENCE_ORDER: Record<Presence, number> = { online: 0, away: 1, "in-call": 2, offline: 3 };
 
 /** Friends with a missed call first (latest on top), then by presence and name. */
 function sortFriends(friends: FriendState[], missed: Map<string, Missed>): FriendState[] {

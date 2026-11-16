@@ -1,12 +1,13 @@
 // Call requests between friends: a ring reaches every open client of the callee until one answers, the caller
-// cancels or it times out. An answered call gets a private room only the two accounts can join.
+// cancels or it times out. A callee with no client open gets it if one opens in time. An answered call gets a
+// private room only the two accounts can join.
 
 import { randomBytes } from "node:crypto";
 import { USERNAME_RE } from "../../shared/api.js";
 import type { CallEndReason } from "../../shared/protocol.js";
 import { rateLimit } from "../limits.js";
 import { createPrivateRoom, inCall, type Invitee } from "../rooms.js";
-import { refresh, send, sendToUser, socketsOf, type UserSocket } from "./hub.js";
+import { presence, refresh, send, sendToUser, type UserSocket } from "./hub.js";
 import * as store from "./store.js";
 
 const RING_MS = 45_000;
@@ -52,10 +53,6 @@ export async function ring(from: UserSocket, to: string): Promise<void> {
   // The caller may have hung up while the database answered
   if (from.ws.readyState !== from.ws.OPEN) return;
   const caller: Invitee = { id: from.userId, username: from.username };
-  if (socketsOf(callee.id).length === 0) {
-    missedCall(callee, caller);
-    return ended("offline");
-  }
   if (inCall(callee.id)) {
     missedCall(callee, caller);
     return ended("busy");
@@ -63,7 +60,7 @@ export async function ring(from: UserSocket, to: string): Promise<void> {
 
   const r: Ring = { id: callId, caller, callee, from, timer: setTimeout(() => finish(r, "timeout", true), RING_MS) };
   rings.set(callId, r);
-  send(from.ws, { type: "ringing", callId, to: callee.username });
+  send(from.ws, { type: "ringing", callId, to: callee.username, presence: presence(callee.id) });
   sendToUser(callee.id, { type: "incoming", callId, from: caller.username });
 }
 
@@ -95,10 +92,7 @@ export function connected(sock: UserSocket): void {
   for (const r of rings.values()) if (r.callee.id === sock.userId) send(sock.ws, { type: "incoming", callId: r.id, from: r.caller.username });
 }
 
-/** A client closed: its own ring ends, and so do rings to its account once no client of it is left. */
+/** A client closed: its own ring ends. Rings to its account go on, for another client or one that opens later. */
 export function disconnected(sock: UserSocket): void {
-  for (const r of rings.values()) {
-    if (r.from === sock) finish(r, "cancelled", true);
-    else if (r.callee.id === sock.userId && socketsOf(sock.userId).length === 0) finish(r, "offline", true);
-  }
+  for (const r of rings.values()) if (r.from === sock) finish(r, "cancelled", true);
 }

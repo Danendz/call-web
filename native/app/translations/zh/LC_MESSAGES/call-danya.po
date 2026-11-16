@@ -296,6 +296,9 @@ msgstr "以后再说"
 msgid "Offline"
 msgstr "离线"
 
+msgid "Away"
+msgstr "离开"
+
 msgid "On-device recognition"
 msgstr "本机识别"
 
@@ -574,6 +577,9 @@ msgstr "{} 还在通话中"
 
 msgid "{} isn't online. They'll see a missed call."
 msgstr "{} 不在线。对方会看到未接来电。"
+
+msgid "Offline: it rings if they open the app in time."
+msgstr "对方离线：如果对方及时打开应用，就会响铃。"
 
 msgid "Live translation"
 msgstr "实时翻译"

@@ -477,6 +477,14 @@
       "from": "friend_1"
     },
     {
+      "type": "visibility",
+      "foreground": false
+    },
+    {
+      "type": "visibility",
+      "foreground": true
+    },
+    {
       "type": "ping"
     }
   ],
@@ -492,6 +500,10 @@
         {
           "username": "friend_2",
           "presence": "in-call"
+        },
+        {
+          "username": "friend_4",
+          "presence": "away"
         },
         {
           "username": "friend_3",
@@ -533,7 +545,14 @@
     {
       "type": "ringing",
       "callId": "k1",
-      "to": "friend_1"
+      "to": "friend_1",
+      "presence": "online"
+    },
+    {
+      "type": "ringing",
+      "callId": "k1",
+      "to": "friend_1",
+      "presence": "offline"
     },
     {
       "type": "incoming",

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum Presence {
     Online,
+    /// Every open client is in the background: a ring reaches a notification rather than someone at the screen
+    Away,
     InCall,
     Offline,
     /// From a newer server: shown as offline
@@ -69,6 +71,10 @@ pub enum UserClientMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<String>,
     },
+    /// The app went to the background (hidden, closed to the tray) or came back. A client starts in the foreground.
+    Visibility {
+        foreground: bool,
+    },
     Ping,
 }
 
@@ -89,10 +95,13 @@ pub struct FriendsLists {
 #[serde(tag = "type", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum UserServerMessage {
     State(FriendsLists),
-    /// Your ring reached at least one of their devices
+    /// Your ring is going. `presence` is theirs when you rang (missing from older servers): offline means it rings
+    /// only if they open the app before it times out.
     Ringing {
         call_id: String,
         to: String,
+        #[serde(default)]
+        presence: Option<Presence>,
     },
     Incoming {
         call_id: String,
