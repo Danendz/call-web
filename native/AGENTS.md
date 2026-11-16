@@ -152,6 +152,8 @@ cargo test
 cargo build --release
 ```
 
+After touching Windows-only code or `crates/bergamot`, also run `dev/xwin.sh` (its header says what it needs): clippy for Windows on this Mac through cargo-xwin, ~15 s once built. `dev/xwin.sh build -p engine` compiles and links Bergamot's C++ for Windows too. The app itself doesn't link there (no static-runtime Skia), so running it is still for the Windows PC.
+
 CI runs fmt, clippy and tests on macOS for every PR once it's out of draft (they don't build on Linux: `webrtc-sys` needs clang 21+ there), and Android clippy on Linux, where the NDK brings its own clang. The macOS and Windows release builds only build: they make the installable artifacts and are the only compile of Windows-only code (which no CI lints, so keep it clippy-clean by eye), and still take a while, so they run only on a push to a `build/**` branch (or `gh workflow run native.yml --ref build/<name>`) and for a release on a `release/<version>` branch (see Releasing). Nothing runs on `main` except `native-cache.yml`, which saves the Rust caches these jobs start from when `Cargo.lock` changes. Push to a `build/**` branch only when the user asks for a build; don't offer to: Actions minutes are limited and a build costs a lot of them.
 
 When `shared/` changed, also `npm run fixtures -- --check`, `npm run typecheck` and `npm run build` from the root. Check UI changes by running the app on a single instance (start, setup, waiting screens) against a local server: `PORT=8090 npm run dev:server` in the root (8080 is often taken), then `cargo run` here (a debug build uses `http://localhost:8090` unless `CALL_SERVER` says otherwise). Leave real two-person calls to the user.

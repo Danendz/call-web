@@ -73,6 +73,17 @@ const PATCHES: &[(&str, &str, &str)] = &[
         "/MT /O2 ${INTRINSICS} /MP /GL /DNDEBUG",
         "/MT /O2 ${INTRINSICS} /MP /DNDEBUG",
     ),
+    // Without /GL there's nothing to link-time optimize, and llvm-lib (cargo-xwin) rejects the flag
+    (
+        "inference/CMakeLists.txt",
+        "set(CMAKE_STATIC_LINKER_FLAGS      \"${CMAKE_STATIC_LINKER_FLAGS} /LTCG:incremental\")",
+        "",
+    ),
+    (
+        "inference/marian-fork/CMakeLists.txt",
+        "set(CMAKE_STATIC_LINKER_FLAGS      \"${CMAKE_STATIC_LINKER_FLAGS} /LTCG:incremental\")",
+        "",
+    ),
     // PCRE2's headers expect its DLL on Windows unless told it's linked statically
     (
         "inference/3rd_party/ssplit-cpp/src/ssplit/regex.h",
@@ -184,6 +195,12 @@ fn build() -> Result<(), String> {
                 // runtime, so the app still starts on any x86-64 CPU
                 "-DBUILD_ARCH=x86-64-v2",
             ]);
+            // cargo-xwin's clang-cl toolchain when cross-compiling from macOS (see cmake()), which it names the way the
+            // cmake crate reads it
+            println!("cargo::rerun-if-env-changed=CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc");
+            if let Ok(toolchain) = std::env::var("CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc") {
+                configure.arg(format!("-DCMAKE_TOOLCHAIN_FILE={toolchain}"));
+            }
         }
     }
     configure.args([
@@ -361,6 +378,14 @@ fn cmake() -> Command {
     // .cargo/config.toml sets it for iOS builds, and clang then builds for iOS whenever nothing says otherwise, as
     // with macOS; the toolchain file gives iOS builds their own
     command.env_remove("IPHONEOS_DEPLOYMENT_TARGET");
+    // cargo-xwin, cross-compiling for Windows from macOS, hands clang-cl the target and the Windows headers in
+    // CMAKE_C(XX)_FLAGS, which Marian replaces with its own; clang-cl reads CL too, as cl does. MSVC also compiles
+    // intrinsics without their header or their instruction set turned on, which clang-cl has to be given: Marian's x86
+    // code uses SSE4.1, and /arch:SSE2 (MSVC's default, which clang-cl warns about on x64) is an error under /WX
+    println!("cargo::rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc");
+    if let Ok(flags) = std::env::var("CFLAGS_x86_64_pc_windows_msvc") {
+        command.env("CL", format!("{flags} -msse4.1 /FIintrin.h -Wno-unused-command-line-argument"));
+    }
     command
 }
 
