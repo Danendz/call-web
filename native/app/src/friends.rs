@@ -18,6 +18,9 @@ thread_local! {
     // What the friends thread's state and events reach on the UI thread: models and the engine aren't `Send`
     #[cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android"))]
     static LINKS: RefCell<Option<(Models, Rc<Engine>)>> = const { RefCell::new(None) };
+    // The friends thread, told when the app goes to the background on iOS
+    #[cfg(target_os = "ios")]
+    static FRIENDS: RefCell<std::rc::Weak<Friends>> = const { RefCell::new(std::rc::Weak::new()) };
 }
 
 /// Starts the friends thread with the saved session, and connects it to the window and the call engine.
@@ -45,7 +48,18 @@ pub fn start(ui: &AppWindow, engine: &Rc<Engine>, server: url::Url) -> anyhow::R
         },
     )?);
     wire(ui, &friends);
+    #[cfg(target_os = "ios")]
+    FRIENDS.with_borrow_mut(|weak| *weak = Rc::downgrade(&friends));
     Ok(friends)
+}
+
+/// The app went to the background or came back (iOS): friends see away until iOS closes the socket, which it soon
+/// does, and offline after.
+#[cfg(target_os = "ios")]
+pub fn set_foreground(foreground: bool) {
+    if let Some(friends) = FRIENDS.with_borrow(std::rc::Weak::upgrade) {
+        friends.send(FriendsCommand::Foreground(foreground));
+    }
 }
 
 fn event_on_ui(event: FriendsEvent) {
