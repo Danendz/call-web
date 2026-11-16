@@ -157,7 +157,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup target add aarch64-apple-ios && brew install xcodegen
+      # From native/, so the target goes to the toolchain rust-toolchain.toml pins there, not the runner's default
+      - run: cd native && rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
       - uses: ./.github/actions/bergamot
@@ -272,13 +273,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup target add aarch64-apple-ios && brew install xcodegen
+      # From native/, so the target goes to the toolchain rust-toolchain.toml pins there, not the runner's default
+      - run: cd native && rustup target add aarch64-apple-ios && brew install xcodegen
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: native, shared-key: release-ios }
       - uses: ./.github/actions/bergamot
         with: { platform: ios }
       - uses: ./.github/actions/sherpa-onnx
         with: { target: aarch64-apple-ios }
+      # release.sh uploads with the aws CLI
+      - run: command -v aws > /dev/null || brew install awscli
       - run: native/packaging/ios/release.sh
         env:
           RELEASES_ENDPOINT: ${{ secrets.RELEASES_ENDPOINT }}

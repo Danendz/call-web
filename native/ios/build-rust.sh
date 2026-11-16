@@ -13,8 +13,13 @@ if [ "$CONFIGURATION" = Release ]; then profile=release; flag=--release; else pr
 
 native="$PROJECT_DIR/.."
 # Xcode's environment (SDKROOT, deployment targets, compiler flags) is for its own iOS build and would leak into the
-# host build scripts cargo compiles, so cargo gets a clean one
-env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" HOME="$HOME" \
+# host build scripts cargo compiles, so cargo gets a clean one, keeping
+# the cargo the caller's PATH finds (CI's isn't necessarily in ~/.cargo); the caller's PATH comes last, for the
+# tools build scripts run (CMake for Bergamot), after the system's own compilers
+cargo=$(command -v cargo || echo "${CARGO_HOME:-$HOME/.cargo}/bin/cargo")
+[ -x "$cargo" ] || { echo "error: cargo not found" >&2; exit 1; }
+env -i PATH="$(dirname "$cargo"):/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" HOME="$HOME" \
+    ${CARGO_HOME:+CARGO_HOME="$CARGO_HOME"} ${RUSTUP_HOME:+RUSTUP_HOME="$RUSTUP_HOME"} \
     ${LK_CUSTOM_WEBRTC:+LK_CUSTOM_WEBRTC="$LK_CUSTOM_WEBRTC"} \
     cargo build --manifest-path "$native/Cargo.toml" -p call-danya --bin call-danya --target "$triple" $flag
 
