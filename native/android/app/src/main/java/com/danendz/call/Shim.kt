@@ -55,6 +55,11 @@ object Shim {
     var activity = WeakReference<Activity>(null)
     // The activity's prompt is up; its answer goes to Rust when it comes
     var asking = false
+    // Some of the app is on screen (started, not stopped): a ring shows in the app, not as a notification
+    @Volatile
+    var shown = false
+    // Accept pressed on a ring's notification: the app answers that call once its own socket shows it
+    private var answer: String? = null
 
     /** The call started or ended, or the mic or the notification's text changed. */
     @JvmStatic
@@ -182,6 +187,52 @@ object Shim {
 
     @JvmStatic
     fun installUpdate(context: Context) = Updater.install(context)
+
+    /** Settings' "Get calls when the app is closed", with the notifications' text (see [ListenService]). */
+    @JvmStatic
+    fun setListening(context: Context, on: Boolean, labels: Array<String>) {
+        main.post { ListenService.set(context, on, labels) }
+    }
+
+    /** The listening socket's session ended: nothing to listen for until someone signs in again. */
+    @JvmStatic
+    fun listenSignedOut(context: Context) {
+        main.post { ListenService.stop(context) }
+    }
+
+    @JvmStatic
+    fun ringShow(context: Context, callId: String, from: String) {
+        main.post { ListenService.ringShow(context, callId, from) }
+    }
+
+    @JvmStatic
+    fun ringEnded(context: Context, callId: String) {
+        main.post { ListenService.ringEnded(context, callId) }
+    }
+
+    @JvmStatic
+    fun missedShow(context: Context, from: String) {
+        main.post { ListenService.missedShow(context, from) }
+    }
+
+    @Synchronized
+    fun answerOnOpen(callId: String) {
+        answer = callId
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun takeAnswer(): String? = answer.also { answer = null }
+
+    /** Opens the listening socket with the session saved in `dir`; false when nobody is signed in. */
+    @JvmStatic
+    external fun nativeListen(dir: String): Boolean
+
+    @JvmStatic
+    external fun nativeStopListening()
+
+    @JvmStatic
+    external fun nativeDecline(callId: String)
 
     @JvmStatic
     external fun nativeAction(action: Int)

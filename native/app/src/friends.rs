@@ -54,6 +54,8 @@ fn event_on_ui(event: FriendsEvent) {
         match event {
             FriendsEvent::Session(session) => {
                 save_session(session.as_ref());
+                #[cfg(target_os = "android")]
+                crate::android::session_changed();
                 engine.send(Command::SetSession(session));
             }
             FriendsEvent::Answered(room_id) => {
@@ -198,6 +200,8 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_password_changed(state.password_changed);
     #[cfg(desktop)]
     crate::desktop::friends_state(state);
+    #[cfg(target_os = "android")]
+    crate::android::answer_from_notification(ui, state);
     ui.set_friends_connected(state.connected);
     ui.set_friends_loaded(state.lists.is_some());
     ui.set_calling(state.outgoing.as_ref().map(|o| o.to.as_str()).unwrap_or_default().into());
@@ -342,7 +346,7 @@ fn session_path() -> Option<PathBuf> {
 
 /// The token from the last sign-in, kept in its own file (not settings.json) so it never ends up in a log of the
 /// settings.
-fn load_session() -> Option<SessionToken> {
+pub(crate) fn load_session() -> Option<SessionToken> {
     let token = fs::read_to_string(session_path()?).ok()?;
     let token = token.trim();
     (!token.is_empty()).then(|| SessionToken(token.to_owned()))

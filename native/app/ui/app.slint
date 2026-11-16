@@ -216,13 +216,14 @@ export component AppWindow inherits Window {
     // The window's icon, also the desktop tray's
     out property <image> app-icon: @image-url("app-icon.png");
     // The tray menu's and friends' call notifications' text, in the app's language: quit, "calling you", missed
-    // call, accept, decline
+    // call, accept, decline, and Android's listening notification
     out property <[string]> tray-text: [
         @tr("Quit"),
         @tr("Calling you"),
         @tr("Missed call"),
         @tr("Accept"),
         @tr("Decline"),
+        @tr("Ready for friends' calls"),
     ];
     in-out property <bool> sign-in-open;
     property <bool> sign-in-up;

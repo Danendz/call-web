@@ -4,6 +4,7 @@
 //! `Shim.kt`, called through [`Java`]; what Android reports back arrives in the `Shim_native*` functions.
 
 mod fonts;
+mod listen;
 mod log;
 
 use std::cell::{Cell, RefCell};
@@ -43,18 +44,28 @@ thread_local! {
     // The mic was turned off for a phone call, and comes back on after it
     #[allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android")]
     static MUTED_FOR_CALL: Cell<bool> = const { Cell::new(false) };
+    // The account's friends thread, and the settings with "Get calls when the app is closed"
+    #[allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android")]
+    static FRIENDS: RefCell<Option<FriendsLinks>> = const { RefCell::new(None) };
     // What Android was last told: in a call, mic on, the notification's title, text and labels, the main video's size
     #[allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android")]
     static SHOWN: RefCell<Option<CallState>> = const { RefCell::new(None) };
 }
 
-/// `MainActivity.nativeInit(context)`, on the activity's main thread before the app starts.
+/// The account's friends thread, and the settings holding "Get calls when the app is closed"
+type FriendsLinks = (Rc<engine::friends::Friends>, Rc<RefCell<crate::settings::Settings>>);
+
+/// `MainActivity.nativeInit(context)`, on the main thread before the app starts. `ListenService` calls it too, when
+/// it starts the process without the activity (after a reboot), so only the first call does anything.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_danendz_call_MainActivity_nativeInit(
     mut env: JNIEnv,
     _class: JClass,
     context: JObject,
 ) {
+    if JAVA.get().is_some() {
+        return;
+    }
     log::init();
     let vm = match env.get_java_vm() {
         Ok(vm) => vm,
@@ -378,6 +389,75 @@ pub extern "system" fn Java_com_danendz_call_Shim_nativePip(_env: JNIEnv, _class
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_danendz_call_Shim_nativeShown(_env: JNIEnv, _class: JClass, shown: jboolean) {
     crate::video::set_window_shown(shown != 0);
+    // Friends see the app as away while none of it is on screen
+    on_ui(move |_| {
+        FRIENDS.with_borrow(|links| {
+            if let Some((friends, _)) = links {
+                friends.send(engine::friends::FriendsCommand::Foreground(shown != 0));
+            }
+        });
+    });
+}
+
+/// Settings' "Get calls when the app is closed", and the listening service started if it's on.
+pub(crate) fn attach_friends(
+    ui: &AppWindow,
+    friends: &Rc<engine::friends::Friends>,
+    settings: &Rc<RefCell<crate::settings::Settings>>,
+) {
+    FRIENDS.with_borrow_mut(|links| *links = Some((friends.clone(), settings.clone())));
+    let on = settings.borrow().listen_closed;
+    ui.set_background_calls_kind("android".into());
+    ui.set_background_calls(on);
+    ui.on_set_background_calls({
+        let settings = settings.clone();
+        let weak = ui.as_weak();
+        move |on| {
+            let mut settings = settings.borrow_mut();
+            settings.listen_closed = on;
+            settings.save();
+            if let Some(ui) = weak.upgrade() {
+                ui.set_background_calls(on);
+                listen::set(on, &labels(&ui));
+            }
+        }
+    });
+    // Also brings the notifications' text up to the app's language
+    if on {
+        listen::set(true, &labels(ui));
+    }
+}
+
+/// The notifications' text for `listen::set`: `tray-text` without the desktop's Quit.
+fn labels(ui: &AppWindow) -> Vec<String> {
+    ui.get_tray_text().iter().skip(1).map(String::from).collect()
+}
+
+/// Signed in or out: the listening service starts again with the new session.
+pub(crate) fn session_changed() {
+    on_ui(|ui| {
+        let on =
+            FRIENDS.with_borrow(|links| links.as_ref().is_some_and(|(_, settings)| settings.borrow().listen_closed));
+        if on {
+            listen::set(true, &labels(ui));
+        }
+    });
+}
+
+/// Answers the call Accept was pressed for on its notification, once this socket shows it ringing.
+pub(crate) fn answer_from_notification(_ui: &AppWindow, state: &engine::friends::FriendsState) {
+    if state.incoming.is_empty() {
+        return;
+    }
+    let Some(call_id) = listen::take_answer() else { return };
+    if !state.incoming.iter().any(|c| c.call_id == call_id) {
+        return;
+    }
+    FRIENDS.with_borrow(|links| {
+        if let Some((friends, _)) = links {
+            friends.send(engine::friends::FriendsCommand::Answer { call_id, accept: true });
+        }
+    });
 }
 
 /// `Shim.nativeAudio`: which outputs there are, as bits of `1 << route`, and the one the call plays on.

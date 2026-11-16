@@ -154,6 +154,8 @@ pub fn run() -> anyhow::Result<()> {
     let friends = friends::start(&ui, &engine, server_for_friends)?;
     #[cfg(desktop)]
     desktop::attach(&ui, &engine, &friends, &settings, updater.clone());
+    #[cfg(target_os = "android")]
+    android::attach_friends(&ui, &friends, &settings);
 
     // Things that change continuously are read on the UI's clock instead of being pushed: the call timer, and the
     // mic level while the setup screen shows it. The clock runs only on the screens that need it
@@ -628,7 +630,7 @@ fn parse_lang(code: &str) -> Lang {
 }
 
 /// `CALL_SERVER` points the app at another server, e.g. production from a debug build.
-fn server_url() -> anyhow::Result<Url> {
+pub(crate) fn server_url() -> anyhow::Result<Url> {
     let raw = std::env::var("CALL_SERVER").unwrap_or_else(|_| DEFAULT_SERVER.into());
     let url = Url::parse(&raw).with_context(|| format!("CALL_SERVER isn't a URL: {raw}"))?;
     anyhow::ensure!(matches!(url.scheme(), "http" | "https"), "CALL_SERVER must be http or https: {raw}");
