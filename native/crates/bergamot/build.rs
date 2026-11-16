@@ -125,6 +125,8 @@ const PATCHES: &[(&str, &str, &str)] = &[
 fn main() {
     if let Err(e) = build() {
         println!("cargo::error=bergamot: {e}");
+        // A failed exit makes cargo print what CMake and the compiler said, which it hides otherwise
+        std::process::exit(1);
     }
 }
 
@@ -209,6 +211,8 @@ fn build() -> Result<(), String> {
         "-DCOMPILE_TESTS=OFF",
         "-DCOMPILE_UNIT_TESTS=OFF",
         "-DCOMPILE_LIBRARY_ONLY=ON",
+        // Wherever Doxygen is installed (GitHub's Windows runners) Marian would read a Doxyfile.in it no longer has
+        "-DUSE_DOXYGEN=OFF",
         "-DUSE_STATIC_LIBS=ON",
         "-DSSPLIT_USE_INTERNAL_PCRE2=ON",
     ]);
@@ -303,7 +307,7 @@ fn fetch(dir: &Path) -> Result<PathBuf, String> {
         run(Command::new("git")
             .args(["-c", "core.autocrlf=false", "clone", "--quiet", "--filter=blob:none", "--no-checkout", REPO])
             .arg(dir))?;
-        run(Command::new("git").arg("-C").arg(dir).args(["checkout", "--quiet", COMMIT]))?;
+        run(Command::new("git").arg("-C").arg(dir).args(["-c", "core.autocrlf=false", "checkout", "--quiet", COMMIT]))?;
         run(Command::new("git")
             .arg("-C")
             .arg(dir)
@@ -383,8 +387,16 @@ fn cmake() -> Command {
     // intrinsics without their header or their instruction set turned on, which clang-cl has to be given: Marian's x86
     // code uses SSE4.1, and /arch:SSE2 (MSVC's default, which clang-cl warns about on x64) is an error under /WX
     println!("cargo::rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc");
-    if let Ok(flags) = std::env::var("CFLAGS_x86_64_pc_windows_msvc") {
-        command.env("CL", format!("{flags} -msse4.1 /FIintrin.h -Wno-unused-command-line-argument"));
+    let mut cl = match std::env::var("CFLAGS_x86_64_pc_windows_msvc") {
+        Ok(flags) => format!("{flags} -msse4.1 /FIintrin.h -Wno-unused-command-line-argument "),
+        Err(_) => String::new(),
+    };
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "windows") {
+        // SentencePiece's protobuf-lite in a namespace of its own: sherpa-onnx's onnxruntime brings another protobuf,
+        // and MSVC's linker, unlike the others, refuses the symbols both define. `google` is otherwise only in
+        // comments here. CL takes `#` for `=`.
+        cl.push_str("/Dgoogle#bergamot_google");
+        command.env("CL", cl);
     }
     command
 }
