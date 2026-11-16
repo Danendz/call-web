@@ -3,6 +3,22 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.5.1 — 2026-11-16
+
+Friends can now call you when the app isn't open on screen, and live subtitles translate faster.
+
+### New
+
+- You can call a friend who's offline: the call keeps ringing for 45 seconds and reaches them if they open the app in that time
+- Friends whose app is open in the background show as away
+- macOS and Windows: closing the window keeps the app running in the tray or menu bar (Settings → Account, "Keep running when the window is closed"), and a friend's call rings with a notification you can answer from
+- Android: "Get calls when the app is closed" (Settings → Account) rings friends' calls with a full-screen call notification, and missed calls leave a notification
+- iPhone: opening the app while a friend is still calling shows their call
+
+### Changed
+
+- Live subtitles translate about a quarter faster on macOS, Windows and Android
+
 ## 0.5.0 — 2026-11-15
 
 The app comes to iPhone, gets its own icon, and video holds up better on weak connections.
