@@ -125,6 +125,8 @@ const PATCHES: &[(&str, &str, &str)] = &[
 fn main() {
     if let Err(e) = build() {
         println!("cargo::error=bergamot: {e}");
+        // A failed exit makes cargo print what CMake and the compiler said, which it hides otherwise
+        std::process::exit(1);
     }
 }
 
