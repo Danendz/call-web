@@ -2,7 +2,6 @@
 //! (`cpp/shim.cpp`). The engine side (`engine::translate`) gives it the same model files and settings as its WASM build.
 
 use std::ffi::{CStr, CString, c_char};
-use std::path::Path;
 use std::ptr::{self, NonNull};
 
 #[repr(C)]
@@ -10,13 +9,26 @@ struct Raw {
     _private: [u8; 0],
 }
 
+/// A file's bytes, borrowed for the call
+#[repr(C)]
+struct Bytes {
+    data: *const c_char,
+    len: usize,
+}
+
+impl Bytes {
+    fn of(bytes: &[u8]) -> Self {
+        Self { data: bytes.as_ptr().cast(), len: bytes.len() }
+    }
+}
+
 unsafe extern "C" {
     fn bergamot_new(
         config: *const c_char,
-        model: *const c_char,
-        lex: *const c_char,
-        src_vocab: *const c_char,
-        trg_vocab: *const c_char,
+        model: Bytes,
+        lex: Bytes,
+        src_vocab: Bytes,
+        trg_vocab: Bytes,
         error: *mut *mut c_char,
     ) -> *mut Raw;
     fn bergamot_translate(
@@ -37,33 +49,30 @@ pub struct Translator {
 // SAFETY: the engine has no thread affinity; it's only used from one thread at a time, which `&mut self` ensures
 unsafe impl Send for Translator {}
 
-/// What one direction's model is made of
+/// What one direction's model is made of: its files' contents, which the engine copies
 pub struct Files<'a> {
-    pub model: &'a Path,
-    pub lex: &'a Path,
-    pub src_vocab: &'a Path,
+    pub model: &'a [u8],
+    pub lex: &'a [u8],
+    pub src_vocab: &'a [u8],
     /// None when one vocabulary serves both languages
-    pub trg_vocab: Option<&'a Path>,
+    pub trg_vocab: Option<&'a [u8]>,
 }
 
 impl Translator {
     /// Loads a model. `config` is Marian's YAML settings.
     pub fn load(config: &str, files: &Files) -> Result<Self, String> {
-        let c = |s: &str| CString::new(s).map_err(|_| format!("{s:?} has a NUL in it"));
-        let path = |p: &Path| p.to_str().ok_or_else(|| format!("{} isn't UTF-8", p.display())).and_then(c);
-        let config = c(config)?;
-        let (model, lex, src_vocab) = (path(files.model)?, path(files.lex)?, path(files.src_vocab)?);
-        let trg_vocab = files.trg_vocab.map(path).transpose()?;
+        let config = CString::new(config).map_err(|_| "the config has a NUL in it".to_string())?;
+        let trg_vocab = files.trg_vocab.map_or(Bytes { data: ptr::null(), len: 0 }, Bytes::of);
         let mut error = ptr::null_mut();
-        // SAFETY: every pointer is a live NUL-terminated string or null where the shim allows it; it copies what it
-        // keeps
+        // SAFETY: the config is a live NUL-terminated string and each file's bytes are live for the call, with their
+        // length (a null target vocabulary is allowed); the shim copies what it keeps
         let raw = unsafe {
             bergamot_new(
                 config.as_ptr(),
-                model.as_ptr(),
-                lex.as_ptr(),
-                src_vocab.as_ptr(),
-                trg_vocab.as_ref().map_or(ptr::null(), |v| v.as_ptr()),
+                Bytes::of(files.model),
+                Bytes::of(files.lex),
+                Bytes::of(files.src_vocab),
+                trg_vocab,
                 &raw mut error,
             )
         };

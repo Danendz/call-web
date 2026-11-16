@@ -5,9 +5,8 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# Firefox's translation engine (bergamot-translator) built natively from source, for where wasmtime can't run
-# machine code (iOS). build.rs fetches the same release as vendor/bergamot, patches it for current toolchains and builds
-# it with CMake.
+# Firefox's translation engine (bergamot-translator) built natively from source for every platform the app runs on.
+# build.rs fetches the same release as vendor/bergamot, patches it for current toolchains and builds it with CMake.
 
 [lints]
 workspace = true

@@ -1,0 +1,17 @@
+# Caches Bergamot's C++ build (native/crates/bergamot), which takes minutes. It sits in target/ beside cargo's, where
+# rust-cache would clear it, so this comes after rust-cache: its save then runs first.
+name: bergamot
+description: Cache the native Bergamot build
+inputs:
+  platform:
+    description: Which platform's build, one cache each
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      with:
+        path: |
+          native/target/bergamot-src
+          native/target/bergamot-build
+        key: bergamot-${{ inputs.platform }}-${{ hashFiles('native/crates/bergamot/**') }}
