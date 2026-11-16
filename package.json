@@ -14,7 +14,7 @@
     "start": "node dist/server/index.js",
     "build:speech": "tsc -p tsconfig.server.json",
     "start:speech": "node dist/server/speechService.js",
-    "test": "node --import tsx --test server/*.test.ts",
+    "test": "node --import tsx --experimental-test-module-mocks --test server/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "fixtures": "tsx scripts/fixtures.ts",
     "invite": "tsx --env-file-if-exists=.env scripts/invite.ts",

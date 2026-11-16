@@ -123,6 +123,8 @@ export const userClientMessages = [
   { type: "answer", callId: "k1", accept: false },
   { type: "missed-seen" },
   { type: "missed-seen", from: "friend_1" },
+  { type: "visibility", foreground: false },
+  { type: "visibility", foreground: true },
   { type: "ping" },
 ] satisfies UserClientMessage[];
 
@@ -133,6 +135,7 @@ export const userServerMessages = [
     friends: [
       { username: "friend_1", presence: "online" },
       { username: "friend_2", presence: "in-call" },
+      { username: "friend_4", presence: "away" },
       { username: "friend_3", presence: "offline" },
     ],
     incoming: ["someone"],
@@ -142,7 +145,8 @@ export const userServerMessages = [
     rooms: [{ roomId: "AbCdEfGhIjKlMnOpQrStUv", with: "friend_2" }],
   },
   { type: "state", username: "me_1", friends: [], incoming: [], outgoing: [], blocked: [], missed: [], rooms: [] },
-  { type: "ringing", callId: "k1", to: "friend_1" },
+  { type: "ringing", callId: "k1", to: "friend_1", presence: "online" },
+  { type: "ringing", callId: "k1", to: "friend_1", presence: "offline" },
   { type: "incoming", callId: "k1", from: "friend_1" },
   { type: "answered", callId: "k1", roomId: "AbCdEfGhIjKlMnOpQrStUv" },
   { type: "call-ended", callId: "k1", reason: "declined" },

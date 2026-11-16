@@ -18,6 +18,9 @@ thread_local! {
     // What the friends thread's state and events reach on the UI thread: models and the engine aren't `Send`
     #[cfg_attr(target_os = "android", allow(clippy::missing_const_for_thread_local, reason = "it is const; misfires on Android"))]
     static LINKS: RefCell<Option<(Models, Rc<Engine>)>> = const { RefCell::new(None) };
+    // The friends thread, told when the app goes to the background on iOS
+    #[cfg(target_os = "ios")]
+    static FRIENDS: RefCell<std::rc::Weak<Friends>> = const { RefCell::new(std::rc::Weak::new()) };
 }
 
 /// Starts the friends thread with the saved session, and connects it to the window and the call engine.
@@ -45,7 +48,18 @@ pub fn start(ui: &AppWindow, engine: &Rc<Engine>, server: url::Url) -> anyhow::R
         },
     )?);
     wire(ui, &friends);
+    #[cfg(target_os = "ios")]
+    FRIENDS.with_borrow_mut(|weak| *weak = Rc::downgrade(&friends));
     Ok(friends)
+}
+
+/// The app went to the background or came back (iOS): friends see away until iOS closes the socket, which it soon
+/// does, and offline after.
+#[cfg(target_os = "ios")]
+pub fn set_foreground(foreground: bool) {
+    if let Some(friends) = FRIENDS.with_borrow(std::rc::Weak::upgrade) {
+        friends.send(FriendsCommand::Foreground(foreground));
+    }
 }
 
 fn event_on_ui(event: FriendsEvent) {
@@ -54,6 +68,8 @@ fn event_on_ui(event: FriendsEvent) {
         match event {
             FriendsEvent::Session(session) => {
                 save_session(session.as_ref());
+                #[cfg(target_os = "android")]
+                crate::android::session_changed();
                 engine.send(Command::SetSession(session));
             }
             FriendsEvent::Answered(room_id) => {
@@ -196,9 +212,14 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     ui.set_invites_unused(i32::try_from(unused).unwrap_or(i32::MAX));
     ui.set_invites_max(i32::try_from(max).unwrap_or(i32::MAX));
     ui.set_password_changed(state.password_changed);
+    #[cfg(desktop)]
+    crate::desktop::friends_state(state);
+    #[cfg(target_os = "android")]
+    crate::android::answer_from_notification(ui, state);
     ui.set_friends_connected(state.connected);
     ui.set_friends_loaded(state.lists.is_some());
     ui.set_calling(state.outgoing.as_ref().map(|o| o.to.as_str()).unwrap_or_default().into());
+    ui.set_calling_offline(state.outgoing.as_ref().is_some_and(|o| o.presence == Some(Presence::Offline)));
     let incoming = state.incoming.first();
     ui.set_incoming_from(incoming.map(|c| c.from.as_str()).unwrap_or_default().into());
     ui.set_incoming_call_id(incoming.map(|c| c.call_id.as_str()).unwrap_or_default().into());
@@ -228,7 +249,7 @@ fn render(ui: &AppWindow, models: &Models, state: &FriendsState) {
     );
 }
 
-/// Friends with a missed call first (the latest on top), then online, in a call and offline, each by name, like the
+/// Friends with a missed call first (the latest on top), then online, away, in a call and offline, each by name, like the
 /// web's `sortFriends`. Missed calls from someone who isn't a friend aren't shown.
 fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<FriendRow> {
     let mut rows: Vec<(u64, u8, FriendRow)> = friends
@@ -238,8 +259,9 @@ fn friend_rows((friends, missed): (&[FriendState], &[MissedCall])) -> Vec<Friend
             let (count, last) = from_them.fold((0, 0), |(n, last), m| (n + 1, last.max(m.at)));
             let (presence, order) = match f.presence {
                 Presence::Online => ("online", 0),
-                Presence::InCall => ("in-call", 1),
-                Presence::Offline | Presence::Unknown => ("offline", 2),
+                Presence::Away => ("away", 1),
+                Presence::InCall => ("in-call", 2),
+                Presence::Offline | Presence::Unknown => ("offline", 3),
             };
             let row = FriendRow {
                 name: f.username.as_str().into(),
@@ -338,7 +360,7 @@ fn session_path() -> Option<PathBuf> {
 
 /// The token from the last sign-in, kept in its own file (not settings.json) so it never ends up in a log of the
 /// settings.
-fn load_session() -> Option<SessionToken> {
+pub(crate) fn load_session() -> Option<SessionToken> {
     let token = fs::read_to_string(session_path()?).ok()?;
     let token = token.trim();
     (!token.is_empty()).then(|| SessionToken(token.to_owned()))

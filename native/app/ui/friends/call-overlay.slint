@@ -49,6 +49,8 @@ export component CallOverlay inherits Rectangle {
     in property <string> incoming-from;
     // Whom you're calling; "" when nobody
     in property <string> calling;
+    // They were offline when you rang: it rings only if they open the app in time
+    in property <bool> calling-offline;
     // How your last ring ended (protocol's CallEndReason in kebab-case), and with whom; "" when nothing to say
     in property <string> notice;
     in property <string> notice-with;
@@ -134,15 +136,24 @@ export component CallOverlay inherits Rectangle {
                         }
                     }
                 }
-                Text {
-                    text: root.shown-from != "" ? @tr("{} is calling", root.shown-from)
-                        : root.shown-calling != "" ? @tr("Calling {}…", root.shown-calling)
-                        : root.shown-notice;
-                    color: Theme.text;
-                    font-weight: root.shown-notice != "" && root.shown-from == "" && root.shown-calling == "" ? 400 : 650;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
                     horizontal-stretch: 1;
+                    Text {
+                        text: root.shown-from != "" ? @tr("{} is calling", root.shown-from)
+                            : root.shown-calling != "" ? @tr("Calling {}…", root.shown-calling)
+                            : root.shown-notice;
+                        color: Theme.text;
+                        font-weight: root.shown-notice != "" && root.shown-from == "" && root.shown-calling == "" ? 400 : 650;
+                        wrap: word-wrap;
+                    }
+                    if root.shown-from == "" && root.shown-calling != "" && root.calling-offline: Text {
+                        text: @tr("Offline: it rings if they open the app in time.");
+                        color: Theme.muted;
+                        font-size: Theme.font-size-small;
+                        wrap: word-wrap;
+                    }
                 }
                 if !root.narrow || (root.shown-from == "" && root.shown-calling == ""): Buttons {
                     incoming: root.shown-from != "";

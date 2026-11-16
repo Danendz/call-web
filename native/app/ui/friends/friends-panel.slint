@@ -6,7 +6,7 @@ import { Field } from "../components/field.slint";
 import { AccountText } from "../account/errors.slint";
 import { FriendMenu } from "friend-menu.slint";
 
-// presence: "online", "in-call" or "offline"; missed: how many calls from them you missed, the latest at missed-at
+// presence: "online", "away", "in-call" or "offline"; missed: how many calls from them you missed, the latest at missed-at
 // came-online: was offline or in a call on the last list
 export struct FriendRow { name: string, presence: string, missed: int, missed-at: string, came-online: bool }
 export struct RoomRow { room-id: string, with: string }
@@ -80,6 +80,8 @@ component Row inherits HorizontalLayout {
     in property <string> name;
     in property <string> detail;
     in property <color> dot: #00000000;
+    // Only the dot's outline: their app is open in the background
+    in property <bool> dot-hollow;
     // Rings the dot out once: a friend just came online
     in property <bool> ping;
     property <bool> pinging;
@@ -94,7 +96,9 @@ component Row inherits HorizontalLayout {
             width: 10px;
             height: 10px;
             border-radius: 5px;
-            background: root.dot;
+            background: root.dot-hollow ? transparent : root.dot;
+            border-width: root.dot-hollow ? 2px : 0;
+            border-color: root.dot;
             if root.pinging: Rectangle {
                 property <float> t: min(1, (animation-tick() - root.ping-at) / Theme.slow);
                 border-radius: self.width / 2;
@@ -262,8 +266,11 @@ export component FriendsPanel inherits VerticalLayout {
         for friend in root.friends: FadeIn {
             Row {
                 name: friend.name;
-                detail: friend.presence == "online" ? @tr("Online") : friend.presence == "in-call" ? @tr("In a call") : @tr("Offline");
-                dot: friend.presence == "online" ? Theme.good : friend.presence == "in-call" ? Theme.ok : Theme.surface-3;
+                detail: friend.presence == "online" ? @tr("Online") : friend.presence == "away" ? @tr("Away")
+                    : friend.presence == "in-call" ? @tr("In a call") : @tr("Offline");
+                dot: friend.presence == "online" || friend.presence == "away" ? Theme.good
+                    : friend.presence == "in-call" ? Theme.ok : Theme.surface-3;
+                dot-hollow: friend.presence == "away";
                 ping: friend.came-online;
                 VerticalLayout {
                     alignment: center;
@@ -284,7 +291,7 @@ export component FriendsPanel inherits VerticalLayout {
                         label: @tr("Call {}", friend.name);
                         kind: IconButtonKind.active;
                         size: 40px;
-                        enabled: !root.calling && root.connected && friend.presence != "offline";
+                        enabled: !root.calling && root.connected;
                         clicked => { root.ring(friend.name); }
                     }
                 }

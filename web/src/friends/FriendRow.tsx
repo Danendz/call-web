@@ -57,7 +57,7 @@ export function FriendRow({
         <IconButton
           label={t.call(friend.username)}
           variant="active"
-          disabled={calling || friend.presence === "offline"}
+          disabled={calling}
           onClick={onCall}
         >
           <Phone size={18} />

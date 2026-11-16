@@ -57,7 +57,10 @@ function useCard(friends: FriendsSocket) {
         <span className="ring-pulse" aria-hidden>
           <Phone size={22} />
         </span>
-        <strong>{t.calling(outgoing.to)}</strong>
+        <span className="call-text">
+          <strong>{t.calling(outgoing.to)}</strong>
+          {outgoing.presence === "offline" && <span className="muted small">{t.callingOffline}</span>}
+        </span>
         <button className="danger" onClick={() => friends.cancel()}>
           <PhoneOff size={18} />
           {t.cancel}

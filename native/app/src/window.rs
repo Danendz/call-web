@@ -250,7 +250,14 @@ pub fn watch_shown(ui: &crate::ui::AppWindow) {
     // Slint takes one filter per window, so the long press for text boxes' menus is watched here too
     ui.window().on_winit_window_event(move |_window, event| {
         match event {
-            WindowEvent::Occluded(occluded) => crate::video::set_window_shown(!occluded),
+            WindowEvent::Occluded(occluded) => {
+                crate::video::set_window_shown(!occluded);
+                // On iOS this is the app going to the background and back
+                #[cfg(target_os = "ios")]
+                crate::friends::set_foreground(!occluded);
+            }
+            #[cfg(desktop)]
+            WindowEvent::Focused(focused) => crate::desktop::focused(*focused),
             #[cfg(target_os = "ios")]
             WindowEvent::Touch(touch) => crate::ios::touch(&weak, _window.scale_factor(), touch),
             #[cfg(target_os = "windows")]

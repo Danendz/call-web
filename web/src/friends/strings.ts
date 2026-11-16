@@ -13,7 +13,7 @@ const en = {
   waiting: "Waiting for them to accept",
   withdraw: "Withdraw",
   noFriends: "No friends yet. Add someone by their exact username.",
-  presence: { online: "Online", "in-call": "In a call", offline: "Offline" } satisfies Record<Presence, string>,
+  presence: { online: "Online", away: "Away", "in-call": "In a call", offline: "Offline" } satisfies Record<Presence, string>,
   call: (name: string) => `Call ${name}`,
   remove: "Remove",
   block: "Block",
@@ -28,6 +28,7 @@ const en = {
   newRoomLink: "New room link",
   reconnecting: "Reconnecting…",
   calling: (name: string) => `Calling ${name}…`,
+  callingOffline: "Offline: it rings if they open the app in time.",
   cancel: "Cancel",
   incoming: (name: string) => `${name} is calling`,
   ended: {
@@ -53,7 +54,7 @@ const zh: typeof en = {
   waiting: "等待对方接受",
   withdraw: "撤回",
   noFriends: "还没有好友。输入完整的用户名来添加。",
-  presence: { online: "在线", "in-call": "通话中", offline: "离线" },
+  presence: { online: "在线", away: "离开", "in-call": "通话中", offline: "离线" },
   call: (name) => `呼叫 ${name}`,
   remove: "删除",
   block: "屏蔽",
@@ -68,6 +69,7 @@ const zh: typeof en = {
   newRoomLink: "新房间链接",
   reconnecting: "正在重连…",
   calling: (name) => `正在呼叫 ${name}…`,
+  callingOffline: "对方离线：如果对方及时打开应用，就会响铃。",
   cancel: "取消",
   incoming: (name) => `${name} 来电`,
   ended: {

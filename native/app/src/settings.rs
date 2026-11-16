@@ -44,6 +44,13 @@ pub struct Settings {
     /// "Sharpen video" in Settings: the other person's video upscaled with FSR where it's drawn bigger than it came
     #[serde(default = "yes")]
     pub sharpen_video: bool,
+    /// Settings' "Keep running when the window is closed" on desktop: closing the window hides the app to the tray,
+    /// where friends' calls still reach it
+    #[serde(default = "yes")]
+    pub keep_running: bool,
+    /// Settings' "Get calls when the app is closed" on Android: a foreground service keeps listening for rings
+    #[serde(default)]
+    pub listen_closed: bool,
     /// "Live subtitles" in Settings: the last spoken lines over the video
     #[serde(default = "yes")]
     pub subtitles: bool,
@@ -211,6 +218,8 @@ impl Default for Settings {
             record_stats: false,
             fec: true,
             sharpen_video: true,
+            keep_running: true,
+            listen_closed: false,
             subtitles: true,
             noise_suppression: desktop(),
             video_codec: VideoCodec::Auto,

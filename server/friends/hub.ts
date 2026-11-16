@@ -21,6 +21,8 @@ export interface UserSocket {
   userId: string;
   username: string;
   tokenHash: Buffer;
+  // False while the app is in the background: hidden to the tray, or a phone's listening service
+  foreground: boolean;
 }
 
 const online = new Map<string, Set<UserSocket>>();
@@ -38,9 +40,12 @@ export function sendToUser(userId: string, msg: UserServerMessage, except?: User
   for (const sock of socketsOf(userId)) if (sock !== except) send(sock.ws, msg);
 }
 
-function presence(userId: string): Presence {
+export function presence(userId: string): Presence {
   if (inCall(userId)) return "in-call";
-  return online.has(userId) ? "online" : "offline";
+  const sockets = online.get(userId);
+  if (!sockets) return "offline";
+  for (const sock of sockets) if (sock.foreground) return "online";
+  return "away";
 }
 
 /** Sends each of these accounts that's online a fresh state, shortly. */
@@ -73,7 +78,7 @@ async function pushState(userId: string): Promise<void> {
   sendToUser(userId, msg);
 }
 
-/** These accounts went online, offline, into or out of a call: they and their friends get a new state. */
+/** These accounts went online, away, offline, into or out of a call: they and their friends get a new state. */
 export async function presenceChanged(userIds: string[]): Promise<void> {
   const ids = new Set(userIds);
   for (const id of userIds) for (const friend of await store.friendIds(id)) ids.add(friend);
@@ -95,7 +100,7 @@ export function closeSession(tokenHash: Buffer): void {
 
 /** A /ws/user socket, already upgraded, of a signed-in client. */
 export function onUserConnection(ws: WebSocket, user: SessionUser): void {
-  const sock: UserSocket = { key: randomUUID(), ws, userId: user.userId, username: user.username, tokenHash: user.tokenHash };
+  const sock: UserSocket = { key: randomUUID(), ws, userId: user.userId, username: user.username, tokenHash: user.tokenHash, foreground: true };
   const set = online.get(user.userId) ?? new Set();
   const cameOnline = set.size === 0;
   set.add(sock);
@@ -131,6 +136,13 @@ export function onUserConnection(ws: WebSocket, user: SessionUser): void {
           .then(() => refresh([sock.userId]))
           .catch((err: Error) => console.warn("missed calls:", err.message));
         break;
+      case "visibility": {
+        if (typeof msg.foreground !== "boolean" || msg.foreground === sock.foreground) break;
+        const before = presence(sock.userId);
+        sock.foreground = msg.foreground;
+        if (presence(sock.userId) !== before) presenceChanged([sock.userId]).catch((err: Error) => console.warn("presence:", err.message));
+        break;
+      }
       case "ping":
         send(ws, { type: "pong" });
         break;
@@ -138,10 +150,11 @@ export function onUserConnection(ws: WebSocket, user: SessionUser): void {
   });
 
   ws.on("close", () => {
+    const before = presence(user.userId);
     set.delete(sock);
-    const wentOffline = set.size === 0 && online.get(user.userId) === set;
-    if (wentOffline) online.delete(user.userId);
+    if (set.size === 0 && online.get(user.userId) === set) online.delete(user.userId);
     rings.disconnected(sock);
-    if (wentOffline) presenceChanged([user.userId]).catch((err: Error) => console.warn("presence:", err.message));
+    // Closing the only foreground client of an account still open in the background makes it away
+    if (presence(user.userId) !== before) presenceChanged([user.userId]).catch((err: Error) => console.warn("presence:", err.message));
   });
 }

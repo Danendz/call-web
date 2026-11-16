@@ -14,6 +14,8 @@ mod memory;
 mod mic;
 mod peer;
 mod remote;
+#[cfg(desktop)]
+pub mod ringtone;
 pub mod room;
 mod screen;
 mod screen_audio;

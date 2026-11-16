@@ -75,6 +75,8 @@ struct Controller {
     on_state: Box<dyn Fn(FriendsState) + Send>,
     on_event: Box<dyn Fn(FriendsEvent) + Send>,
     socket: Option<UserSocket>,
+    /// Told to the server again on every reconnect, since a new socket starts in the foreground
+    foreground: bool,
     socket_tx: mpsc::UnboundedSender<SocketEvent>,
     socket_rx: mpsc::UnboundedReceiver<SocketEvent>,
     done_tx: mpsc::UnboundedSender<Done>,
@@ -98,6 +100,7 @@ impl Controller {
             on_state,
             on_event,
             socket: None,
+            foreground: true,
             socket_tx,
             socket_rx,
             done_tx,
@@ -175,7 +178,7 @@ impl Controller {
             FriendsCommand::Ring(to) => {
                 if let Some(socket) = &self.socket {
                     socket.send(UserClientMessage::Ring { to: to.clone() });
-                    self.state.outgoing = Some(Outgoing { to, call_id: None });
+                    self.state.outgoing = Some(Outgoing { to, call_id: None, presence: None });
                     self.state.notice = None;
                 }
             }
@@ -196,6 +199,15 @@ impl Controller {
             FriendsCommand::MissedSeen(from) => {
                 if let Some(socket) = &self.socket {
                     socket.send(UserClientMessage::MissedSeen { from: Some(from) });
+                }
+            }
+            FriendsCommand::Foreground(foreground) => {
+                if foreground == self.foreground {
+                    return;
+                }
+                self.foreground = foreground;
+                if let Some(socket) = &self.socket {
+                    socket.send(UserClientMessage::Visibility { foreground });
                 }
             }
             FriendsCommand::DismissNotice => self.state.notice = None,

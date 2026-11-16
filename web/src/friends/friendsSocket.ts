@@ -1,4 +1,4 @@
-import type { CallEndReason, UserClientMessage, UserServerMessage } from "../../../shared/protocol";
+import type { CallEndReason, Presence, UserClientMessage, UserServerMessage } from "../../../shared/protocol";
 import { loadSession } from "../account/session";
 
 const PING_EVERY_MS = 20_000;
@@ -11,8 +11,8 @@ export type FriendsLists = Extract<UserServerMessage, { type: "state" }>;
 export interface FriendsState {
   connected: boolean;
   lists: FriendsLists | null;
-  /** Your ring; callId is null until the server says it's ringing. */
-  outgoing: { to: string; callId: string | null } | null;
+  /** Your ring; callId and their presence are null until the server says it's ringing. */
+  outgoing: { to: string; callId: string | null; presence: Presence | null } | null;
   incoming: { callId: string; from: string }[];
   /** How your last ring ended, until dismissed. */
   notice: { reason: CallEndReason; with: string } | null;
@@ -58,7 +58,7 @@ export class FriendsSocket {
   }
 
   ring(to: string): void {
-    if (this.send({ type: "ring", to })) this.set({ outgoing: { to, callId: null }, notice: null });
+    if (this.send({ type: "ring", to })) this.set({ outgoing: { to, callId: null, presence: null }, notice: null });
   }
 
   cancel(): void {
@@ -129,7 +129,7 @@ export class FriendsSocket {
         this.set({ lists: msg });
         break;
       case "ringing":
-        if (this.state.outgoing?.to === msg.to) this.set({ outgoing: { to: msg.to, callId: msg.callId } });
+        if (this.state.outgoing?.to === msg.to) this.set({ outgoing: { to: msg.to, callId: msg.callId, presence: msg.presence } });
         break;
       case "incoming":
         if (!this.state.incoming.some((c) => c.callId === msg.callId)) this.set({ incoming: [...this.state.incoming, msg] });

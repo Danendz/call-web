@@ -32,12 +32,22 @@ class MainActivity : NativeActivity() {
         }
         super.onCreate(savedInstanceState)
         Updater.answered(this, intent)
+        answered(intent)
     }
 
-    // singleTask: the update installer's answer comes back to the running activity
+    // Accept on a ring's notification opened the app
+    private fun answered(intent: Intent) {
+        val callId = intent.getStringExtra(ListenService.EXTRA_ANSWER) ?: return
+        intent.removeExtra(ListenService.EXTRA_ANSWER)
+        Shim.answerOnOpen(callId)
+        ListenService.ringEnded(this, callId)
+    }
+
+    // singleTask: the update installer's answer, and Accept on a ring's notification, come back to the running activity
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Updater.answered(this, intent)
+        answered(intent)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -66,11 +76,13 @@ class MainActivity : NativeActivity() {
     // Stopped means nothing of the app is on screen (picture-in-picture only pauses it), so video isn't converted
     override fun onStart() {
         super.onStart()
+        Shim.shown = true
         Shim.nativeShown(true)
     }
 
     override fun onStop() {
         super.onStop()
+        Shim.shown = false
         Shim.nativeShown(false)
     }
 

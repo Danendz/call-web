@@ -80,6 +80,14 @@ impl Updater {
         }
     }
 
+    /// Installs the downloaded update and starts the new version with these arguments. Ends the process.
+    pub fn restart_now_with(&self, args: &[&str]) {
+        let Some(info) = self.ready.lock().ok().and_then(|ready| ready.clone()) else { return };
+        if let Err(e) = self.manager.apply_updates_and_restart_with_args(&info, args) {
+            tracing::warn!("update failed: {e}");
+        }
+    }
+
     /// Hands a downloaded update to Velopack's updater, which installs it once this process has exited. Quitting
     /// with ⌘Q on macOS ends the process without getting here; Velopack then installs it at the next launch.
     pub fn install_on_exit(&self) {
