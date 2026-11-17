@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { WebSocketServer, type RawData } from "ws";
 import { Utterance } from "./speechLines.js";
 import { speech, type Speech } from "./speechModels.js";
-import type { Lang } from "../shared/protocol.js";
+import { LANGS, type Lang } from "../shared/protocol.js";
 
 /** web → speech: a client's messages, already checked. Its 16-bit audio comes as binary frames. */
 export type SpeechUpstreamMessage = { type: "start"; lang: Lang; live: boolean } | { type: "end" } | { type: "cancel" };
@@ -71,12 +71,14 @@ wss.on("connection", (ws) => {
   const ping = setInterval(() => ws.ping(), PING_MS);
   let utterance: Utterance | null = null;
 
-  const start = (live: boolean) => {
+  const start = (lang: Lang, live: boolean) => {
+    if (!models) return;
+    const decoder = models.decoder(lang);
     // Too far behind: this utterance goes unrecognized
-    if (!models || models.decoder.waiting() > MAX_WAITING) return;
+    if (decoder.waiting() > MAX_WAITING) return;
     utterance = new Utterance(
       models.vad(live),
-      models.decoder,
+      decoder,
       live,
       {
         live: (id, text) => send({ type: "live", id, text }),
@@ -104,7 +106,7 @@ wss.on("connection", (ws) => {
     if (typeof msg !== "object" || msg === null) return;
     utterance?.[msg.type === "end" ? "end" : "cancel"]();
     utterance = null;
-    if (msg.type === "start") start(msg.live === true);
+    if (msg.type === "start" && LANGS.includes(msg.lang)) start(msg.lang, msg.live === true);
   };
   ws.on("message", (data: RawData, isBinary) => (early ? early.push([data, isBinary]) : onMessage(data, isBinary)));
   ws.on("close", () => {
