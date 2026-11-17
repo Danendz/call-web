@@ -134,3 +134,20 @@ test("an utterance with no speech in it posts nothing, and live text with no lin
   cancelled.cancel();
   assert.deepEqual(s.out, ["live C hi", "live C "]);
 });
+
+test("a line or live text that's only punctuation isn't posted", async () => {
+  const { vad, api: vadApi } = fakeVad();
+  const dec = fakeDecoder();
+  const s = sink();
+  const u = new Utterance(vadApi, dec.api, true, s.api, () => "L");
+
+  vad.speaking = true;
+  u.audio(chunk(0.5));
+  await dec.next("."); // SenseVoice's reading of a breath
+  vad.speaking = false;
+  vad.ended = Infinity;
+  u.audio(chunk(0.1));
+  await dec.next("。");
+  // Only the take-back of its live id, which showed nothing
+  assert.deepEqual(s.out, ["live L "]);
+});

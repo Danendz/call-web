@@ -193,9 +193,10 @@ impl Denoise {
     }
 }
 
-/// Runs on WebRTC's audio thread, after its echo canceller and gain control: DeepFilterNet once it's loaded, then
-/// the tap. Frames at a rate other than the model's (WebRTC processes at 48 kHz when the mic gives it that, as
-/// desktop and phone mics do) pass through it undenoised.
+/// Runs on WebRTC's audio thread, after its echo canceller and gain control: the tap, then DeepFilterNet once it's
+/// loaded. Speech to chat reads the tap before noise suppression, which mutes quiet speech outright. Frames at a rate
+/// other than the model's (WebRTC processes at 48 kHz when the mic gives it that, as desktop and phone mics do) pass
+/// through it undenoised.
 fn processor(
     mut denoiser: Option<denoise::Denoiser>,
     on: Arc<AtomicBool>,
@@ -203,6 +204,7 @@ fn processor(
 ) -> capture_processor::CaptureProcessor {
     let mut warned = false;
     Box::new(move |frame, rate| {
+        tap.send(frame, rate);
         if let Some(denoiser) = denoiser.as_mut()
             && on.load(Ordering::Relaxed)
         {
@@ -214,7 +216,6 @@ fn processor(
                 warned = true;
             }
         }
-        tap.send(frame, rate);
     })
 }
 

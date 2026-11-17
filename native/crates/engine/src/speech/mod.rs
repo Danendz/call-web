@@ -1,6 +1,6 @@
 //! Speech to chat: what you say becomes chat messages. The mic comes from the call's capture after WebRTC's echo
-//! cancellation, noise suppression and gain control, as the web transcribes the track it sends, so the other
-//! person's voice from your speakers isn't transcribed as yours. Then it's cut into utterances, which go to a
+//! cancellation and gain control, so the other person's voice from your speakers isn't transcribed as yours, but
+//! before DeepFilterNet, which mutes quiet speech outright (the web transcribes its mic the same way). Then it's cut into utterances, which go to a
 //! [`Recognizer`]: SenseVoice on this device once it's downloaded and picked, or the server's `/ws/speech`, streamed
 //! while you speak like the web's server path. With live subtitles either one also sends what you're saying as you
 //! say it, each pause ending a line.

@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
-import { TRANSCRIBE_SAMPLE_RATE } from "../shared/protocol.js";
+import { TRANSCRIBE_SAMPLE_RATE, type Lang } from "../shared/protocol.js";
 import type { Decoder, Vad } from "./speechLines.js";
 import { fetchFromBucket } from "./updates.js";
 
@@ -54,7 +54,8 @@ const MAX_LINE_S = 20;
 const VAD_BUFFER_S = 40;
 
 export interface Speech {
-  decoder: Decoder;
+  /** Decodes speech in `lang`; all languages share one queue. */
+  decoder(lang: Lang): Decoder;
   vad(live: boolean): Vad;
 }
 
@@ -85,17 +86,23 @@ async function fetchModel(file: ModelFile): Promise<string> {
   return path;
 }
 
-/** Decodes one at a time: two at once would only split the same cores, and a queue keeps lines in order. */
-function serial(recognizer: import("sherpa-onnx-node").OfflineRecognizer): Decoder {
+type Recognizer = import("sherpa-onnx-node").OfflineRecognizer;
+
+/**
+ * Decodes one at a time, whatever the language: two at once would only split the same cores, and a queue keeps lines
+ * in order. `recognizer` gives the one for a language.
+ */
+function serial(recognizer: (lang: Lang) => Promise<Recognizer>): (lang: Lang) => Decoder {
   let queue: Promise<unknown> = Promise.resolve();
   let waiting = 0;
-  return {
+  return (lang) => ({
     decode(samples) {
       waiting++;
       const result = queue.then(async () => {
-        const stream = recognizer.createStream();
+        const rec = await recognizer(lang);
+        const stream = rec.createStream();
         stream.acceptWaveform({ samples, sampleRate: TRANSCRIBE_SAMPLE_RATE });
-        return (await recognizer.decodeAsync(stream)).text;
+        return (await rec.decodeAsync(stream)).text;
       });
       queue = result.catch(() => {});
       return result
@@ -106,18 +113,30 @@ function serial(recognizer: import("sherpa-onnx-node").OfflineRecognizer): Decod
         .finally(() => waiting--);
     },
     waiting: () => waiting,
-  };
+  });
 }
 
 async function load(): Promise<Speech> {
   const started = Date.now();
   await mkdir(DIR, { recursive: true });
   const [model, tokens, vadModel] = await Promise.all([SENSE_VOICE, SENSE_VOICE_TOKENS, SILERO_VAD].map(fetchModel));
-  const recognizer = await sherpa.OfflineRecognizer.createAsync({
-    featConfig: { sampleRate: TRANSCRIBE_SAMPLE_RATE, featureDim: 80 },
-    // The language is left to the model: it tells Mandarin from English itself, also mixed in one line
-    modelConfig: { senseVoice: { model, language: "auto", useInverseTextNormalization: 1 }, tokens, numThreads: THREADS, debug: 0 },
-  });
+  // SenseVoice is told the speaker's language: left on "auto", it hears Japanese or Cantonese in short or quiet
+  // English and Mandarin. sherpa-onnx can't change a SenseVoice recognizer's language once made, so there's one per
+  // language, each made the first time someone speaks it, as the native app does.
+  const recognizers = new Map<Lang, Promise<Recognizer>>();
+  const recognizer = (lang: Lang) => {
+    let made = recognizers.get(lang);
+    if (!made) {
+      made = sherpa.OfflineRecognizer.createAsync({
+        featConfig: { sampleRate: TRANSCRIBE_SAMPLE_RATE, featureDim: 80 },
+        modelConfig: { senseVoice: { model, language: lang, useInverseTextNormalization: 1 }, tokens, numThreads: THREADS, debug: 0 },
+      });
+      recognizers.set(lang, made);
+      // Tried again next time
+      made.catch(() => recognizers.delete(lang));
+    }
+    return made;
+  };
   console.info(`speech models ready in ${Date.now() - started}ms`);
   return {
     decoder: serial(recognizer),

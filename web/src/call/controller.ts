@@ -147,8 +147,8 @@ export class CallController {
   private mediaReady: Promise<void> | null = null;
   private switchingDevice = false;
   private pendingDevices = new Map<MediaKind, string>();
-  // The mic after noise suppression: what's sent and transcribed. The raw mic stays in localStream, for the level
-  // meter, the picker and muting.
+  // The mic after noise suppression: what's sent. The raw mic stays in localStream, for the level meter, the picker,
+  // muting and speech recognition.
   private denoised: Denoised | null = null;
   private micVersion = 0;
   // The next mic switch closes the old one first, so the browser's audio processing follows the new constraints
@@ -216,7 +216,9 @@ export class CallController {
     const { transcribeOn, micOn, phase, localStream, lang } = this.state;
     // Only while someone is there to read it, and never while muted
     const speaking = transcribeOn && micOn && phase === "in-call";
-    const track = (speaking && (this.denoised?.track ?? localStream?.getAudioTracks()[0])) || null;
+    // The mic before noise suppression: DeepFilterNet mutes quiet speech outright, and the recognizer copes with room
+    // noise on its own. The browser's echo cancellation still keeps the other person's voice out.
+    const track = (speaking && localStream?.getAudioTracks()[0]) || null;
     this.transcriber.sync(track, lang, getSubtitles());
     for (const l of this.listeners) l();
   }

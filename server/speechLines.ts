@@ -51,7 +51,8 @@ const FILLER_RE = /^(?:嗯|啊|哦|呃|额|唔|mm+|hm+|uh+|um+|ah+|oh+|huh|mhm)+
 
 function clean(text: string): string {
   const words = text.toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, "");
-  return FILLER_RE.test(words) ? "" : text.trim();
+  // Only punctuation: SenseVoice's reading of a breath or a cough
+  return !words || FILLER_RE.test(words) ? "" : text.trim();
 }
 
 function concat(chunks: Float32Array[], length: number): Float32Array {
