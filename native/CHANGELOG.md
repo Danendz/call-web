@@ -3,6 +3,14 @@
 What changed in each release of the native app, newest first. CI copies a version's section into its GitHub release
 (`native-v<version>`), so every released version needs one. How to write it: `native/AGENTS.md`, Releasing.
 
+## 0.5.2 — 2026-11-17
+
+Speech to chat hears quiet speech again.
+
+### Fixed
+
+- Speech to chat writes out what you said when you speak quietly or far from the mic with noise suppression on, instead of a lone dot or a few wrong words
+
 ## 0.5.1 — 2026-11-16
 
 Friends can now call you when the app isn't open on screen, and live subtitles translate faster.
