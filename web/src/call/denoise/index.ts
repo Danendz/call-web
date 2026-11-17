@@ -2,7 +2,7 @@
 import wasmUrl from "./denoise.wasm?url";
 import workletUrl from "./worklet.ts?worker&url";
 
-/** A mic track run through DeepFilterNet3, to send and transcribe in its place. */
+/** A mic track run through DeepFilterNet3, to send in its place. */
 export interface Denoised {
   readonly track: MediaStreamTrack;
   /** A context made before the user touched the page starts suspended; any call after a click starts it. */
