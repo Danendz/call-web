@@ -40,7 +40,7 @@ sha2 = "0.11"
 bergamot = { path = "../bergamot", optional = true }
 # The WebAssembly build (vendor/bergamot, the web's) through wasmtime instead, to compare the two; build.rs compiles it
 # ahead of time, so the app only loads machine code and carries no compiler
-wasmtime = { version = "50.0.1", default-features = false, features = ["runtime", "std", "threads"], optional = true }
+wasmtime = { version = "50.0.3", default-features = false, features = ["runtime", "std", "threads"], optional = true }
 
 [features]
 default = ["native-translate"]
@@ -48,7 +48,7 @@ native-translate = ["dep:bergamot"]
 wasm-translate = ["dep:wasmtime"]
 
 [build-dependencies]
-wasmtime = { version = "50.0.1", default-features = false, features = ["cranelift", "all-arch", "std", "parallel-compilation", "threads"], optional = true }
+wasmtime = { version = "50.0.3", default-features = false, features = ["cranelift", "all-arch", "std", "parallel-compilation", "threads"], optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
