@@ -145,7 +145,8 @@ async function load(): Promise<Speech> {
         {
           sileroVad: {
             model: vadModel,
-            threshold: 0.5,
+            // Silero's own default is 0.5, which drops whole phrases said quietly or under street noise
+            threshold: 0.35,
             minSilenceDuration: live ? LIVE_PAUSE_S : CHAT_PAUSE_S,
             minSpeechDuration: 0.25,
             windowSize: 512,

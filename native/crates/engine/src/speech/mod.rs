@@ -9,6 +9,7 @@ mod live;
 mod local;
 mod model;
 mod socket;
+mod text;
 mod utterance;
 
 use std::path::PathBuf;
