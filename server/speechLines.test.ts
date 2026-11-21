@@ -53,7 +53,7 @@ function sink() {
   };
 }
 
-test("each pause ends a line, posted in order with the live text it replaces", async () => {
+test("each short pause ends a line shown live, and the sentence they make goes to the chat as one", async () => {
   const { vad, api: vadApi } = fakeVad();
   const dec = fakeDecoder();
   const s = sink();
@@ -68,16 +68,43 @@ test("each pause ends a line, posted in order with the live text it replaces", a
   u.audio(chunk(0.1)); // the pause ends it
   vad.speaking = true;
   u.audio(chunk(0.5)); // the next line, no live decode yet: the first line's is waiting
+  assert.equal(await dec.next("你好。"), 0.6); // the line alone, for the live text
+  u.audio(chunk(0.5));
+  assert.equal(await dec.next("我是"), 1); // the next line so far, after it
   vad.open = true;
   u.end();
 
-  assert.equal(dec.pending.length, 2);
-  await dec.next();
-  await dec.next("嗯。"); // a filler alone isn't posted
-  assert.deepEqual(s.out, ["live L1 0.5s", "line L1 0.6s"]);
+  // The last line isn't decoded alone: the sentence, all its lines at once, goes out right after
+  assert.equal(await dec.next(), 1.6);
+  assert.deepEqual(s.out, ["live L1 0.5s", "live L1 你好。", "live L1 你好。我是", "line L1 1.6s"]);
 });
 
-test("a line ends where speech did, and the next one keeps its start", async () => {
+test("a longer pause ends the sentence, and the next one gets live text of its own", async () => {
+  const { vad, api: vadApi } = fakeVad();
+  const dec = fakeDecoder();
+  const s = sink();
+  let ids = 0;
+  const u = new Utterance(vadApi, dec.api, true, s.api, () => `L${++ids}`);
+
+  vad.speaking = true;
+  u.audio(chunk(0.5));
+  await dec.next("hi");
+  vad.speaking = false;
+  vad.ended = Infinity;
+  u.audio(chunk(0.1));
+  await dec.next("hello");
+  u.audio(chunk(0.5));
+  assert.equal(dec.pending.length, 0); // still within the sentence's pause
+  u.audio(chunk(0.5));
+  assert.equal(await dec.next("Hello there."), 0.6);
+
+  vad.speaking = true;
+  u.audio(chunk(0.5));
+  await dec.next("how");
+  assert.deepEqual(s.out, ["live L1 hi", "live L1 hello", "line L1 Hello there.", "live L2 how"]);
+});
+
+test("a cancelled utterance still posts the lines it finished", async () => {
   const { vad, api: vadApi } = fakeVad();
   const dec = fakeDecoder();
   const s = sink();
@@ -85,15 +112,31 @@ test("a line ends where speech did, and the next one keeps its start", async () 
 
   vad.speaking = true;
   u.audio(chunk(1));
+  vad.ended = 0.6 * TRANSCRIBE_SAMPLE_RATE;
+  u.audio(chunk(0.2)); // a line ends; the rest of the utterance is dropped
+  u.cancel();
+  assert.equal(await dec.next("Hello."), 0.9);
+  assert.deepEqual(s.out, ["line - Hello."]);
+});
+
+test("a line ends where speech did, and the next one keeps its start", async () => {
+  const { vad, api: vadApi } = fakeVad();
+  const dec = fakeDecoder();
+  const s = sink();
+  const u = new Utterance(vadApi, dec.api, true, s.api, () => "L");
+
+  vad.speaking = true;
+  u.audio(chunk(1));
+  await dec.next(); // live
   // The VAD sees the pause only once the next line has begun: speech ended 0.6 s in
   vad.ended = 0.6 * TRANSCRIBE_SAMPLE_RATE;
   u.audio(chunk(0.2));
   vad.open = true;
   u.end();
 
-  // The first line keeps 0.3 s past its end; the other 0.3 s starts the next
+  // The first line keeps 0.3 s past its end; the other 0.3 s starts the next. The sentence is both, nothing lost.
   assert.equal(await dec.next(), 0.9);
-  assert.equal(await dec.next(), 0.3);
+  assert.equal(await dec.next(), 1.2);
 });
 
 test("live text isn't decoded again while the decoder is behind, and a stale result is dropped", async () => {
@@ -115,7 +158,7 @@ test("live text isn't decoded again while the decoder is behind, and a stale res
   u.audio(chunk(0.1)); // the line ends before its last live decode is back
   await dec.next("stale");
   await dec.next("done");
-  assert.deepEqual(s.out, ["live L1 0.5s", "line L1 done"]);
+  assert.deepEqual(s.out, ["live L1 0.5s", "live L1 done"]);
 });
 
 test("an utterance with no speech in it posts nothing, and live text with no line is taken back", async () => {
@@ -135,7 +178,7 @@ test("an utterance with no speech in it posts nothing, and live text with no lin
   assert.deepEqual(s.out, ["live C hi", "live C "]);
 });
 
-test("a line or live text that's only punctuation isn't posted", async () => {
+test("a line or live text that's only punctuation or a filler isn't posted", async () => {
   const { vad, api: vadApi } = fakeVad();
   const dec = fakeDecoder();
   const s = sink();
@@ -148,6 +191,8 @@ test("a line or live text that's only punctuation isn't posted", async () => {
   vad.ended = Infinity;
   u.audio(chunk(0.1));
   await dec.next("。");
+  u.end();
+  await dec.next("嗯。");
   // Only the take-back of its live id, which showed nothing
   assert.deepEqual(s.out, ["live L "]);
 });

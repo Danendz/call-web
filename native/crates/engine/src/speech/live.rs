@@ -1,7 +1,9 @@
 //! Speech recognized on this device while it's said, for live subtitles, like the server's `speechLines.ts`: the
 //! same SenseVoice as [`super::local`] decodes the line so far again as it grows, and each result goes out as live
 //! text. Silero VAD says where the speech is: a short pause in it ends a line, so a long stretch of talk becomes a few
-//! short lines that each show and finish quickly, and an utterance with no speech in it posts nothing.
+//! short lines that each show quickly, and an utterance with no speech in it posts nothing. A line alone is often a
+//! second or two, too little for SenseVoice to read well, so lines are only shown live: once the speaker pauses
+//! longer, the sentence they make is decoded again as a whole, and that's what goes to the chat.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc as std_mpsc;
@@ -13,6 +15,7 @@ use tokio::sync::mpsc;
 
 use super::local::{Loaded, decode, load};
 use super::model::SILERO_VAD;
+use super::text::{clean, join};
 use super::{Out, Recognizer, SpeechEvent};
 
 const RATE: usize = TRANSCRIBE_SAMPLE_RATE as usize;
@@ -25,6 +28,10 @@ const LONG_LINE_S: f32 = 5.0;
 const PAUSE_S: f32 = 0.4;
 // Talk without a pause this long is cut into a line anyway
 const MAX_LINE_S: f32 = 20.0;
+// A pause this long ends a sentence, and its lines go to the chat as one
+const SENTENCE_PAUSE_S: f32 = 1.0;
+// A sentence this long goes to the chat even without a pause: SenseVoice reads up to about 30 s at once
+const MAX_SENTENCE_S: f32 = 20.0;
 // What the VAD holds: a whole utterance, at most MAX_UTTERANCE_S, with room to spare
 const VAD_BUFFER_S: f32 = 40.0;
 // Audio kept from before the VAD says speech started, which it says a little late: without it, the first syllable is
@@ -68,7 +75,8 @@ fn vad(dir: &Path) -> Result<VoiceActivityDetector, String> {
     let config = VadModelConfig {
         silero_vad: SileroVadModelConfig {
             model: Some(dir.join(SILERO_VAD.local).to_string_lossy().into_owned()),
-            threshold: 0.5,
+            // Silero's own default is 0.5, which drops whole phrases said quietly or under street noise
+            threshold: 0.35,
             min_silence_duration: PAUSE_S,
             min_speech_duration: 0.25,
             window_size: 512,
@@ -166,17 +174,38 @@ struct Lines<V, D, E> {
     pcm_start: usize,
     /// `pcm.len()` when live text was last decoded
     decoded_at: usize,
+    /// Shows the sentence being said, its finished lines and the line so far
     live_id: Option<String>,
+    sentence: Option<Sentence>,
+}
+
+/// The finished lines not in the chat yet.
+struct Sentence {
+    pcm: Vec<f32>,
+    texts: Vec<String>,
+    /// Where the last line's speech ended, in samples fed to the VAD since its last reset
+    speech_end: usize,
 }
 
 impl<V: Vad, D: Fn(&[f32]) -> Option<String>, E: Fn(SpeechEvent)> Lines<V, D, E> {
     fn new(vad: V, decode: D, emit: E) -> Self {
-        Self { vad, decode, emit, open: false, pcm: Vec::new(), pcm_start: 0, decoded_at: 0, live_id: None }
+        Self {
+            vad,
+            decode,
+            emit,
+            open: false,
+            pcm: Vec::new(),
+            pcm_start: 0,
+            decoded_at: 0,
+            live_id: None,
+            sentence: None,
+        }
     }
 
     fn handle(&mut self, msg: Out) {
         match msg {
             Out::Start(_) => {
+                self.finish_sentence();
                 self.stop();
                 self.vad.reset();
                 self.pcm_start = 0;
@@ -187,9 +216,17 @@ impl<V: Vad, D: Fn(&[f32]) -> Option<String>, E: Fn(SpeechEvent)> Lines<V, D, E>
                 self.vad.accept(&samples);
                 self.pcm.extend_from_slice(&samples);
                 if let Some(end) = self.vad.ended() {
-                    self.finish_line(end);
+                    self.finish_line(end, true);
                 }
                 if !self.vad.speaking() {
+                    let fed = self.pcm_start + self.pcm.len();
+                    if self
+                        .sentence
+                        .as_ref()
+                        .is_some_and(|s| fed.saturating_sub(s.speech_end) >= (SENTENCE_PAUSE_S * RATE as f32) as usize)
+                    {
+                        self.finish_sentence();
+                    }
                     let keep = (KEEP_BEFORE_SPEECH_S * RATE as f32) as usize;
                     let extra = self.pcm.len().saturating_sub(keep);
                     self.pcm.drain(..extra);
@@ -200,12 +237,17 @@ impl<V: Vad, D: Fn(&[f32]) -> Option<String>, E: Fn(SpeechEvent)> Lines<V, D, E>
             Out::End if self.open => {
                 self.vad.flush();
                 if self.vad.ended().is_some() {
-                    // Nothing more is coming: it all goes in this line
-                    self.finish_line(usize::MAX);
+                    // Nothing more is coming: it all goes in this line, and the line in the sentence posted now
+                    self.finish_line(usize::MAX, false);
                 }
+                self.finish_sentence();
                 self.stop();
             }
-            Out::Cancel => self.stop(),
+            // What's still unfinished isn't posted, but the lines already finished are
+            Out::Cancel => {
+                self.finish_sentence();
+                self.stop();
+            }
             _ => {}
         }
     }
@@ -222,20 +264,43 @@ impl<V: Vad, D: Fn(&[f32]) -> Option<String>, E: Fn(SpeechEvent)> Lines<V, D, E>
         }
         self.decoded_at = self.pcm.len();
         let Some(text) = (self.decode)(&self.pcm).and_then(|t| clean(&t)) else { return };
+        let done = self.sentence.as_ref().map_or(&[][..], |s| &s.texts[..]);
+        let text = join(done.iter().map(String::as_str).chain([text.as_str()]));
         let id = self.live_id.get_or_insert_with(crate::room::random_id).clone();
         (self.emit)(SpeechEvent::Live { id, text });
     }
 
-    /// Ends the line where speech ended; what came after it starts the next one.
-    fn finish_line(&mut self, end: usize) {
-        let live_id = self.live_id.take();
+    /// Ends the line where speech ended; what came after it starts the next one. The line joins the sentence, and
+    /// with `show` it's decoded alone too, so the live text keeps up until the sentence is done.
+    fn finish_line(&mut self, end: usize, show: bool) {
         let after = (KEEP_AFTER_SPEECH_S * RATE as f32) as usize;
+        let speech_end = end.min(self.pcm_start + self.pcm.len());
         let cut = end.saturating_sub(self.pcm_start).saturating_add(after).min(self.pcm.len());
         let rest = self.pcm.split_off(cut);
         let pcm = std::mem::replace(&mut self.pcm, rest);
         self.pcm_start += cut;
         self.decoded_at = 0;
-        match (self.decode)(&pcm).and_then(|t| clean(&t)) {
+
+        if self.sentence.as_ref().is_some_and(|s| s.pcm.len() + cut > (MAX_SENTENCE_S * RATE as f32) as usize) {
+            self.finish_sentence();
+        }
+        let text = if show { (self.decode)(&pcm).and_then(|t| clean(&t)) } else { None };
+        let sentence = self.sentence.get_or_insert_with(|| Sentence { pcm: Vec::new(), texts: Vec::new(), speech_end });
+        sentence.pcm.extend_from_slice(&pcm);
+        sentence.speech_end = speech_end;
+        if let Some(text) = text {
+            sentence.texts.push(text);
+            let text = join(sentence.texts.iter().map(String::as_str));
+            let id = self.live_id.get_or_insert_with(crate::room::random_id).clone();
+            (self.emit)(SpeechEvent::Live { id, text });
+        }
+    }
+
+    /// Decodes the finished lines again as one, and posts that: it replaces their live text.
+    fn finish_sentence(&mut self) {
+        let Some(sentence) = self.sentence.take() else { return };
+        let live_id = self.live_id.take();
+        match (self.decode)(&sentence.pcm).and_then(|t| clean(&t)) {
             Some(text) => (self.emit)(SpeechEvent::Text { text, live_id }),
             // Nothing to post: its live text is taken back
             None => {
@@ -257,39 +322,6 @@ impl<V: Vad, D: Fn(&[f32]) -> Option<String>, E: Fn(SpeechEvent)> Lines<V, D, E>
     }
 }
 
-/// The line to post, or None when it's only punctuation or a filler: in the chat a lone "嗯" is noise even when it
-/// was really said, since it was heard anyway.
-fn clean(text: &str) -> Option<String> {
-    let words: Vec<char> = text.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect();
-    (!words.is_empty() && !fillers(&words)).then(|| text.trim().to_owned())
-}
-
-/// Whether `words` is fillers and nothing else, like the server's `FILLER_RE`.
-fn fillers(words: &[char]) -> bool {
-    let Some((first, rest)) = words.split_first() else { return true };
-    if "嗯啊哦呃额唔".contains(*first) && fillers(rest) {
-        return true;
-    }
-    for fixed in [['h', 'u', 'h'], ['m', 'h', 'm']] {
-        if let Some(rest) = words.strip_prefix(&fixed[..])
-            && fillers(rest)
-        {
-            return true;
-        }
-    }
-    // "mm", "hmm", "uhh", "umm", "ahh", "ohh": a letter, then one or more of another
-    for (letter, repeated) in [('m', 'm'), ('h', 'm'), ('u', 'h'), ('u', 'm'), ('a', 'h'), ('o', 'h')] {
-        if *first != letter {
-            continue;
-        }
-        let run = rest.iter().take_while(|&&c| c == repeated).count();
-        if (1..=run).any(|n| rest.get(n..).is_some_and(fillers)) {
-            return true;
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -297,7 +329,7 @@ mod tests {
 
     use protocol::Lang;
 
-    use super::{Lines, Out, RATE, SpeechEvent, Vad, clean};
+    use super::{Lines, Out, RATE, SpeechEvent, Vad};
 
     /// What the VAD says, as the test sets it
     #[derive(Default)]
@@ -358,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pause_ends_a_line_with_the_live_text_it_replaces() {
+    fn each_short_pause_ends_a_line_shown_live_and_the_sentence_goes_to_the_chat_as_one() {
         let (vad, log, mut lines) = lines(None);
         lines.handle(Out::Start(Lang::En));
         vad.0.borrow_mut().speaking = true;
@@ -372,7 +404,8 @@ mod tests {
         lines.handle(audio(0.3));
         vad.0.borrow_mut().open = true;
         lines.handle(Out::End);
-        assert_eq!(*log.borrow(), ["live 0.5s", "line 0.8s replaces=true", "line 0.3s replaces=false"]);
+        // The last line isn't decoded alone: the sentence, all its lines at once, goes out right after
+        assert_eq!(*log.borrow(), ["live 0.5s", "live 0.8s", "line 1.1s replaces=true"]);
     }
 
     #[test]
@@ -386,8 +419,42 @@ mod tests {
         lines.handle(audio(0.2));
         vad.0.borrow_mut().open = true;
         lines.handle(Out::End);
-        // The first line keeps 0.3 s past its end; the other 0.3 s starts the next
-        assert_eq!(*log.borrow(), ["line 0.9s replaces=false", "line 0.3s replaces=false"]);
+        // The first line keeps 0.3 s past its end; the other 0.3 s starts the next. The sentence is both, nothing lost.
+        assert_eq!(*log.borrow(), ["live 0.9s", "line 1.2s replaces=true"]);
+    }
+
+    #[test]
+    fn a_longer_pause_ends_the_sentence() {
+        let (vad, log, mut lines) = lines(None);
+        lines.handle(Out::Start(Lang::En));
+        vad.0.borrow_mut().speaking = true;
+        lines.handle(audio(0.5));
+        lines.decode_live();
+        let mut script = vad.0.borrow_mut();
+        script.speaking = false;
+        script.ended = Some(usize::MAX);
+        drop(script);
+        lines.handle(audio(0.1));
+        lines.handle(audio(0.5));
+        assert_eq!(log.borrow().len(), 2, "still within the sentence's pause");
+        lines.handle(audio(0.5));
+        // The next sentence starts from the second of quiet kept before it
+        vad.0.borrow_mut().speaking = true;
+        lines.handle(audio(0.5));
+        lines.decode_live();
+        assert_eq!(*log.borrow(), ["live 0.5s", "live 0.6s", "line 0.6s replaces=true", "live 1.5s"]);
+    }
+
+    #[test]
+    fn a_cancelled_utterance_still_posts_the_lines_it_finished() {
+        let (vad, log, mut lines) = lines(None);
+        lines.handle(Out::Start(Lang::En));
+        vad.0.borrow_mut().speaking = true;
+        lines.handle(audio(1.0));
+        vad.0.borrow_mut().ended = Some(RATE * 6 / 10);
+        lines.handle(audio(0.2));
+        lines.handle(Out::Cancel);
+        assert_eq!(*log.borrow(), ["live 0.9s", "line 0.9s replaces=true"]);
     }
 
     #[test]
@@ -413,15 +480,5 @@ mod tests {
         lines.handle(audio(0.5));
         lines.handle(Out::End);
         assert!(log.borrow().is_empty());
-    }
-
-    #[test]
-    fn fillers_and_words() {
-        for filler in ["嗯。", "Mm-hmm.", "Uhh, um", "Hmm?", "啊哦", "mhm"] {
-            assert_eq!(clean(filler), None, "{filler}");
-        }
-        for words in ["嗯，好的。", "Hmm, maybe.", "Oh no", "um, yes", "Ahead"] {
-            assert_eq!(clean(words).as_deref(), Some(words), "{words}");
-        }
     }
 }
